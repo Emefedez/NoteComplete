@@ -1,27 +1,40 @@
-/* The hanzi module's editor (editor.js): the stroke player or practice in the middle. */
+/* The hanzi module's editor (editor.js): the stroke player or practice in the middle, the
+   look-up's header under it, and the look-up's sections on the right. */
 .hz-editor .hz-canvas { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; touch-action: auto; }
 .hz-stage-host { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .hz-player { display: grid; gap: 10px; }
 .hz-stage svg, .hz-practice svg { background: #fff; border-radius: 6px; }
 .hz-practice-status { margin: 6px 0 0; text-align: center; }
-.hz-actions { display: flex; align-items: center; gap: 6px; }
+.hz-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.hz-views { display: inline-flex; gap: 4px; }
 /* Chosen: pale accent, as everywhere in the app (the solid accent is for small marks). */
 .hz-editor .pk-button[aria-pressed="true"],
 .hz-editor .pk-button.is-active { background: var(--k-soft); border-color: color-mix(in srgb, var(--k-accent) 45%, var(--k-line)); color: var(--k-accent); font-weight: 600; }
 .hz-sheet-preview { margin-top: 4px; padding: 8px; border: 1px solid var(--k-line); border-radius: 8px; background: #fff; overflow-x: auto; text-align: center; }
 .hz-sheet-preview svg { display: inline-block; max-width: 100%; height: auto; max-height: 180px; }
 
-/* The dictionary bar under the player: the characters, their reading and the meaning on the
-   page. Every meaning is in the side panel (.hz-defs), each one a toggle (pale accent: on the
-   page). */
+/* The header under the player: the characters, their pinyin (each syllable plays), listen,
+   favourite, level; then the meaning on the page. */
 .hz-dict-bar { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-chrome); font-size: 12.5px; }
-.hz-dict-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.hz-dict-chars { font-size: 16px; flex: none; }
-.hz-dict-pinyin { color: var(--k-accent); font-weight: 600; flex: none; }
+.hz-dict-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.hz-dict-chars { font-size: 20px; flex: none; }
+.hz-dict-head .zh-lk-py { font-size: 14px; }
 .hz-dict-gloss { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hz-defs { display: grid; gap: 6px; }
-.hz-defs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.hz-defs-head h4 { margin: 0; }
+
+/* The side panel's look-up: collapsible sections. */
+.hz-lookup { display: grid; gap: 8px; }
+.hz-section { border-top: 1px solid var(--k-line); padding-top: 6px; }
+.hz-section > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.hz-section > summary > span { flex: 1; min-width: 0; }
+.hz-section[open] > summary { margin-bottom: 6px; }
+.hz-section > .zh-lk-row + .zh-lk-row { margin-top: 6px; }
+.hz-section > summary > small { font-weight: 400; }
+.hz-tools { display: flex; align-items: center; gap: 2px; margin-bottom: 4px; }
+.hz-editor .hz-tool { min-height: 24px; padding: 2px 4px; border-color: transparent; background: transparent; }
+.hz-editor .hz-tool:hover:not(:disabled) { border-color: var(--k-line); }
+/* The meanings: a small scrolling box of toggles (pale accent: on the page). */
+.hz-defs-box { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-surface); }
+.hz-defs-box:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
 .hz-defs-list { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
 .hz-defs-list > li { line-height: 1.55; }
 .hz-defs-reading { margin-right: 4px; color: var(--k-accent); font-weight: 600; }
@@ -29,14 +42,18 @@
 .hz-editor .hz-def:hover { border-color: var(--k-line); }
 .hz-editor .hz-def[aria-pressed="true"] { background: var(--k-soft); color: var(--k-accent); }
 .hz-def:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
-/* Narrow (a phone, a small window): the actions wrap, the player shrinks with the width. */
-.hz-actions { flex-wrap: wrap; }
+.hz-struct-char { margin: 8px 0 4px; font-size: 16px; font-weight: 600; }
+.hz-struct-char:first-of-type { margin-top: 0; }
+.hz-words { max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
+.hz-compare { margin-top: 8px; }
+
 .hz-stage-host svg { max-width: 100%; height: auto; }
-@media (pointer: coarse) { .hz-editor .hz-def { padding: 4px 8px; } }
 .hz-ime-btn { min-width: 30px; justify-content: center; flex: none; }
-.hz-yb-wrap, .hz-variants { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.hz-variants { display: flex; font-size: 12px; }
-.hz-variants .pk-button { min-height: 24px; padding: 0 8px; font-size: 12px; }
+.hz-yb-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .hz-yb-btn { color: var(--k-accent); }
 .hz-char-row { display: flex; align-items: center; gap: 6px; }
-@media (pointer: coarse) { .hz-variants .pk-button { min-height: 36px; } }
+@media (pointer: coarse) {
+  .hz-editor .hz-def { padding: 4px 8px; }
+  .hz-editor .hz-tool { min-height: 36px; min-width: 36px; justify-content: center; }
+  .hz-section > summary { min-height: 40px; }
+}

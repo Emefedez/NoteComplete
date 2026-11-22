@@ -3,9 +3,10 @@
 // caption, with prefers-reduced-motion. It owns no picture: `draw(i, t)` draws steps < i done and
 // step i at t ∈ [0, 1] (t = 0 also when i = steps: everything done). Stepping forward animates
 // the step (`duration(i)` ms at 1×); stepping back and scrubbing jump. The algorithms player
-// has the same controls and keys (its own copy, older than this).
+// has the same controls and keys (its own copy, older than this). With `loop`, a repeat button
+// (L) plays it over and over, the choice remembered by `key`.
 //   const p = stepPlayer(host, { steps: 7, draw, caption: (at) => `Stroke ${at} of 7` });
-//   p.play(); p.go(3); p.replay(); p.setSteps(n); p.destroy();
+//   p.play(); p.go(3); p.replay(); p.setSteps(n); p.looping = true; p.destroy();
 import { make, button, selectInput, loadKitStyles } from './shell.js';
 import { icon } from '../../icons.js';
 
@@ -15,11 +16,14 @@ const keep = (key, value) => { try { localStorage.setItem(key, value); } catch {
 const typing = (t) => t?.closest?.('input:not([type=range]):not([type=checkbox]), textarea, select, [contenteditable=""], [contenteditable="true"]');
 
 // `steps`: how many; `start`: steps done at first (default 0); `duration(i)`: ms of step i at 1×;
-// `gap`: ms between steps while playing; `key`: names the remembered speed; `onChange(at)`.
-export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n) => `${at} / ${n}`, duration = () => 700, gap = 220, key = 'steps', onChange = null, keys = true } = {}) {
+// `gap`: ms between steps while playing; `key`: names the remembered speed and loop; `onChange(at)`.
+// `loop`: { from() → the step a new round starts at (default 0), skip(i) → step i is passed
+// without animating while looping, onToggle(on) }, or null for no repeat button.
+export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n) => `${at} / ${n}`, duration = () => 700, gap = 220, key = 'steps', onChange = null, keys = true, loop = null } = {}) {
   loadKitStyles();
   let n = steps, at = Math.max(0, Math.min(n, start)), raf = 0, timer = 0, playing = false;
   let speed = Number(remembered(`pk-speed:${key}`, '1')) || 1;
+  let looping = !!loop && remembered(`pk-loop:${key}`, '0') === '1';
   const reduced = typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
 
   const captionEl = make('p', { className: 'pk-step-caption', role: 'status' });
@@ -34,7 +38,8 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
   const speedSel = selectInput(SPEEDS, String(speed), (v) => { speed = Number(v) || 1; keep(`pk-speed:${key}`, String(speed)); });
   speedSel.title = 'Speed';
   speedSel.setAttribute('aria-label', 'Speed');
-  const controls = make('div', { className: 'pk-step-controls' }, firstBtn, prevBtn, playBtn, nextBtn, lastBtn, count, speedSel);
+  const loopBtn = loop && button('loop', 'Repeat (L)', { iconOnly: true });
+  const controls = make('div', { className: 'pk-step-controls' }, firstBtn, prevBtn, playBtn, nextBtn, lastBtn, count, speedSel, loopBtn);
   const el = make('div', { className: 'pk-step-player', tabIndex: keys ? 0 : -1 }, captionEl, timeline, controls);
   host.append(el);
 
@@ -50,6 +55,7 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
     firstBtn.disabled = prevBtn.disabled = at === 0;
     nextBtn.disabled = lastBtn.disabled = at >= n;
     playBtn.disabled = n === 0;
+    loopBtn?.setAttribute('aria-pressed', String(looping));
     playIcon();
   }
   const halt = () => { cancelAnimationFrame(raf); clearTimeout(timer); raf = 0; timer = 0; };
@@ -66,17 +72,34 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
     draw?.(i, 0);
     raf = requestAnimationFrame(frame);
   }
+  const first = () => (looping ? Math.max(0, Math.min(n - 1, loop.from?.() ?? 0)) : 0);
+  // Steps a round passes over at once (looping: those of the characters left out).
+  const passOver = () => { while (looping && at < n && loop.skip?.(at)) at++; };
   function play() {
     if (!n) return;
     halt();
-    if (at >= n) { at = 0; paint(); onChange?.(at); }
+    if (at >= n) { at = first(); paint(); onChange?.(at); }
     playing = true; playIcon();
+    const wait = () => (reduced.matches ? Math.max(gap, duration(at)) : gap) / speed;
     const next = () => {
       if (!playing) return;
-      if (at >= n) { playing = false; playIcon(); return; }
-      animate(() => { if (playing && at < n) timer = setTimeout(next, (reduced.matches ? Math.max(gap, duration(at)) : gap) / speed); else { playing = false; playIcon(); } });
+      passOver();
+      if (at >= n) {
+        if (!looping) { playing = false; paint(); return; }
+        // The whole picture held a moment, then the next round.
+        paint();
+        timer = setTimeout(() => { if (!playing) return; at = first(); paint(); onChange?.(at); timer = setTimeout(next, gap / speed); }, Math.max(700, gap * 4) / speed);
+        return;
+      }
+      animate(() => { if (playing) timer = setTimeout(next, wait()); else playIcon(); });
     };
     next();
+  }
+  function setLooping(on) {
+    looping = !!loop && !!on;
+    keep(`pk-loop:${key}`, looping ? '1' : '0');
+    paint();
+    loop?.onToggle?.(looping);
   }
   function pause() { halt(); playing = false; paint(); }
   function go(i) { halt(); playing = false; at = Math.max(0, Math.min(n, i)); paint(); onChange?.(at); }
@@ -92,6 +115,7 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
   nextBtn.onclick = forward;
   lastBtn.onclick = () => go(n);
   playBtn.onclick = () => (playing ? pause() : play());
+  if (loopBtn) loopBtn.onclick = () => setLooping(!looping);
   timeline.oninput = () => go(Number(timeline.value));
   const onKey = (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
@@ -101,12 +125,14 @@ export function stepPlayer(host, { steps = 0, start = 0, draw, caption = (at, n)
     else if (e.key === 'ArrowRight') { e.preventDefault(); forward(); }
     else if (e.key === 'Home') { e.preventDefault(); go(0); }
     else if (e.key === 'End') { e.preventDefault(); go(n); }
+    else if (loop && e.key.toLowerCase() === 'l') { e.preventDefault(); setLooping(!looping); }
   };
   if (keys) el.addEventListener('keydown', onKey);
   paint();
   return {
     el, controls, caption: captionEl, timeline,
     get index() { return at; }, get steps() { return n; }, get playing() { return playing; },
+    get looping() { return looping; }, set looping(on) { setLooping(on); },
     play, pause, go, forward, replay: () => { go(0); play(); },
     setSteps(count, startAt = 0) { halt(); playing = false; n = Math.max(0, count | 0); at = Math.max(0, Math.min(n, startAt)); paint(); },
     redraw: () => paint(),

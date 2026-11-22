@@ -54,6 +54,7 @@ export function openZhSettings({ client = null } = {}) {
   fill();
   dialog.showModal();
   listPacks(client);
+  listFavourites(client);
 }
 
 function build(client) {
@@ -97,6 +98,13 @@ function build(client) {
     </section>
     <section class="zh-settings-panel" data-zh-panel="packs" role="tabpanel" hidden>
       <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
+      <div class="zh-user-card">
+        <div class="zh-user-info">
+          <strong>Favourites</strong>
+          <small class="muted">Starred in a look-up or the stroke order window: Chinese input offers them first. Click one to take it off.</small>
+        </div>
+        <div class="zh-favs" data-favs aria-live="polite"></div>
+      </div>
       <div class="zh-user-card">
         <div class="zh-user-info">
           <strong>Learned vocabulary &amp; frequency</strong>
@@ -158,6 +166,7 @@ function build(client) {
     input.click();
   };
   d.__client = client;
+  addEventListener('zh-favourites', () => { if (d.open) listFavourites(client); });
   return d;
 }
 
@@ -177,6 +186,18 @@ async function listPacks(client) {
   try { packs = zh ? await zh.packs() : null; } catch (e) { list.replaceChildren(row('Dictionaries could not be read: ' + e.message)); return; }
   if (!packs) { list.replaceChildren(row('The dictionary is not available in this build. Pinyin with tone marks works without it.')); return; }
   list.replaceChildren(...packs.map((p) => packRow(zh, p, client)));
+}
+async function listFavourites(client) {
+  const box = dialog.querySelector('[data-favs]');
+  let zh = null, list = [];
+  try { zh = await client?.(); list = zh ? await zh.favourites() : []; } catch { /* Shown as none. */ }
+  if (!list.length) { box.replaceChildren(Object.assign(document.createElement('small'), { className: 'muted', textContent: 'None yet: click ☆ beside a character in its look-up.' })); return; }
+  box.replaceChildren(...list.map((hanzi) => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'chip zh-cjk', title: `Take ${hanzi} off the favourites` });
+    b.append(icon('star'), document.createTextNode(hanzi));
+    b.onclick = async () => { b.disabled = true; try { await zh.setFavourite(hanzi, false); } catch { b.disabled = false; } };
+    return b;
+  }));
 }
 const row = (text) => Object.assign(document.createElement('li'), { className: 'muted', textContent: text });
 

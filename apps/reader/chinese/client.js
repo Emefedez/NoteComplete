@@ -5,7 +5,8 @@
 //   choose(input, item, script)            learn a chosen candidate (user dictionary)
 //   chooseSequence(parts, script)          several candidates chosen for one input (小 + 明): learnt
 //                                          as a word; offered as one after the second time
-//   addWord(hanzi, pinyin)                 "Add to my words"
+//   favourites() → [hanzi…]; isFavourite(hanzi); setFavourite(hanzi, on, pinyin): the ☆ of the
+//                                          panels; a favourite comes first among the candidates
 //   annotate(text, {script})               → [{start, end, text, pinyin: ["nǐ"…], level}] per word of the Han runs
 //   lookup(text, {script})                 → {entries: [{simp, trad, pinyin, gloss: [], level}], words: [{text,
 //     pinyin, gloss, level}], char?: {char, readings: [{pinyin, count}], strokes, radical: {number, char,
@@ -79,7 +80,13 @@ export function createClient({
       const row = await dict.choose(joined, script, { word: true });
       if (worker) await post('learn', [row]);
     },
-    async addWord(hanzi, pinyin) { await dict.addWord(hanzi, pinyin); await refreshUser(); },
+    favourites: () => dict.favourites(),
+    isFavourite: async (hanzi) => (await dict.favourites()).includes(hanzi),
+    async setFavourite(hanzi, on, pinyin = '') {
+      await dict.setFavourite(hanzi, on, pinyin);
+      await refreshUser();
+      globalThis.dispatchEvent?.(new CustomEvent('zh-favourites'));
+    },
     annotate: (text, opts = {}) => call('annotate', text, opts),
     lookup: (text, opts = {}) => call('lookup', text, opts),
     convert: (text, direction) => call('convert', text, direction),

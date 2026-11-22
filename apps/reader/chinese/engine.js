@@ -96,7 +96,7 @@ export function parseInput(pack, input) {
 export function createEngine({ ime, chars = null }) {
   const pack = ime.meta ? ime : decodeIme(ime);
   let charPack = chars && (chars.meta ? chars : decodeChars(chars));
-  let extras = [], extraBuckets = new Map(), levelOverride = new Map(), user = new Map(), userWords = [];
+  let extras = [], extraBuckets = new Map(), levelOverride = new Map(), user = new Map(), userWords = [], favs = new Set();
   let formMap = null, reverse = null;
 
   const lfOf = (r, script) => (script === 't' ? pack.ft : pack.fs)[r] / pack.scale;
@@ -170,13 +170,14 @@ export function createEngine({ ime, chars = null }) {
         const consumed = way.syls[k - 1].end;
         matches(way.syls.slice(0, k), k, v => {
           const score = lfView(v, script) + userBoost(v, script, now) - wi * W_SPLIT;
-          const it = item(v, script, consumed), key = it.text + '\t' + consumed;
+          const it = item(v, script, consumed, { fav: favs.has(display(v, script)) }), key = it.text + '\t' + consumed;
           const old = found.get(key);
           if (!old || old.score < score) found.set(key, { ...it, score, level: Math.max(it.level, old?.level || 0) });
         });
       }
     });
-    let items = [...found.values()].sort((a, b) => b.consumed - a.consumed || b.score - a.score);
+    // Favourites first among the candidates that cover as much of the input.
+    let items = [...found.values()].sort((a, b) => b.consumed - a.consumed || b.fav - a.fav || b.score - a.score);
     // The sentence: the cheapest path over the whole input (any way of splitting it), shown
     // when it has several words.
     let best = null;
@@ -335,10 +336,11 @@ export function createEngine({ ime, chars = null }) {
     hasChars: () => !!charPack, setChars(bytes) { charPack = bytes.meta ? bytes : decodeChars(bytes); },
     // rows: [{simp, trad, n: "ni3 hao3", gloss, level}] of the installed HSK expansions.
     setExpansions(rows) { expansionRows = rows; setExtras(expansionRows); },
-    // chosen: [{key: "s:ni'hao:你好", count, last, word?}], words: [{hanzi, pinyin: "xiao3 ming2"}]
+    // chosen: [{key: "s:ni'hao:你好", count, last, word?}], words: the favourites [{hanzi, pinyin: "xiao3 ming2"}]
     setUser({ chosen = [], words = [] } = {}) {
       user = new Map(chosen.map(c => [c.key, c]));
-      storedWords = words.map(w => ({ simp: w.hanzi, trad: w.hanzi, n: w.pinyin, user: true }));
+      favs = new Set(words.map(w => w.hanzi));
+      storedWords = words.filter(w => w.pinyin).map(w => ({ simp: w.hanzi, trad: w.hanzi, n: w.pinyin, user: true }));
       refreshUser();
     },
     learn(row) {

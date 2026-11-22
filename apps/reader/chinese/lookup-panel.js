@@ -2,8 +2,8 @@
 // right-click, a long press or a selection. A movable window on a computer, a bottom sheet on a
 // phone. Header: the character, every reading in tone colours (the one used here first, "Use
 // here" sets it for pinyin over characters), 🔊 to hear it (S; Shift: slower; each syllable
-// plays its own tone when clicked, chinese/speech.js streams the audio on demand), and the
-// stroke player with Practise. Then meanings, HSK level, forms, structure and words with it,
+// plays its own tone when clicked, chinese/speech.js streams the audio on demand), ☆ to make it
+// a favourite (Chinese input offers it first), and the stroke player with Practise. Then meanings, HSK level, forms, structure and words with it,
 // each a link to its own look-up (← goes back), and the actions.
 //   openLookup("好", { host, context: { reading, replace(text), setReading(pinyin) }, near })
 // host: { status, script(), decks(), addCards(cards, { deckId, title }), insertFigure(spec) }.
@@ -11,17 +11,11 @@ import { openContextMenu } from '../context-menu.js';
 import { icon } from '../icons.js';
 import { zhWindow, modalHost, langToggle } from './zh-window.js';
 import { levelLabel, vocabCard, HAN } from './vocab.js';
-import { speak, speakSyllable, stopSpeech, canSpeak } from './speech.js';
+import { stopSpeech, canSpeak } from './speech.js';
 import { localizeLookup, zhLang } from './translate.js';
+import { el, sayer, listenButton, syllables as toneSyllables, favouriteButton, formRows, structureRows } from './char-info.js';
 
-const IDC = /[⿰-⿿]/u;
-// How the parts sit (the first Ideographic Description Character of the decomposition).
-const IDC_NAMES = { '⿰': 'left and right', '⿱': 'top and bottom', '⿲': 'left, middle and right', '⿳': 'top, middle and bottom', '⿴': 'enclosed', '⿵': 'open at the bottom', '⿶': 'open at the top', '⿷': 'open at the right', '⿸': 'from the top left', '⿹': 'from the top right', '⿺': 'from the bottom left', '⿻': 'overlaid' };
-const ETYMOLOGY = { ideographic: 'Ideographic', pictographic: 'Pictographic', pictophonetic: 'Sound and meaning' };
-export const toneOf = (syllable) => {
-  const s = String(syllable).normalize('NFD');
-  return /̄/.test(s) ? 1 : /́/.test(s) ? 2 : /̌/.test(s) ? 3 : /̀/.test(s) ? 4 : 5;
-};
+export { toneOf } from './char-info.js';
 // The readings of the panel's header, the one used here first: [{ pinyin, here }].
 export function readingsFor(result, here = '') {
   const list = result?.char?.readings?.length ? result.char.readings.map((r) => r.pinyin) : (result?.entries || []).map((e) => e.pinyin);
@@ -69,14 +63,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   let players = [], shown = null, token = 0;
   const status = (msg, bad = false) => host.status?.(msg, bad);
   const script = () => host.script?.() || 'simplified';
-  // Plays `t` (its reading when one character), lighting `button` while it plays.
-  const say = (t, { reading = '', button = null, slow = false, syllable = false } = {}) => {
-    const onState = (on) => button?.classList.toggle('playing', on);
-    const opts = { script: script(), slow, onState };
-    const run = syllable ? speakSyllable(reading, { ...opts, fallback: t }) : speak(t, { ...opts, reading });
-    run.then((ok) => { if (!ok) status(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true); });
-  };
-  const el = (tag, cls = '', textContent = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (textContent) e.textContent = textContent; return e; };
+  const say = sayer({ script, status });
   const btn = (label, iconName, run, cls = '') => {
     const b = el('button', cls);
     b.type = 'button';
@@ -87,24 +74,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   };
   // A character or word that opens its own look-up.
   const link = (t, cls = 'zh-lk-link zh-cjk') => { const b = el('button', cls, t); b.type = 'button'; b.title = `Look up ${t}`; b.onclick = () => go(t); return b; };
-  // Pinyin in tone colours; each syllable plays its tone when clicked (`chars`: the characters
-  // it reads, spoken instead when there is no recording of that syllable).
-  const syllables = (pinyin, chars = '') => {
-    const s = el('span', 'zh-lk-py');
-    const han = [...chars].filter((c) => HAN.test(c));
-    let k = 0;
-    String(pinyin).split(/(\s+)/).forEach((p) => {
-      if (!p.trim()) { s.append(p); return; }
-      const b = el('button', `zh-lk-syl zh-t${toneOf(p)}`, p);
-      const ch = han.length === String(pinyin).trim().split(/\s+/).length ? han[k] : (han.length === 1 ? han[0] : '');
-      k++;
-      b.type = 'button';
-      b.title = `Listen to ${p}${toneOf(p) < 5 ? ` (tone ${toneOf(p)})` : ''} · Shift-click: slower`;
-      b.onclick = (e) => { e.stopPropagation(); say(ch || '', { reading: p, button: b, slow: e.shiftKey, syllable: true }); };
-      s.append(b);
-    });
-    return s;
-  };
+  const syllables = (pinyin, chars = '') => toneSyllables(pinyin, chars, say);
   const section = (title, open = true) => {
     const d = el('details', 'zh-lk-section');
     d.open = open;
@@ -178,15 +148,9 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const facts = el('div', 'zh-lk-facts');
     if (level) facts.append(el('span', 'zh-lk-level', levelLabel(level)));
     if (result.char?.strokes) facts.append(el('span', 'muted', `${result.char.strokes} strokes`));
-    if (canSpeak(script())) {
-      const speakBtn = el('button', 'zh-lk-say');
-      speakBtn.type = 'button';
-      speakBtn.title = 'Listen (S) · Shift: slower';
-      speakBtn.setAttribute('aria-label', `Listen to ${t}`);
-      speakBtn.append(icon('speaker'));
-      speakBtn.onclick = (e) => say(t, { reading: single ? reading : '', button: speakBtn, slow: e.shiftKey });
-      facts.prepend(speakBtn);
-    }
+    const speakBtn = listenButton(t, say, { reading: single ? reading : '', script: script() });
+    if (speakBtn) { speakBtn.title = 'Listen (S) · Shift: slower'; facts.prepend(speakBtn); }
+    if (HAN.test(t)) facts.append(favouriteButton(t, { reading, status }));
     side.append(facts);
     // es | en: the meanings in Spanish or English (every Chinese window follows it).
     facts.append(langToggle({ onChange: () => { if (shown?.text === t) show(t, shown.context, false); } }));
@@ -269,41 +233,14 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const forms = formsOf(result, t);
     if (forms.length) {
       const s = section('Forms');
-      for (const f of forms) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', f.label));
-        for (const c of f.chars) row.append(link(c));
-        s.append(row);
-      }
+      s.append(...formRows(forms, link));
       body.push(s);
     }
     // ── Structure ──
-    const c = result.char;
-    if (c && (c.radical || c.decomposition || c.etymology)) {
+    const structure = structureRows(result.char, link);
+    if (structure.length) {
       const s = section('Structure');
-      if (c.radical?.char) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', 'Radical'), link(c.radical.char), el('span', 'muted', `No. ${c.radical.number}${c.radical.residual ? ` + ${c.radical.residual} strokes` : ''}`));
-        s.append(row);
-      }
-      if (c.decomposition && c.decomposition !== t) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', 'Parts'));
-        const layout = IDC_NAMES[[...c.decomposition][0]];
-        for (const p of [...c.decomposition]) if (!IDC.test(p)) row.append(HAN.test(p) ? link(p) : el('span', 'muted', p));
-        if (layout) row.append(el('span', 'muted', layout));
-        s.append(row);
-      }
-      const e = c.etymology;
-      if (e?.type) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', ETYMOLOGY[e.type] || e.type));
-        if (e.type === 'pictophonetic' && (e.semantic || e.phonetic)) {
-          if (e.semantic) row.append(link(e.semantic), el('span', 'muted', `meaning${e.hint ? ` (${e.hint})` : ''}`));
-          if (e.phonetic) row.append(link(e.phonetic), el('span', 'muted', 'sound'));
-        } else if (e.hint) row.append(el('span', '', e.hint));
-        s.append(row);
-      }
+      s.append(...structure);
       body.push(s);
     }
     // ── Words with it (built when opened) ──
@@ -315,11 +252,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
         const ul = el('ul', 'zh-lk-words');
         for (const w of result.words) {
           const li = el('li');
-          const hear = el('button', 'zh-lk-say small');
-          hear.type = 'button'; hear.title = `Listen to ${w.text} · Shift: slower`; hear.setAttribute('aria-label', hear.title);
-          hear.append(icon('speaker'));
-          hear.onclick = (e) => say(w.text, { button: hear, slow: e.shiftKey });
-          li.append(link(w.text), hear, syllables(w.pinyin, w.text), el('span', 'zh-lk-gloss', w.gloss || ''));
+          li.append(link(w.text), listenButton(w.text, say, { script: script(), small: true }) || '', syllables(w.pinyin, w.text), el('span', 'zh-lk-gloss', w.gloss || ''));
           if (w.level) li.append(el('span', 'zh-lk-level', levelLabel(w.level)));
           ul.append(li);
         }
@@ -346,9 +279,6 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     if (ctx.replace) actions.push(convertHere(t, ctx));
     if (host.insertFigure && han.length && han.length <= 12) actions.push(btn('Stroke figure', 'graph', async () => {
       try { await host.insertFigure({ type: 'hanzi', module: 'hanzi', text: han.join(''), pinyin: reading, show: 'strokes', grid: 'mi' }); } catch (e) { status(e.message, true); }
-    }));
-    if (reading) actions.push(btn('My words', 'plus', async () => {
-      try { const { chinese } = await import('./client.js'); await chinese().addWord(t, reading); status(`${t} (${reading}) added to your words: Chinese input offers it first.`); } catch (e) { status(e.message, true); }
     }));
     win.foot.replaceChildren(...actions.filter(Boolean));
     win.foot.classList.add('zh-lk-actions');

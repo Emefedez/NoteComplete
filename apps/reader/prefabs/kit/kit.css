@@ -117,6 +117,7 @@ body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select
 .pk-step-player .pk-button:hover:not(:disabled) { background: var(--k-soft); }
 .pk-step-player .pk-button:disabled { opacity: .45; cursor: default; }
 .pk-step-player .pk-button.primary { background: var(--k-accent); border-color: var(--k-accent); color: #fff; }
+.pk-step-player .pk-button[aria-pressed="true"] { background: var(--k-soft); border-color: color-mix(in srgb, var(--k-accent) 45%, var(--k-line)); color: var(--k-accent); }
 .pk-step-player .pk-button svg { width: 16px; height: 16px; flex: none; }
 @media (pointer: coarse) { .pk-step-player .pk-button, .pk-step-player select { min-height: 40px; min-width: 40px; justify-content: center; } }
 

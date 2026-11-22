@@ -732,7 +732,8 @@ the `中` toolbar's "Look up" opens it too.
 6. Actions: Copy (character / with pinyin / pinyin only), Add to flashcards (deck chosen; card
    = front 你好, back `nǐ hǎo — hello` + optional stroke strip), Convert here
    (simplified ↔ traditional of that occurrence), Insert stroke-order figure (the prefab),
-   Add to my words (user dictionary).
+   and a ☆ favourite toggle in the header (user dictionary, store "words": a favourite comes
+   first among the candidates that cover as much of the input, §4.6).
 
 ---
 

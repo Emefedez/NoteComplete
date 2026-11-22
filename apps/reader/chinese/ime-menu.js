@@ -110,6 +110,7 @@ function render() {
       if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
     }
     if (item.level > 0) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: item.level >= 7 ? 'HSK 7–9' : `HSK ${item.level}`, title: `HSK level ${item.level >= 7 ? '7–9' : item.level}` }));
+    if (item.fav) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-fav', textContent: '★', title: 'A favourite' }));
     if (item.sentence) li.classList.add('zh-ime-sentence');
     if (item.gloss) li.title = item.gloss;
     list.append(li);

@@ -82,6 +82,27 @@ test('user history moves 得 above 的 after 3 choices', async () => {
   assert.equal(texts(fresh.candidates('de'))[0], '得');
 });
 
+test('a favourite comes first among the candidates it fits, and goes back when removed', async () => {
+  const words = memoryStore(), dict = userDict({ chosen: memoryStore(), words });
+  const e = make();
+  assert.notEqual(texts(e.candidates('de'))[0], '得');
+  await dict.setFavourite('得', true, 'dé');
+  e.setUser(await dict.all());
+  const items = e.candidates('de').items;
+  assert.equal(items[0].text, '得');
+  assert.equal(items[0].fav, true);
+  // Only where it fits: typing another syllable does not bring it.
+  assert.ok(!e.candidates('ma').items.some(i => i.text === '得'));
+  // A row from before favourites ("My words") counts as one, and removing takes both.
+  await words.put({ key: '的\tde5', hanzi: '的', pinyin: 'de5', added: 1 });
+  assert.deepEqual((await dict.favourites()).sort(), ['得', '的'].sort());
+  await dict.setFavourite('的', false);
+  await dict.setFavourite('得', false);
+  assert.deepEqual(await dict.favourites(), []);
+  e.setUser(await dict.all());
+  assert.notEqual(texts(e.candidates('de'))[0], '得');
+});
+
 test('a sequence chosen twice becomes a word', async () => {
   const e = make(), dict = userDict({ chosen: memoryStore(), words: memoryStore() });
   const joined = { text: '小明', pinyin: 'xiǎo míng' };
