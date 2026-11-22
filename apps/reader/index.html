@@ -336,7 +336,6 @@
     <div id="jobArea" class="job-area"></div>
     <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
     <div id="collabSlot" class="collab-slot"></div>
-    <button id="mathModePill" type="button" class="math-mode-pill" aria-pressed="false" title="Toggle Math Mode (Ctrl+Shift+M)">∑ Math</button>
     <button id="keptRefsPill" type="button" class="kept-refs-pill" data-icon="star" title="Kept for exercises: view saved snippets beside the page or editor" hidden><span id="keptRefsCount">Kept (0)</span></button>
     <div id="globalAudioBar" class="global-audio-bar" role="region" aria-label="MP3 audio player" hidden></div>
     <div id="barEndActions" class="bar-end-actions">
@@ -731,6 +730,14 @@
             data-icon="image"
             disabled
           ><span class="tool-name">Image</span></button>
+          <button
+            id="mathModePill"
+            type="button"
+            aria-label="Math"
+            title="Math Mode: formula bar, CAS &amp; R plots (Ctrl+Shift+M)"
+            data-icon="graph"
+            aria-pressed="false"
+          ><span class="tool-name">Math</span></button>
         </div>
         <div class="toolbar-actions">
           <button

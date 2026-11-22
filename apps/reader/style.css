@@ -5356,19 +5356,50 @@ header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-read
 }
 
 /* Math Mode bar & R Bridge settings (matching NoteComplete's chrome tokens) */
-.math-mode-pill {
-  font-weight: 600;
-  font-size: 12.5px;
-  padding: 2px 9px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  white-space: nowrap;
-}
-.math-mode-pill[aria-pressed="true"] {
+#mathModePill[aria-pressed="true"] {
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
+}
+.new-r-dialog[open],
+.math-settings[open] {
+  width: min(680px, calc(100vw - 24px));
+  height: auto;
+  max-height: calc(100dvh - 24px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+:is(.new-r-dialog, .math-settings) .zh-settings-panel {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+:is(.new-r-dialog, .math-settings) .zh-set-row {
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink);
+}
+:is(.new-r-dialog, .math-settings) .zh-set-row :is(input, select) {
+  height: var(--control);
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12.5px;
+  min-width: 0;
+}
+.math-bridge-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
 }
 .math-mode-bar {
   flex: none;

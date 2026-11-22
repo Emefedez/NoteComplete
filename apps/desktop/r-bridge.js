@@ -220,10 +220,21 @@ export function findArf() {
 }
 
 export function findStudioApp({ managedDir = managedStudioDir(), devDir = path.join(os.homedir(), 'Work', 'r-commander-studio') } = {}) {
-  // 1. Managed NoteComplete install directory
+  // 1. Managed NoteComplete install directory & user-local R Commander Studio directory
   const managedAppImage = path.join(managedDir, 'R-Commander-Studio.AppImage');
   if (process.platform === 'linux' && existsSync(managedAppImage)) {
     return { kind: 'binary', path: managedAppImage, source: 'managed' };
+  }
+  const userShareDir = path.join(os.homedir(), '.local', 'share', 'r-commander-studio');
+  if (process.platform === 'linux') {
+    for (const candidate of [
+      path.join(userShareDir, 'R-Commander-Studio.AppImage'),
+      path.join(userShareDir, 'r-commander-studio'),
+    ]) {
+      if (existsSync(candidate)) {
+        return { kind: 'binary', path: candidate, source: 'system' };
+      }
+    }
   }
   const managedExe = path.join(managedDir, 'R-Commander-Studio.exe');
   if (process.platform === 'win32' && existsSync(managedExe)) {
@@ -465,13 +476,25 @@ export function createRBridge({
   }
 
   async function spawnStudio(studioApp, cliArgs = []) {
+    // Strip NoteComplete's own AppImage / Electron environment variables so R Commander Studio
+    // never inherits APPIMAGE=NoteComplete.AppImage when updating its .desktop entry.
+    const cleanEnv = { ...process.env };
+    for (const k of ['APPIMAGE', 'APPDIR', 'ARGV0', 'OWD', 'ELECTRON_RUN_AS_NODE']) {
+      delete cleanEnv[k];
+    }
+    if (cleanEnv.LD_LIBRARY_PATH) {
+      cleanEnv.LD_LIBRARY_PATH = String(cleanEnv.LD_LIBRARY_PATH)
+        .split(path.delimiter)
+        .filter((p) => p && !p.includes('/tmp/.mount_'))
+        .join(path.delimiter);
+    }
     if (studioApp.kind === 'binary') {
-      const child = spawn(studioApp.path, cliArgs, { detached: true, stdio: 'ignore' });
+      const child = spawn(studioApp.path, cliArgs, { detached: true, stdio: 'ignore', env: cleanEnv });
       child.unref();
       return true;
     }
     if (studioApp.kind === 'dev' && studioApp.electron) {
-      const child = spawn(studioApp.electron, ['.', ...cliArgs], { cwd: studioApp.dir, detached: true, stdio: 'ignore' });
+      const child = spawn(studioApp.electron, ['.', ...cliArgs], { cwd: studioApp.dir, detached: true, stdio: 'ignore', env: cleanEnv });
       child.unref();
       return true;
     }
