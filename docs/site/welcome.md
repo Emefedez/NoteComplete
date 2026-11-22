@@ -57,7 +57,7 @@ _Everything belonging to a note, kept non-destructively together_
 
 ## Also opens · exports
 >> [purple] OPENS: PDFs, images, HTML, Markdown, Word, Excel, CSV, PlantUML, archives, **Noteful** (.noteful), **Goodnotes** and **Notability** notebooks, plus MP3/MP4 media || [coral] EXPORTS: PDF, SVG, images, .noteful, Markdown and Anki study decks
-- A PDF or image becomes a note you can write on. Word, Excel and CSV open as editable Markdown; Save writes a copy and never changes the original.
+- A PDF or image becomes a note you can write on. Word (`.docx`, `.doc`), OpenDocument (`.odt`, `.ods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`), PowerPoint (`.pptx`, `.ppt`), EPUB, Jupyter notebooks (`.ipynb`) and CSV/TSV open as editable Markdown; Save writes a copy and never changes the original.
 - **Export** is in File and in the **...** menu of any note on Home.
 
 \pagebreak
@@ -94,7 +94,7 @@ _Documents, unified search and built-in media playback_
 - **Library & Cloud**: open local folders as sidebar groups, connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive** or **GitHub**, compare newer versions, and filter by type, date, source, size, audio or tags.
 
 ## Audio & Media
-- **Global audio bar**: open any `.mp3` from a folder, file picker or cloud—or close an active note Audio window—to keep playback docked on the top bar ((headset mute, back/play/forward, seek bar, speed)); click `×` on the bar or `Shift+×` on the Audio window to stop completely. `.mp4` videos open in your computer's player.
+- **Global audio bar**: open any audio file (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus`) from a folder, file picker or cloud—or close an active note Audio window—to keep playback docked on the top bar ((headset mute, back/play/forward, seek bar, speed)); click `×` on the bar or `Shift+×` on the Audio window to stop completely. Video files (`.mp4`, `.mkv`, `.mov`, `.webm`, `.avi`) open in your computer's player.
 - **Synced recordings**: record or import audio into a note so ink replays as it was written; transcribe locally with Whisper or Voxtype, click any word to seek, and revise with AI while keeping timings.
 
 !stat 30 seconds back or forward in note audio: ==J== and ==L==, ==K== to play

@@ -64,6 +64,15 @@
         "image/webp": [
           ".webp"
         ],
+        "image/gif": [
+          ".gif"
+        ],
+        "image/bmp": [
+          ".bmp"
+        ],
+        "image/avif": [
+          ".avif"
+        ],
         "text/markdown": [
           ".md",
           ".markdown"
@@ -76,22 +85,74 @@
           ".htm"
         ],
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-          ".docx"
+          ".docx",
+          ".docm",
+          ".dotx"
+        ],
+        "application/msword": [
+          ".doc"
+        ],
+        "application/rtf": [
+          ".rtf"
         ],
         "application/vnd.oasis.opendocument.text": [
-          ".odt"
+          ".odt",
+          ".fodt"
         ],
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-          ".xlsx"
+          ".xlsx",
+          ".xlsm",
+          ".xlsb"
+        ],
+        "application/vnd.ms-excel": [
+          ".xls"
         ],
         "application/vnd.oasis.opendocument.spreadsheet": [
-          ".ods"
+          ".ods",
+          ".fods"
+        ],
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
+          ".pptx",
+          ".pptm"
+        ],
+        "application/vnd.ms-powerpoint": [
+          ".ppt"
+        ],
+        "application/vnd.oasis.opendocument.presentation": [
+          ".odp"
+        ],
+        "application/epub+zip": [
+          ".epub"
+        ],
+        "application/x-ipynb+json": [
+          ".ipynb"
         ],
         "text/csv": [
           ".csv"
         ],
         "text/tab-separated-values": [
           ".tsv"
+        ],
+        "audio/mpeg": [
+          ".mp3"
+        ],
+        "audio/mp4": [
+          ".m4a"
+        ],
+        "audio/wav": [
+          ".wav"
+        ],
+        "audio/ogg": [
+          ".ogg",
+          ".oga",
+          ".opus"
+        ],
+        "audio/flac": [
+          ".flac"
+        ],
+        "video/mp4": [
+          ".mp4",
+          ".m4v"
         ]
       },
       "launch_type": "multiple-clients"
@@ -114,15 +175,32 @@
             "image/png",
             "image/jpeg",
             "image/webp",
+            "image/gif",
+            "image/bmp",
+            "image/avif",
             "text/markdown",
             "text/plain",
             "text/html",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/msword",
+            "application/rtf",
             "application/vnd.oasis.opendocument.text",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "application/vnd.ms-excel",
             "application/vnd.oasis.opendocument.spreadsheet",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.oasis.opendocument.presentation",
+            "application/epub+zip",
+            "application/x-ipynb+json",
             "text/csv",
             "text/tab-separated-values",
+            "audio/mpeg",
+            "audio/mp4",
+            "audio/wav",
+            "audio/ogg",
+            "audio/flac",
+            "video/mp4",
             ".noteful",
             ".nfedit",
             ".notecomp",
@@ -133,17 +211,44 @@
             ".jpg",
             ".jpeg",
             ".webp",
+            ".gif",
+            ".bmp",
+            ".avif",
             ".md",
             ".markdown",
             ".txt",
             ".html",
             ".htm",
             ".docx",
+            ".docm",
+            ".dotx",
+            ".doc",
+            ".rtf",
             ".odt",
+            ".fodt",
             ".xlsx",
+            ".xlsm",
+            ".xlsb",
+            ".xls",
             ".ods",
+            ".fods",
+            ".pptx",
+            ".pptm",
+            ".ppt",
+            ".odp",
+            ".epub",
+            ".ipynb",
             ".csv",
-            ".tsv"
+            ".tsv",
+            ".mp3",
+            ".m4a",
+            ".wav",
+            ".ogg",
+            ".oga",
+            ".opus",
+            ".flac",
+            ".mp4",
+            ".m4v"
           ]
         }
       ]

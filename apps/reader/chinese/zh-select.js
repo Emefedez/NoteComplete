@@ -61,13 +61,12 @@ export function showBar(text, rect, near = null, selection = false, replace = nu
   }
   const han = [...text].filter((c) => HAN.test(c)).join('');
   const shortText = [...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text;
-  bar.replaceChildren(
+  bar.replaceChildren(...[
     iconButton('translate', `Translate “${shortText}”`, (t) => openTranslation(t, { near, replace })),
     lookupable(text) && iconButton('search', `Look up ${text.trim()}`, (t) => lookUp(t.trim(), {}, near)),
     han && [...han].length <= 12 && host.openTracePrefab && iconButton('draw', `Stroke order of ${[...han].slice(0, 12).join('')}`, () => host.openTracePrefab([...han].slice(0, 12).join(''))),
     han && iconButton('speaker', `Listen to ${shortText}`, (t) => listen(t.trim())),
-  );
-  for (const b of [...bar.children]) if (!(b instanceof Element)) b.remove();
+  ].filter(Boolean));
   barFor = text;
   // In the open modal dialog the selection is in, so it shows over it.
   const dialog = near?.closest?.('dialog[open]');

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <code>.nfedit</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>DOCX / ODT</code> · <code>XLSX / ODS / CSV</code> · <code>PNG / JPG / WebP</code> · <code>PlantUML</code> · <code>ZIP / TAR</code> · <code>MP3 / MP4</code>
+  <code>.nfedit</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>DOCX / DOC / ODT / RTF</code> · <code>XLSX / XLS / ODS / CSV</code> · <code>PPTX / PPT / ODP</code> · <code>EPUB / IPYNB</code> · <code>PNG / JPG / WebP / GIF / AVIF</code> · <code>PlantUML</code> · <code>ZIP / TAR</code> · <code>MP3 / WAV / FLAC / MP4</code>
 </p>
 
 # NoteComplete
@@ -41,6 +41,7 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Page text boxes:** Rich formatting, live KaTeX math (`∑` or `$...$`) with touch math keypad, direct move without leaving Text mode (hold/drag box, drag `⋮⋮` grip, or drag outside with no selection).
 - **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
+- **Documents, slides, spreadsheets & e-books as Markdown:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown with extracted images — Save writes a `.md` copy and never modifies the original.
 - **Side Notes (`N`):** Per-document Markdown notes linked to pages with `+ Page`.
 
 </details>
@@ -60,7 +61,7 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Prefabs &amp; Diagrams</b></summary>
 
-- **Editable exam figures (`Shift+X`):** Function graphs, histograms, bar charts, process states & CPU timelines (tap-to-paint exercises), trees, node graphs, tables (`Shift+Y`), stroke-order sheets, and UML diagrams (Visual Paradigm XML & XMI import/export).
+- **Editable exam figures & sticky notes (`Shift+X`):** Sticky notes (coloured cards with folded corner, optional title/body/lines that stay under handwriting — also imported directly from Goodnotes sticky notes), function graphs, histograms, bar charts, process states & CPU timelines (tap-to-paint exercises), trees, node graphs, tables (`Shift+Y`), stroke-order sheets, and UML diagrams (Visual Paradigm XML & XMI import/export).
 - **Kept for exercises:** Keep Grab snippets in a floating viewer / top-bar `★ Kept` pill while building charts or solving problems.
 
 <p align="center"><img src="docs/images/prefabs-menu.png" alt="Prefabs picker menu" width="100%"></p>
@@ -74,8 +75,8 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Audio &amp; Media</b></summary>
 
-- **Global-bar audio player:** Opening any `.mp3` (from a folder, `File → Open…`, drag-and-drop, archive, or cloud) or closing an active note Audio window docks a compact accent-colored player onto the top bar (headset mute, back/play-pause/forward, scrub bar, speed `0.5×–2×`, close). Click `×` on the top bar—or `Shift+×` on the Audio window—to stop and close completely.
-- **MP4 handoff:** Clicking an `.mp4` opens it directly in your computer's default media player.
+- **Global-bar audio player:** Opening any audio file (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus` — from a folder, `File → Open…`, drag-and-drop, archive, or cloud) or closing an active note Audio window docks a compact accent-colored player onto the top bar (headset mute, back/play-pause/forward, scrub bar, speed `0.5×–2×`, close). Click `×` on the top bar—or `Shift+×` on the Audio window—to stop and close completely.
+- **Video handoff & media card icons:** Clicking any video (`.mp4`, `.mkv`, `.mov`, `.webm`, `.avi`, `.m4v`) opens it in your computer's default media player; audio, video, Office, EPUB, and notebook cards show color-coded icons on Home, Folders, and Cloud views.
 - **Synced note recordings:** Record or import audio into a note with timed ink playback (tap ink to seek), segment trimming, and audio enhancement.
 
 </details>

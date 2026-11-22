@@ -328,6 +328,7 @@ fn add_prefab_description() -> String {
     format!("{HEAD}{notes}")
 }
 const SHIPPED_PREFAB_NOTES: &str = concat!(
+    include_str!("../../../apps/reader/prefabs/stickynote/ai.md"),
     include_str!("../../../apps/reader/prefabs/charts/ai.md"),
     include_str!("../../../apps/reader/prefabs/uml/ai.md"),
     include_str!("../../../apps/reader/prefabs/numberline/ai.md"),
@@ -711,6 +712,7 @@ process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.heigh
                     spec: None,
                 }),
                 joined: true,
+                under: false,
             },
         )?;
 

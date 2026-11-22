@@ -250,10 +250,38 @@ impl Editor {
                         && !deleted.contains(a.id.as_str())
                 })
             };
-            // Under-ink additions (highlighter fills) go below the layer's ink.
-            for a in added_in_layer(true) {
-                let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                write_added(&mut content, &a.id, &svg, false);
+            let images_in_layer = |under: bool| {
+                facts.images.iter().filter(move |(id, image)| {
+                    image.layer == layer.id
+                        && image.under == under
+                        && !deleted.contains(id.as_str())
+                })
+            };
+            // Under-ink additions (highlighter fills, sticky note cards) go below the layer's ink,
+            // in the order they were made.
+            let mut under_pictures = images_in_layer(true).peekable();
+            let mut under_lines = added_in_layer(true).peekable();
+            loop {
+                let picture_first = match (under_pictures.peek(), under_lines.peek()) {
+                    (None, None) => break,
+                    (Some(_), None) => true,
+                    (None, Some(_)) => false,
+                    (Some((id, _)), Some(a)) => {
+                        crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
+                    }
+                };
+                if picture_first {
+                    let (id, image) = under_pictures.next().unwrap();
+                    let svg = item_svg(
+                        &image.item(id.clone()),
+                        adjustments.get(id.as_str()).copied(),
+                    )?;
+                    let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
+                } else {
+                    let a = under_lines.next().unwrap();
+                    let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
+                    write_added(&mut content, &a.id, &svg, false);
+                }
                 added += 1;
             }
             for item in p.items.iter().filter(|i| i.layer == layer.id) {
@@ -271,11 +299,7 @@ impl Editor {
             // Added pictures, text boxes and ink in the order they were made: a text box added
             // after a stroke is over it, and a stroke added after it is over the box. Both ids
             // carry their place in the history, so no order is stored.
-            let mut pictures = facts
-                .images
-                .iter()
-                .filter(|(id, image)| image.layer == layer.id && !deleted.contains(id.as_str()))
-                .peekable();
+            let mut pictures = images_in_layer(false).peekable();
             let mut lines = added_in_layer(false).peekable();
             loop {
                 let picture_first = match (pictures.peek(), lines.peek()) {
@@ -771,6 +795,7 @@ mod tests {
             layer: 0,
             joined: false,
             part: None,
+            under: false,
             text: Some(typed(text, math)),
         }
     }
@@ -964,9 +989,22 @@ mod tests {
             text: None,
             joined: false,
             part: None,
+            under: false,
         })
         .unwrap();
         step(e, "picture");
+        e.add_image(0, Image {
+            base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),
+            mime: "image/png".into(),
+            bounds: [40., 40., 120., 120.],
+            layer: 0,
+            text: None,
+            joined: false,
+            part: None,
+            under: true,
+        })
+        .unwrap();
+        step(e, "picture under ink");
         let text = format!("image:{}", e.cursor);
         e.add_image(0, text_box("Hola\nmundo", false)).unwrap();
         step(e, "text box");

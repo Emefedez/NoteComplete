@@ -75,7 +75,7 @@ try {
   assert.deepEqual(await text('#textBody h2'), ['Ventas', 'Notas']);
   assert.deepEqual(await text('#textBody table:first-of-type th'), ['Producto', 'Precio', 'Fecha']);
   assert.ok((await text('#textBody td')).includes('Lápiz'));
-  assert.ok(vendor.includes('sheetjs/xlsx.mini.min.js'));
+  assert.ok(vendor.includes('sheetjs/xlsx.core.min.js'));
   // Find in the document (Ctrl F) sees the cells.
   await p.click('#textBody');
   await p.keyboard.press('Control+f');

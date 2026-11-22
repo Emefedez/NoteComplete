@@ -6,6 +6,7 @@
 import { FOLDER_MIME, supportedDriveFile } from './drive-client.js';
 import { noteCover } from './note-cover.js';
 import { noteFacts } from './note-facts.js';
+import { fileCoverSvg } from './file-covers.js';
 
 // Ranges already fetched serve later reads inside them (cover and facts share the head and tail).
 export function cachingReader(read) {
@@ -64,6 +65,7 @@ export function driveThumbnails(client, { library = null, resize = shrink, paral
       const cover = await noteCover(readerFor(file, signal), Number(file.size));
       if (cover) url = await resize(new Blob([cover.bytes], { type: cover.mime }));
     }
+    if (!url) url = fileCoverSvg(file.name) || '';
     if (url.startsWith('blob:')) urls.push(url);
     else if (url && key) library.saveCover(key, url);
     return url;

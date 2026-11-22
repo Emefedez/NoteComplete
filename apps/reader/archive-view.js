@@ -9,7 +9,7 @@ import {
 } from './archive.js';
 import { zipFiles } from './zip.js';
 
-const KIND_ICON = { note: 'note', pdf: 'pdfBg', image: 'image', html: 'code', office: 'text', text: 'text', archive: 'archive' };
+const KIND_ICON = { note: 'note', pdf: 'pdfBg', image: 'image', html: 'code', audio: 'headphones', video: 'video', office: 'text', text: 'text', archive: 'archive' };
 const BAD = new Set(['damaged', 'unsafe']);
 const STATUS_TEXT = { ok: 'Intact', damaged: 'Damaged', encrypted: 'Encrypted', unsupported: 'Not checked', unsafe: 'Unsafe name', refused: 'Not unpacked', unchecked: 'Not checked' };
 

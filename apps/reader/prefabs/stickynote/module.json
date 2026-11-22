@@ -1,0 +1,34 @@
+{
+  "id": "stickynote",
+  "api": 1,
+  "version": "1.0.0",
+  "order": 15,
+  "label": "Sticky note",
+  "kind": "custom",
+  "output": "picture",
+  "types": ["stickynote"],
+  "names": { "stickynote": "Sticky note" },
+  "editor": "editor.js",
+  "groups": { "notes": "Notes" },
+  "prefabs": [
+    {
+      "id": "stickynote",
+      "group": "notes",
+      "label": "Sticky note",
+      "hint": "A coloured sticky note card with optional title, text and folded corner (handwriting stays on top)",
+      "icon": "note",
+      "spec": {
+        "type": "stickynote",
+        "color": "#fae778",
+        "title": "",
+        "text": "",
+        "author": "",
+        "fontSize": 15,
+        "fold": true,
+        "lines": false,
+        "width": 256,
+        "height": 256
+      }
+    }
+  ]
+}

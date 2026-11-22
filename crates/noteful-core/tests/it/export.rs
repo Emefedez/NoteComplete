@@ -514,6 +514,7 @@ fn added_ink_and_text_boxes_stack_in_the_order_they_were_made() {
         }),
         joined: false,
         part: None,
+        under: false,
     };
     e.add_line(0, line(0, 1)).unwrap();
     e.add_image(0, text).unwrap();
@@ -553,6 +554,7 @@ fn a_notes_own_order_of_pictures_and_ink_is_kept_through_edits() {
         text: None,
         joined: false,
         part: None,
+        under: false,
     }
     };
     // What each item of a page is, in the order it is drawn: `p` a picture, `s` ink.

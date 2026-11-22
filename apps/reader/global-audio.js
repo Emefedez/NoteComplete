@@ -19,8 +19,14 @@ export function formatAudioClock(seconds) {
 
 export function cleanTrackTitle(name) {
   const base = String(name || 'Audio').split(/[\\/]/).pop() || 'Audio';
-  return base.replace(/\.mp3$/i, '') || base;
+  return base.replace(/\.(mp3|m4a|wav|ogg|oga|opus|flac|aac|weba)$/i, '') || base;
 }
+
+const AUDIO_MIME = {
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg',
+  oga: 'audio/ogg', opus: 'audio/opus', flac: 'audio/flac', aac: 'audio/aac', weba: 'audio/webm',
+};
+const audioMimeFor = (name) => AUDIO_MIME[String(name || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1]] || 'audio/mpeg';
 
 export function globalAudioController({ bar, header = null, status = () => {} } = {}) {
   if (!bar) return { playFile: async () => {}, close: () => {}, get isOpen() { return false; }, get currentName() { return ''; } };
@@ -293,7 +299,7 @@ export function globalAudioController({ bar, header = null, status = () => {} } 
     raf = 0;
     audio.pause();
     if (url) { URL.revokeObjectURL(url); url = ''; }
-    const blob = file.type ? file : new Blob([file], { type: 'audio/mpeg' });
+    const blob = file.type ? file : new Blob([file], { type: audioMimeFor(file.name) });
     url = URL.createObjectURL(blob);
     currentName = file.name || 'Audio.mp3';
     const label = cleanTrackTitle(currentName);

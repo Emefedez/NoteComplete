@@ -10,6 +10,7 @@ fn math_box(text: &str, math: bool) -> Image {
         layer: 0,
         joined: false,
         part: None,
+        under: false,
         text: Some(TextBox {
             text: text.into(),
             font_size: 20.,
@@ -191,6 +192,7 @@ fn a_prefab_is_a_picture_with_a_frame_keeping_its_spec() {
             joined: true,
             text: None,
             part: Some(part(None)),
+            under: false,
         },
     )
     .unwrap();

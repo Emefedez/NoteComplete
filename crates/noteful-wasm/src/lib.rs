@@ -102,7 +102,11 @@ impl EditorSession {
         name: &str,
         origin: &[u8],
     ) -> Result<EditorSession, Failure> {
-        let mut inner = noteful_core::Editor::open(noteful)?;
+        let mut inner = if noteful_core::is_project_archive(noteful) {
+            noteful_core::Editor::open_project_bytes(noteful)?
+        } else {
+            noteful_core::Editor::open(noteful)?
+        };
         inner.set_origin(Some(noteful_core::Origin {
             format: format.into(),
             name: name.into(),

@@ -9,6 +9,7 @@ import {
   decryptInvite,
 } from './chunked-note.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { fileCoverSvg } from './file-covers.js';
 
 // Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
 // Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.
@@ -63,6 +64,8 @@ export const CLOUD_PROVIDERS = [
 ];
 
 function cardCoverSvg(name, badgeLabel = 'NOTE') {
+  const iconCover = fileCoverSvg(name);
+  if (iconCover) return iconCover;
   const isPdf = /\.pdf$/i.test(name);
   const color = isPdf ? '#d9534f' : '#245dc4';
   const label = isPdf ? 'PDF' : badgeLabel;

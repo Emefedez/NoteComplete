@@ -8,7 +8,7 @@
 // would expand past `maxEntry`, or that expand suspiciously far (`maxRatio`), are not unpacked.
 // Names that point outside the archive (../, /abs, C:\) are listed as unsafe and never opened.
 import { crc32 } from './zip.js';
-import { isTextName, isOfficeName } from './text-types.js';
+import { isTextName, isOfficeName, isImageName, isAudioName, isVideoName } from './text-types.js';
 
 const MB = 1048576;
 export const LIMITS = Object.freeze({
@@ -21,7 +21,7 @@ export const LIMITS = Object.freeze({
 
 const ARCHIVE_NAME = /\.(zip|tar|tgz|tar\.gz|gz|7z|rar)$/i;
 // Formats that are zips or tars inside but are documents the app opens as such.
-const DOCUMENT_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|docx|xlsx|odt|ods)$/i;
+const DOCUMENT_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|docx|docm|dotx|xlsx|xlsm|xlsb|pptx|pptm|odt|ods|odp|epub)$/i;
 const NOTE_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb)$/i;
 
 export const formatLabel = { zip: 'ZIP', tar: 'Tar', tgz: 'Tar + gzip', gz: 'gzip', '7z': '7-Zip', rar: 'RAR' };
@@ -68,8 +68,10 @@ export function entryKind(name) {
   if (!n) return '';
   if (NOTE_NAME.test(n)) return 'note';
   if (/\.pdf$/i.test(n)) return 'pdf';
-  if (/\.(png|jpe?g|webp)$/i.test(n)) return 'image';
+  if (isImageName(n)) return 'image';
   if (/\.html?$/i.test(n)) return 'html';
+  if (isAudioName(n)) return 'audio';
+  if (isVideoName(n)) return 'video';
   if (isOfficeName(n)) return 'office';
   if (isArchiveName(n)) return /\.(7z|rar)$/i.test(n) ? '' : 'archive';
   if (isTextName(n)) return 'text';
@@ -78,7 +80,20 @@ export function entryKind(name) {
 export function typeLabel(name) {
   const n = String(name || '').split('/').pop(), ext = /\.([^.]+)$/.exec(n)?.[1];
   if (/\.(tgz|tar\.gz)$/i.test(n)) return 'Tar + gzip archive';
-  const known = { pdf: 'PDF', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', webp: 'WebP image', noteful: 'Noteful note', nfedit: 'NoteComplete project', goodnotes: 'Goodnotes notebook', ntb: 'Notability notebook', zip: 'ZIP archive', tar: 'Tar archive', gz: 'gzip file', '7z': '7-Zip archive', rar: 'RAR archive', html: 'HTML page', htm: 'HTML page', docx: 'Word document', odt: 'OpenDocument text', xlsx: 'Excel workbook', ods: 'OpenDocument spreadsheet' };
+  const known = {
+    pdf: 'PDF', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', webp: 'WebP image', gif: 'GIF image', bmp: 'BMP image', svg: 'SVG image', avif: 'AVIF image', ico: 'ICO image',
+    mp3: 'MP3 audio', m4a: 'M4A audio', wav: 'WAV audio', ogg: 'OGG audio', oga: 'OGG audio', opus: 'Opus audio', flac: 'FLAC audio', aac: 'AAC audio', weba: 'WebM audio',
+    mp4: 'MP4 video', m4v: 'M4V video', webm: 'WebM video', mkv: 'MKV video', mov: 'MOV video', avi: 'AVI video', ogv: 'OGV video',
+    noteful: 'Noteful note', nfedit: 'NoteComplete project', goodnotes: 'Goodnotes notebook', ntb: 'Notability notebook',
+    zip: 'ZIP archive', tar: 'Tar archive', gz: 'gzip file', '7z': '7-Zip archive', rar: 'RAR archive',
+    html: 'HTML page', htm: 'HTML page',
+    docx: 'Word document', docm: 'Word document', dotx: 'Word template', doc: 'Word document', rtf: 'Rich Text document',
+    odt: 'OpenDocument text', fodt: 'OpenDocument text',
+    xlsx: 'Excel workbook', xlsm: 'Excel workbook', xlsb: 'Excel workbook', xls: 'Excel workbook',
+    ods: 'OpenDocument spreadsheet', fods: 'OpenDocument spreadsheet',
+    pptx: 'PowerPoint presentation', pptm: 'PowerPoint presentation', ppt: 'PowerPoint presentation', odp: 'OpenDocument presentation',
+    epub: 'EPUB e-book', ipynb: 'Jupyter notebook',
+  };
   if (ext && known[ext.toLowerCase()]) return known[ext.toLowerCase()];
   return ext ? `${ext.toUpperCase().slice(0, 8)} file` : 'File';
 }

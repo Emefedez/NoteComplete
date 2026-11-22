@@ -7,11 +7,13 @@ import { keepInside } from './prefabs/kit/window.js';
 
 test('the shipped modules give the picker every prefab it had, in its groups', () => {
   const ids = cards().map((c) => c.id);
-  for (const id of ['graph', 'table', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'numberline', 'truthtable']) assert.ok(ids.includes(id), id);
-  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'maths', 'algorithms', 'languages']);
-  assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml' });
-  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'table', 'charts', 'uml', 'numberline', 'truthtable', 'algorithms', 'hanzi']);
+  for (const id of ['graph', 'table', 'stickynote', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'numberline', 'truthtable']) assert.ok(ids.includes(id), id);
+  assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'notes', 'maths', 'algorithms', 'languages']);
+  assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', stickynote: 'prefab', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml' });
+  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'stickynote', 'table', 'charts', 'uml', 'numberline', 'truthtable', 'algorithms', 'hanzi']);
   assert.ok(cards().some((c) => c.id === 'algorithm-dijkstra' && c.label === 'Greedy: Dijkstra' && c.group === 'algorithms' && c.kind === 'prefab'));
+  const sticky = renderSpec({ type: 'stickynote', color: '#fae778', title: 'Idea', text: 'Note body', author: 'Ana', fold: true });
+  assert.ok(sticky?.svg.startsWith('<svg') && sticky.transparent === true && sticky.svg.includes('Idea') && sticky.svg.includes('Ana'));
 });
 
 test('specs find their module by name or by type; old notes name none', () => {

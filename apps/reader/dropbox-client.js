@@ -6,7 +6,12 @@ import { FOLDER_MIME, supportedDriveFile } from './drive-client.js';
 export const DROPBOX_SCOPES = ['account_info.read', 'files.metadata.read', 'files.content.read'];
 const API = 'https://api.dropboxapi.com/2/';
 const CONTENT = 'https://content.dropboxapi.com/2/';
-const MIME = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', html: 'text/html', htm: 'text/html', txt: 'text/plain', md: 'text/markdown' };
+const MIME = {
+  pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp', svg: 'image/svg+xml', avif: 'image/avif',
+  mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac', opus: 'audio/opus',
+  mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska', mov: 'video/quicktime', avi: 'video/x-msvideo',
+  html: 'text/html', htm: 'text/html', txt: 'text/plain', md: 'text/markdown', rtf: 'application/rtf', epub: 'application/epub+zip',
+};
 // Dropbox reads JSON arguments from a header, which may only hold ASCII: escape everything else.
 export const headerArg = value => JSON.stringify(value).replace(/[\u007f-\uffff]/g, c => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
 const parentOf = path => { const at = String(path || '').lastIndexOf('/'); return at > 0 ? path.slice(0, at) : ''; };

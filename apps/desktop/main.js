@@ -216,7 +216,7 @@ const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
-const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'mp3', 'mp4', 'docx', 'odt', 'xlsx', 'ods', 'txt', 'md', 'markdown', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
+const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico', 'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'aac', 'weba', 'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'docx', 'docm', 'dotx', 'doc', 'rtf', 'odt', 'fodt', 'xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'pptx', 'pptm', 'ppt', 'odp', 'epub', 'ipynb', 'txt', 'md', 'markdown', 'rst', 'adoc', 'asciidoc', 'org', 'rmd', 'qmd', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
 const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 // Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
 // in their own session so sign-ins stay apart from the reader's storage.
@@ -541,7 +541,7 @@ app.whenReady().then(async () => {
     if (chosen.canceled) return null;
     const file = chosen.filePaths[0];
     await files.remember(file);
-    if (/\.mp4$/i.test(file)) return { path: file, name: path.basename(file), bytes: new Uint8Array(0), external: true };
+    if (/\.(mp4|m4v|webm|mkv|mov|avi|ogv)$/i.test(file)) return { path: file, name: path.basename(file), bytes: new Uint8Array(0), external: true };
     return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
   }));
   // The file the system asked this tab to open, once; it joins Recent like a dialog pick.

@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 1.2.66
+
+- **Simplified Chinese IME: removed standalone Pinyin-typing mode (`ā`) & keep-marked-Pinyin Enter modes.** The `中` toggle and `Ctrl+Shift+Space` now switch directly between **Off ↔ Hanzi**, since Pinyin over characters is already handled cleanly by **View → Pinyin over characters (`拼`)**. Removed all dead `pinyin`-mode, `Enter = Auto / Convert to tone-marked Pinyin`, `lineBefore`, `hasMarkedPinyin`, and `.zh-ime-py` code paths while migrating any legacy stored preferences cleanly.
+
 ## 1.2.65
 
 - **Styled Home sort dropdown (`A – Z`, `Last opened`, …, `Smallest`).** Replaced the raw native HTML `<select>` inside the Home sort pill with a custom button & styled radio menu matching `Type`, `Modified`, `Source`, and `Size`—clicking anywhere on the pill (including the arrow caret) now opens and closes the dropdown cleanly, with animated caret rotation and keyboard navigation (`↑`/`↓`/`Esc`).

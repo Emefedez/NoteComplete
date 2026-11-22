@@ -200,6 +200,7 @@ pub fn annotate(items: &[Item], seed: u64) -> Result<Annotation, String> {
                     layer: 0,
                     joined: false,
                     part: None,
+                    under: false,
                     text: Some(TextBox {
                         text: text.to_owned(),
                         font_size: size,

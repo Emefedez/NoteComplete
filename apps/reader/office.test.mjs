@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDelimited, guessSeparator, delimitedMarkdown, gridMarkdown, tableMarkdown, escapeText, parseXml, odfToMarkdown, zipEntry, odtMarkdown,
-  htmlToMarkdown, docxToMarkdown, docxDocument, odtDocument, officeDocument, imageFolder, imageExtension, linkPath, workbookMarkdown, readWorkbook, officeMarkdown, MAX_ROWS, MAX_COLUMNS } from './office.js';
+import { parseDelimited, guessSeparator, delimitedMarkdown, gridMarkdown, tableMarkdown, escapeText, parseXml, odfToMarkdown, zipEntry, zipList, odtMarkdown,
+  htmlToMarkdown, docxToMarkdown, docxDocument, docxXmlDocument, odtDocument, odpDocument, pptxDocument, docDocument, pptDocument, rtfToMarkdown, epubDocument, ipynbDocument, parseCfb, officeDocument, imageFolder, imageExtension, linkPath, workbookMarkdown, readWorkbook, officeMarkdown, MAX_ROWS, MAX_COLUMNS } from './office.js';
 import { fileKind, prepareDocument } from './media-import.js';
-import { isOfficeName } from './text-types.js';
+import { isOfficeName, isAudioName, isVideoName, isImageName } from './text-types.js';
+import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
 import { zip, docx, odt, workbook, ODT_CONTENT, CSV, XLSX, mammoth } from '../../tests/fixtures/office-files.mjs';
 
 test('CSV fields keep quoted commas, newlines and doubled quotes', () => {
@@ -261,4 +262,252 @@ test('an office file opened by name reports its picture folder', async () => {
   assert.match(done.markdown, /\(Mi%20apunte_files\/image1\.png\)/);
   assert.equal(done.images[0].path, 'Mi apunte_files/image1.png');
   assert.deepEqual((await officeDocument('x.csv', new TextEncoder().encode('a,b\n1,2'))).images, []);
+});
+
+// Minimal OLE2 Compound File Binary builder for testing legacy .doc and .ppt readers.
+function buildCfb(streams) {
+  const secSize = 512, ENDOFCHAIN = 0xfffffffe, FREESECT = 0xffffffff, FATSECT = 0xfffffffd;
+  const sectors = [];
+  const fat = [];
+  const entries = [{ name: 'Root Entry', type: 5, start: ENDOFCHAIN, size: 0 }];
+  for (const [name, data] of Object.entries(streams)) {
+    const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
+    // Keep streams >= 4096 bytes so they live in regular FAT sectors (simpler fixture).
+    const paddedLen = Math.max(4096, Math.ceil(buf.length / secSize) * secSize);
+    const nSec = paddedLen / secSize;
+    const start = sectors.length;
+    for (let i = 0; i < nSec; i++) {
+      const s = new Uint8Array(secSize);
+      const off = i * secSize;
+      if (off < buf.length) s.set(buf.subarray(off, Math.min(buf.length, off + secSize)));
+      sectors.push(s);
+      fat.push(i + 1 < nSec ? start + i + 1 : ENDOFCHAIN);
+    }
+    entries.push({ name, type: 2, start, size: buf.length });
+  }
+  const dirSec = sectors.length;
+  const dir = new Uint8Array(secSize);
+  const dv = new DataView(dir.buffer);
+  entries.forEach((e, idx) => {
+    const off = idx * 128;
+    for (let i = 0; i < e.name.length; i++) dv.setUint16(off + i * 2, e.name.charCodeAt(i), true);
+    dv.setUint16(off + 64, (e.name.length + 1) * 2, true);
+    dir[off + 66] = e.type;
+    dir[off + 67] = 1; // black
+    dv.setUint32(off + 68, 0xffffffff, true);
+    dv.setUint32(off + 72, 0xffffffff, true);
+    dv.setUint32(off + 76, idx === 0 && entries.length > 1 ? 1 : 0xffffffff, true);
+    dv.setUint32(off + 116, e.start, true);
+    dv.setUint32(off + 120, e.size, true);
+  });
+  sectors.push(dir);
+  fat.push(ENDOFCHAIN);
+
+  const fatSec = sectors.length;
+  fat.push(FATSECT);
+  const fatBuf = new Uint8Array(secSize);
+  const fv = new DataView(fatBuf.buffer);
+  fv.fill?.(0);
+  for (let i = 0; i < secSize / 4; i++) fv.setUint32(i * 4, i < fat.length ? fat[i] : FREESECT, true);
+  sectors.push(fatBuf);
+
+  const header = new Uint8Array(secSize);
+  header.set([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1], 0);
+  const hv = new DataView(header.buffer);
+  hv.setUint16(24, 0x003e, true); hv.setUint16(26, 0x0003, true); hv.setUint16(28, 0xfffe, true);
+  hv.setUint16(30, 9, true); hv.setUint16(32, 6, true);
+  hv.setUint32(44, 1, true); // FAT sectors
+  hv.setUint32(48, dirSec, true);
+  hv.setUint32(56, 4096, true);
+  hv.setUint32(60, ENDOFCHAIN, true);
+  hv.setUint32(68, ENDOFCHAIN, true);
+  hv.setUint32(72, 0, true);
+  for (let i = 0; i < 109; i++) hv.setUint32(76 + i * 4, i === 0 ? fatSec : FREESECT, true);
+
+  const out = new Uint8Array((1 + sectors.length) * secSize);
+  out.set(header, 0);
+  sectors.forEach((s, i) => out.set(s, (i + 1) * secSize));
+  return out;
+}
+
+test('pure-JS .docx fallback parses OOXML headings, styles, lists, tables, links and images without mammoth', async () => {
+  const res = await docxXmlDocument(docx({ image: PNG }), 'Informe_files');
+  assert.match(res.markdown, /^# Informe trimestral\n/);
+  assert.match(res.markdown, /Ventas de \*\*marzo\*\* y \*abril\*/);
+  assert.match(res.markdown, /1\. Primer punto\n2\. Segundo punto/);
+  assert.match(res.markdown, /\| Mes \| Total \|\n\| --- \| --- \|\n\| Marzo \| 1\\\|200 \|/);
+  assert.match(res.markdown, /\[Sitio\]\(https:\/\/example\.com\/a\)/);
+  assert.match(res.markdown, /!\[Esquema del circuito\]\(Informe_files\/image1\.png\)/);
+  assert.equal(res.images.length, 1);
+  // officeDocument works in Node even without window.mammoth by using docxXmlDocument!
+  const direct = await officeDocument('Informe.docx', docx());
+  assert.match(direct.markdown, /^# Informe trimestral\n/);
+});
+
+test('RTF documents convert formatting, Unicode, accents, hyperlinks and tables to Markdown', async () => {
+  const rtf = String.raw`{\rtf1\ansi\ansicpg1252{\fonttbl{\f0 Arial;}}{\colortbl;\red0\green0\blue0;}Hola {\b negrita} y {\i cursiva} con caf\'e9 y \u20013?\par {\field{\*\fldinst HYPERLINK "https://example.org"}{\fldrslt Enlace}}\par \trowd A\cell B\cell\row 1\cell 2\cell\row}`;
+  const md = rtfToMarkdown(rtf);
+  assert.match(md, /Hola \*\*negrita\*\* y \*cursiva\* con café y 中/);
+  assert.match(md, /\[Enlace\]\(https:\/\/example\.org\)/);
+  assert.match(md, /\| A \| B \|\n\| --- \| --- \|\n\| 1 \| 2 \|/);
+  const viaOffice = await officeDocument('carta.rtf', new TextEncoder().encode(rtf));
+  assert.match(viaOffice.markdown, /café/);
+});
+
+test('legacy .doc converts OLE2 WordDocument piece table (UTF-16 & CP1252, fields, tables) and disguised RTF/HTML', async () => {
+  // Build a real Word 97-2003 FIB + 0Table PlcPcd with UTF-16LE text including a field and a table.
+  const text = 'Tema 1\rHola \x13 HYPERLINK "x" \x14mundo\x15 con ñ\rA\x07B\x07\x07\r1\x072\x07\x07\r';
+  const textOffset = 0x400;
+  const word = new Uint8Array(Math.max(4096, textOffset + text.length * 2 + 16));
+  const wv = new DataView(word.buffer);
+  wv.setUint16(0, 0xa5ec, true); // wIdent
+  wv.setUint16(2, 0x00c1, true); // nFib (Word 97)
+  wv.setUint16(10, 0x0000, true); // flags -> 0Table, not encrypted
+  wv.setUint16(32, 14, true); // csw
+  wv.setUint16(34 + 28, 22, true); // cslw at 0x3E
+  wv.setUint32(0x4c, text.length, true); // ccpText
+  wv.setUint16(0x98, 93, true); // cbRgFcLcb
+  wv.setUint32(0x1a2, 0, true); // fcClx = 0 in 0Table
+  const pcdtLen = 4 * 2 + 8; // 2 CPs + 1 PCD = 16 bytes
+  wv.setUint32(0x1a6, 1 + 4 + pcdtLen, true); // lcbClx
+  for (let i = 0; i < text.length; i++) wv.setUint16(textOffset + i * 2, text.charCodeAt(i), true);
+
+  const tbl = new Uint8Array(4096);
+  const tv = new DataView(tbl.buffer);
+  tbl[0] = 0x02; // clxt = Pcdt
+  tv.setUint32(1, pcdtLen, true);
+  tv.setUint32(5, 0, true); // cp0
+  tv.setUint32(9, text.length, true); // cp1
+  tv.setUint32(13 + 2, textOffset, true); // fc (bit 30 = 0 -> UTF-16LE)
+
+  const bytes = buildCfb({ WordDocument: word, '0Table': tbl });
+  assert.ok(parseCfb(bytes).get('WordDocument'));
+  const res = await officeDocument('apuntes.doc', bytes);
+  assert.match(res.markdown, /Tema 1/);
+  assert.match(res.markdown, /Hola mundo con ñ/);
+  assert.match(res.markdown, /\| A \| B \|\n\| --- \| --- \|\n\| 1 \| 2 \|/);
+
+  // RTF disguised as .doc
+  const rtfDoc = await docDocument(new TextEncoder().encode('{\\rtf1 Disguised {\\b RTF} doc}'));
+  assert.match(rtfDoc.markdown, /Disguised \*\*RTF\*\* doc/);
+});
+
+test('PowerPoint .pptx and OpenDocument .odp extract ordered slides, lists, tables, images and speaker notes', async () => {
+  const pptxBytes = zip({
+    'ppt/presentation.xml': '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>',
+    'ppt/_rels/presentation.xml.rels': '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>',
+    'ppt/slides/slide1.xml': `<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:cSld><p:spTree>
+      <p:sp><p:nvSpPr><p:nvPr><p:ph type="title"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>Redes TCP/IP</a:t></a:r></a:p></p:txBody></p:sp>
+      <p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:pPr lvl="0"/><a:r><a:rPr b="1"/><a:t>Capa de transporte</a:t></a:r></a:p></p:txBody></p:sp>
+      <p:pic><p:nvPicPr><p:cNvPr id="2" name="diag" descr="Diagrama"/></p:nvPicPr><p:blipFill><a:blip r:embed="rImg"/></p:blipFill></p:pic>
+    </p:spTree></p:cSld></p:sld>`,
+    'ppt/slides/_rels/slide1.xml.rels': '<Relationships><Relationship Id="rImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/img1.png"/><Relationship Id="rNotes" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide1.xml"/></Relationships>',
+    'ppt/media/img1.png': PNG,
+    'ppt/notesSlides/notesSlide1.xml': '<p:notes xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:sp><p:nvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr><p:txBody><a:p><a:r><a:t>Explicar handshake</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>',
+  });
+  const pptxRes = await officeDocument('Tema 2.pptx', pptxBytes);
+  assert.match(pptxRes.markdown, /^## Slide 1: Redes TCP\/IP/);
+  assert.match(pptxRes.markdown, /- \*\*Capa de transporte\*\*/);
+  assert.match(pptxRes.markdown, /!\[Diagrama\]\(Tema%202_files\/image1\.png\)/);
+  assert.match(pptxRes.markdown, /> \*\*Notes:\*\* Explicar handshake/);
+  assert.equal(pptxRes.images.length, 1);
+
+  const odpBytes = zip({
+    'content.xml': `<office:document-content xmlns:office="o" xmlns:draw="d" xmlns:presentation="pr" xmlns:text="t" xmlns:xlink="x"><office:body><office:presentation>
+      <draw:page draw:name="p1">
+        <draw:frame presentation:class="title"><draw:text-box><text:p>Álgebra</text:p></draw:text-box></draw:frame>
+        <draw:frame><draw:text-box><text:p>Matrices invertibles</text:p></draw:text-box></draw:frame>
+        <presentation:notes><draw:frame presentation:class="notes"><draw:text-box><text:p>Repasar determinante</text:p></draw:text-box></draw:frame></presentation:notes>
+      </draw:page>
+    </office:presentation></office:body></office:document-content>`,
+  });
+  const odpRes = await odpDocument(odpBytes, 'Algebra_files');
+  assert.match(odpRes.markdown, /## Slide 1: Álgebra/);
+  assert.match(odpRes.markdown, /Matrices invertibles/);
+  assert.match(odpRes.markdown, /> \*\*Notes:\*\* Repasar determinante/);
+});
+
+test('legacy .ppt extracts slides from OLE2 PowerPoint Document records', async () => {
+  const encodeRec = (verInst, recType, payload) => {
+    const out = new Uint8Array(8 + payload.length);
+    const v = new DataView(out.buffer);
+    v.setUint16(0, verInst, true); v.setUint16(2, recType, true); v.setUint32(4, payload.length, true);
+    out.set(payload, 8);
+    return out;
+  };
+  const titleStr = 'Arquitectura';
+  const utf16 = new Uint8Array(titleStr.length * 2);
+  const uv = new DataView(utf16.buffer);
+  for (let i = 0; i < titleStr.length; i++) uv.setUint16(i * 2, titleStr.charCodeAt(i), true);
+  const rec1 = encodeRec(0x0000, 0x0fa0, utf16);
+  const rec2 = encodeRec(0x0000, 0x0fa8, new TextEncoder().encode('Pipeline de 5 etapas'));
+  const slidePayload = new Uint8Array(rec1.length + rec2.length);
+  slidePayload.set(rec1, 0); slidePayload.set(rec2, rec1.length);
+  const pptStream = encodeRec(0x000f, 0x03ee, slidePayload);
+  const pptRes = await pptDocument(buildCfb({ 'PowerPoint Document': pptStream }));
+  assert.match(pptRes.markdown, /## Slide 1: Arquitectura/);
+  assert.match(pptRes.markdown, /- Pipeline de 5 etapas/);
+});
+
+test('EPUB e-books and Jupyter .ipynb notebooks convert to Markdown with images', async () => {
+  const epubBytes = zip({
+    'META-INF/container.xml': '<container><rootfiles><rootfile full-path="OEBPS/content.opf"/></rootfiles></container>',
+    'OEBPS/content.opf': `<package><metadata xmlns:dc="dc"><dc:title>Manual de R</dc:title><dc:creator>Ana López</dc:creator></metadata>
+      <manifest><item id="c1" href="ch1.xhtml" media-type="application/xhtml+xml"/><item id="i1" href="img/plot.png" media-type="image/png"/></manifest>
+      <spine><itemref idref="c1"/></spine></package>`,
+    'OEBPS/ch1.xhtml': '<html><body><h2>Capítulo 1</h2><p>Vectores en <strong>R</strong>.</p><p><img src="img/plot.png" alt="Gráfico"/></p></body></html>',
+    'OEBPS/img/plot.png': PNG,
+  });
+  const epubRes = await epubDocument(epubBytes, 'Manual_files');
+  assert.match(epubRes.markdown, /^# Manual de R\n\n\*Ana López\*/);
+  assert.match(epubRes.markdown, /## Capítulo 1/);
+  assert.match(epubRes.markdown, /Vectores en \*\*R\*\*\./);
+  assert.match(epubRes.markdown, /!\[Gráfico\]\(Manual_files\/image1\.png\)/);
+  assert.equal(epubRes.images.length, 1);
+
+  const nb = {
+    metadata: { kernelspec: { language: 'python' } },
+    cells: [
+      { cell_type: 'markdown', source: ['# Práctica 1\n', 'Cálculo numérico.'] },
+      { cell_type: 'code', source: ['print(2 + 2)'], outputs: [{ text: ['4\n'] }, { data: { 'image/png': Buffer.from(PNG).toString('base64') } }] },
+    ],
+  };
+  const nbRes = ipynbDocument(new TextEncoder().encode(JSON.stringify(nb)), 'Practica_files');
+  assert.match(nbRes.markdown, /# Práctica 1/);
+  assert.match(nbRes.markdown, /```python\nprint\(2 \+ 2\)\n```/);
+  assert.match(nbRes.markdown, /```\n4\n```/);
+  assert.match(nbRes.markdown, /!\[Output\]\(Practica_files\/image1\.png\)/);
+  assert.equal(nbRes.images.length, 1);
+  assert.ok(zipList(epubBytes).includes('OEBPS/content.opf'));
+});
+
+test('legacy .xls (BIFF8), .xlsm, .xlsb and .fods work through SheetJS', () => {
+  for (const bt of ['biff8', 'xlsm', 'xlsb', 'fods']) {
+    const md = workbookMarkdown(XLSX, readWorkbook(XLSX, workbook(bt)));
+    assert.match(md, /## Ventas/, bt);
+    assert.match(md, /Lápiz/, bt);
+  }
+});
+
+test('fileCoverSvg provides crisp icon covers for MP3, MP4, Office, EPUB and Jupyter files', () => {
+  for (const name of ['track.mp3', 'lesson.m4a', 'clip.mp4', 'video.mkv', 'report.docx', 'old.doc', 'notes.odt', 'memo.rtf', 'data.xlsx', 'old.xls', 'slides.pptx', 'deck.ppt', 'talk.odp', 'book.epub', 'lab.ipynb', 'page.html', 'bundle.zip']) {
+    const url = fileCoverSvg(name);
+    assert.match(url || '', /^data:image\/svg\+xml;utf8,/, name);
+  }
+  assert.equal(hasStaticFileCover('song.mp3'), true);
+  assert.equal(hasStaticFileCover('movie.mp4'), true);
+  assert.equal(hasStaticFileCover('report.docx'), true);
+  assert.equal(hasStaticFileCover('archive.zip'), false); // zip may be a Goodnotes notebook
+  assert.equal(fileCoverSvg('notes.pdf'), null);
+  assert.equal(isAudioName('a.mp3'), true);
+  assert.equal(isAudioName('a.flac'), true);
+  assert.equal(isVideoName('b.mp4'), true);
+  assert.equal(isVideoName('b.mkv'), true);
+  assert.equal(isImageName('c.gif'), true);
+  assert.equal(isImageName('d.avif'), true);
+  assert.equal(isImageName('e.svg'), false);
+  assert.equal(isOfficeName('e.doc'), true);
+  assert.equal(isOfficeName('f.pptx'), true);
+  assert.equal(isOfficeName('g.epub'), true);
+  assert.equal(isOfficeName('h.ipynb'), true);
 });

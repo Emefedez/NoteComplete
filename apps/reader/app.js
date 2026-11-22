@@ -12,6 +12,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
+import { isAudioName, isVideoName } from "./text-types.js";
 import { savedUmlView } from "./uml.js";
 import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
 import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
@@ -115,8 +116,8 @@ const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1
 enhanceSelects();
 decorateIcons();
 const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
-const isMp3Name = (name, type = "") => /\.mp3$/i.test(String(name || "")) || String(type || "").toLowerCase() === "audio/mpeg";
-const isMp4Name = (name, type = "") => /\.mp4$/i.test(String(name || "")) || String(type || "").toLowerCase() === "video/mp4";
+const isMp3Name = (name, type = "") => isAudioName(name, type);
+const isMp4Name = (name, type = "") => isVideoName(name, type);
 async function openExternalVideo(path, name = "video.mp4", file = null) {
   if (path && window.notecompleteFiles?.openExternalPath) {
     await window.notecompleteFiles.openExternalPath(path);
@@ -788,7 +789,7 @@ async function load(file, preparedDocument = null) {
     // A Goodnotes or Notability notebook is now a note: it is saved as a .nfedit that keeps it.
     if (prepared.kind === "notebook") {
       const left = result.import_warnings || [];
-      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, left.length > 0);
+      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, false);
     } else status("Document opened.");
     collab?.documentChanged();
     autosave.opened(recovering);
@@ -3344,12 +3345,23 @@ function stylusPressure(g) {
 }
 // Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
 // documents scroll the same way. It never auto-scrolls or pastes the primary selection.
+let middleMouseAt = -Infinity;
+for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick"]) {
+  document.addEventListener(type, (e) => {
+    if (e.button !== 1) return;
+    middleMouseAt = performance.now();
+    if ((type === "mouseup" || type === "auxclick") && !e.target?.closest?.("input, textarea, [contenteditable], .TinyMDE, math-field")) {
+      e.preventDefault();
+    }
+  }, true);
+}
 function middlePan(el) {
   let drag = null;
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 1 || e.pointerType !== "mouse") return;
     // Editors with their own canvas (UML: a .puml file, a prefab on the page) pan it themselves.
     if (e.target.closest?.(".uml-editor")) return;
+    middleMouseAt = performance.now();
     e.preventDefault();
     e.stopPropagation();
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
@@ -3373,6 +3385,7 @@ function middlePan(el) {
   }, true);
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
+    middleMouseAt = performance.now();
     if (latest) { cancelAnimationFrame(frame); apply(); }
     latest = null;
     drag = null;
@@ -3380,7 +3393,8 @@ function middlePan(el) {
   };
   el.addEventListener("pointerup", end, true);
   el.addEventListener("pointercancel", end, true);
-  for (const type of ["mousedown", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) e.preventDefault(); }, true);
+  for (const type of ["mousedown", "mouseup", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) { middleMouseAt = performance.now(); e.preventDefault(); } }, true);
+  el.addEventListener("paste", (e) => { if (performance.now() - middleMouseAt < 400) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 }
 middlePan($("viewport"));
 // Rows that scroll sideways when the window is narrow (the menubar, the tools): a mouse
@@ -6668,7 +6682,7 @@ async function openMember(member) {
   if (member.source === "local" && isMp3Name(member.name)) {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
     if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
-    return openMediaFile(new File([bytes], member.name, { type: "audio/mpeg" }), { path: member.path });
+    return openMediaFile(new File([bytes], member.name), { path: member.path });
   }
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
     navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
@@ -7646,7 +7660,7 @@ async function placePrefab(p, spec, box = null, replace = null, id = undefined) 
   else {
     // A tap (no box dragged) places it from that point; nothing, in the middle of the view.
     // A UML diagram keeps its own size (its units are the page's), when it fits.
-    const natural = spec?.type === "uml" ? prefabSvg(spec)?.width || 440 : 440;
+    const natural = spec?.type === "uml" || spec?.type === "stickynote" ? prefabSvg(spec)?.width || (spec?.type === "stickynote" ? 256 : 440) : 440;
     const w = Math.min(natural, p.size[0] - 60, (p.size[1] - 60) / aspect), h = w * aspect;
     at = box ? [Math.max(20, Math.min(box[0], p.size[0] - w - 20)), Math.max(20, Math.min(box[1], p.size[1] - h - 20)), w, h] : compoundBox(p, "graph", null, [w, h]);
   }
@@ -8035,6 +8049,12 @@ for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
 });
 document.addEventListener("paste", (event) => {
   if (!itemKeys(event)) return;
+  // Middle-click (click wheel) on Linux fires a primary-selection paste event on mouseup;
+  // never turn an accidental wheel click into a text box on the page.
+  if (performance.now() - middleMouseAt < 400) {
+    event.preventDefault();
+    return;
+  }
   const text = event.clipboardData?.getData("text/plain") || "";
   const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
   // A copy made in NoteComplete: this tab's own, or (its picture carrying another copy) one

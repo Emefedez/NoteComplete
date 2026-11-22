@@ -28,7 +28,18 @@ export function mergeMembers(listed = [], added = []) {
 }
 
 // The chip before a document's name: its real format, short.
-const CHIPS = { pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', mp3: 'MP3', mp4: 'MP4', goodnotes: 'Goodnotes', ntb: 'Notability', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart', md: 'Markdown', markdown: 'Markdown', txt: 'TXT', html: 'HTML', htm: 'HTML', docx: 'DOCX', odt: 'ODT', xlsx: 'XLSX', ods: 'ODS', csv: 'CSV', tsv: 'TSV', json: 'JSON', zip: 'ZIP', tar: 'TAR', gz: 'GZ', tgz: 'TGZ', puml: 'PlantUML', plantuml: 'PlantUML' };
+const CHIPS = {
+  pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', gif: 'GIF', bmp: 'BMP', svg: 'SVG', avif: 'AVIF', ico: 'ICO',
+  mp3: 'MP3', m4a: 'M4A', wav: 'WAV', ogg: 'OGG', oga: 'OGG', opus: 'OPUS', flac: 'FLAC', aac: 'AAC', weba: 'WEBA',
+  mp4: 'MP4', m4v: 'M4V', webm: 'WEBM', mkv: 'MKV', mov: 'MOV', avi: 'AVI', ogv: 'OGV',
+  goodnotes: 'Goodnotes', ntb: 'Notability', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart',
+  md: 'Markdown', markdown: 'Markdown', txt: 'TXT', html: 'HTML', htm: 'HTML',
+  docx: 'DOCX', docm: 'DOCM', dotx: 'DOTX', doc: 'DOC', rtf: 'RTF', odt: 'ODT', fodt: 'FODT',
+  xlsx: 'XLSX', xlsm: 'XLSM', xlsb: 'XLSB', xls: 'XLS', ods: 'ODS', fods: 'FODS',
+  pptx: 'PPTX', pptm: 'PPTM', ppt: 'PPT', odp: 'ODP',
+  epub: 'EPUB', ipynb: 'IPYNB',
+  csv: 'CSV', tsv: 'TSV', json: 'JSON', zip: 'ZIP', tar: 'TAR', gz: 'GZ', tgz: 'TGZ', puml: 'PlantUML', plantuml: 'PlantUML',
+};
 export function formatChip(member) {
   if (member?.source === 'web') return 'Web';
   if (member?.folder || member?.kind === 'dir') return 'Folder';

@@ -7,7 +7,8 @@ import { isNotePackageTar } from './archive.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
-import { isTextName } from './text-types.js';
+import { isTextName, isOfficeName, isMediaName, isImageName } from './text-types.js';
+import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
@@ -58,9 +59,9 @@ export function textCoverSvg(text) {
 }
 
 export function shouldSkipCoverFile({ name = '', kind = '' } = {}) {
-  if (kind === 'text') return true;
+  if (kind === 'text' || kind === 'office') return true;
   if (kind && ['project', 'noteful', 'pdf', 'image', 'blank', 'handwritten', 'notecomplete'].includes(kind)) return false;
-  return Boolean(name && isTextName(name));
+  return Boolean(name && (isTextName(name) || isOfficeName(name) || isMediaName(name)));
 }
 /** Return true when a cover image is missing or a tiny placeholder (<= 24px, e.g. 16x16 BLANK_COVER_JPEG). */
 export function isTinyCoverSize(width, height) {
@@ -325,24 +326,32 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
           cover.removeAttribute?.('src');
           cover.classList.add('missing');
         };
-        library.cover(coverKey(entry)).then(async url => {
-          // An old text cover (lines running off the card) is drawn again, wrapped.
-          if (url && isTextName(entry.name || '') && !String(url).includes(encodeURIComponent(TEXT_COVER))) url = null;
-          if (url) {
-            cover.classList.remove('missing');
-            cover.src = url;
-          } else {
-            try {
-              const file = await library.open(entry);
-              if (file) {
-                await rememberCover(coverKey(entry), file);
-                const next = await library.cover(coverKey(entry));
-                if (next) { cover.classList.remove('missing'); cover.src = next; return; }
-              }
-            } catch (e) {}
-            cover.classList.add('missing');
-          }
-        });
+        const staticCover = hasStaticFileCover(entry.name || '') ? fileCoverSvg(entry.name || '') : null;
+        if (staticCover) {
+          cover.classList.remove('missing');
+          cover.src = staticCover;
+        } else {
+          library.cover(coverKey(entry)).then(async url => {
+            // An old text cover (lines running off the card) is drawn again, wrapped.
+            if (url && isTextName(entry.name || '') && !String(url).includes(encodeURIComponent(TEXT_COVER))) url = null;
+            if (url) {
+              cover.classList.remove('missing');
+              cover.src = url;
+            } else {
+              try {
+                const file = await library.open(entry);
+                if (file) {
+                  await rememberCover(coverKey(entry), file);
+                  const next = await library.cover(coverKey(entry));
+                  if (next) { cover.classList.remove('missing'); cover.src = next; return; }
+                }
+              } catch (e) {}
+              const fallback = fileCoverSvg(entry.name || '');
+              if (fallback) { cover.classList.remove('missing'); cover.src = fallback; return; }
+              cover.classList.add('missing');
+            }
+          });
+        }
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
       button.onclick = () => {
@@ -1083,7 +1092,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       // A text cover from before wrapping is drawn again; any other kept cover stays.
       if (kept && !(isTextName(name) && !String(kept).includes(encodeURIComponent(TEXT_COVER)))) return;
       if (/\.nfedit$/i.test(name)) return;
-      if (/\.(jpe?g|png|webp)$/i.test(name) || file.type?.startsWith('image/')) {
+      if (isImageName(name) || file.type?.startsWith('image/')) {
         const url = await shrink(file);
         if (url) await library.saveCover(key, url);
         return;
@@ -1109,10 +1118,10 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         }
         return;
       }
-      if (/\.html?$/i.test(name) || file.type === 'text/html') {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="40" y="30" width="240" height="180" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/><text x="160" y="115" font-family="system-ui, sans-serif" font-size="32" font-weight="bold" fill="#0284c7" text-anchor="middle">&lt;HTML/&gt;</text><text x="160" y="150" font-family="system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Interactive Exercise</text></svg>`;
-        const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-        await library.saveCover(key, url);
+      // HTML, audio, video, Office documents, e-books and notebooks get crisp icon covers.
+      if (hasStaticFileCover(name) || file.type === 'text/html') {
+        const url = fileCoverSvg(name) || fileCoverSvg('page.html');
+        if (url) await library.saveCover(key, url);
         return;
       }
       // Goodnotes and Notability notebooks (also zipped): their own picture, right away; the
@@ -1126,9 +1135,8 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       // Archives: a box with the format (what they hold shows when they are opened).
       if (/\.(zip|tar|tgz|gz|7z|rar)$/i.test(name) && !/\.(goodnotes|ntb)\.zip$/i.test(name)
         && !(/\.tar$/i.test(name) && isNotePackageTar(new Uint8Array(await file.slice(0, 1024).arrayBuffer())))) {
-        const label = (/\.(tgz|tar\.gz)$/i.test(name) ? 'TAR.GZ' : name.split('.').pop()).toUpperCase();
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="100" y="52" width="120" height="30" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><rect x="108" y="82" width="104" height="96" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/><rect x="144" y="100" width="32" height="8" rx="3" fill="#94a3b8"/><text x="160" y="160" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="#475569" text-anchor="middle">${label}</text></svg>`;
-        await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+        const url = fileCoverSvg(name);
+        if (url) await library.saveCover(key, url);
         return;
       }
       // Text and Markdown: the first lines, drawn like a page.

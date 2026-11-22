@@ -1285,6 +1285,11 @@ impl Editor {
     pub fn set_origin(&mut self, origin: Option<Origin>) {
         self.origin = origin;
     }
+    /// Locks the current history position as the undo floor (used by importers whose
+    /// preserved shapes and prefabs are part of the initial note state).
+    pub fn lock_history_floor(&mut self) {
+        self.floor = self.cursor;
+    }
     /// Chinese mode settings kept with the note (§9 of docs/CHINESE-INPUT.md).
     pub fn chinese(&self) -> &ProjectChinese {
         &self.chinese

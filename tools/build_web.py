@@ -117,8 +117,8 @@ def main():
     for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
     # Word and spreadsheet readers (office.js), fetched only when such a file is opened
     # (sw.js leaves them out of the offline install and keeps them once used).
-    # The mini SheetJS build reads XLSX and ODS, which is all the reader opens with it.
-    for folder,package,name in (('mammoth','mammoth','mammoth.browser.min.js'),('sheetjs','xlsx','dist/xlsx.mini.min.js')):
+    # The core SheetJS build reads XLSX, XLSM, XLSB, legacy XLS (BIFF8), ODS and FODS.
+    for folder,package,name in (('mammoth','mammoth','mammoth.browser.min.js'),('sheetjs','xlsx','dist/xlsx.core.min.js')):
         out=ROOT/'apps/reader/vendor'/folder
         if out.exists(): shutil.rmtree(out)
         out.mkdir(parents=True,exist_ok=True)
