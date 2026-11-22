@@ -3,8 +3,10 @@
 // PDF/OCR text layer likewise), and a menu of its own for Chinese in the Markdown preview, HTML
 // and text views, study cards and chat (the caret at the pointer), and for a selection of Chinese
 // in a text field or the notes (convert, vocabulary cards). A long press of a finger on a
-// character opens the panel straight away. app.js: configureZh(host), pageZhEntries(…) in its
-// page menu, pageZhLongPress(…) in its long press, installZhContext() once.
+// character opens the panel straight away. A right-click on a picture (an image-only PDF, an
+// inserted image) reads the Chinese around the pointer in the background and adds those entries
+// to the menu once found (zh-picture.js). app.js: configureZh(host), pageZhEntries(…) and
+// pageZhPicture(…) in its page menu, pageZhLongPress(…) in its long press, installZhContext() once.
 import { openContextMenu } from '../context-menu.js';
 
 export const HAN = /\p{Script=Han}/u;
@@ -332,6 +334,18 @@ function pageContext(p, hit, start, end, reading) {
     };
   }
   return ctx;
+}
+// Chinese read from the picture under (x, y) on page `p` (no text there to hit): the same entries
+// as for text, or [] when there is none or no picture. Only where Chinese is in use (its mode was
+// turned on once, or the note has Chinese), so its recognition data is not downloaded for nothing.
+export async function pageZhPicture(p, x, y) {
+  const root = p?.el;
+  if (!root) return [];
+  const { zhEverUsed, zhSettings } = await import('./settings.js');
+  if (!zhEverUsed() && zhSettings().mode === 'off' && !hasHan(root.textContent)) return [];
+  const { readPictureAt } = await import('./zh-picture.js');
+  const hit = await readPictureAt(root, x, y, { script: await scriptNow() }).catch(() => null);
+  return hit ? hitEntries(hit, (start, end, reading) => ({ reading }), root) : [];
 }
 // A selection of Chinese on a page (the PDF/OCR text layer): its menu.
 export async function pageZhSelection(text, x, y) {

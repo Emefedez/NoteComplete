@@ -39,7 +39,8 @@ const charPoint = (p, text, i) => p.evaluate(([t, k]) => {
   const q = new DOMPoint(r.x + r.width / 2, r.y + r.height / 2).matrixTransform(m);
   return [q.x, q.y];
 }, [text, i]);
-const menuLabels = (p) => p.locator('.context-menu').first().locator('button span').allTextContents();
+// Look-up entries carry the reading and meaning after the word: "Look up 好 (hǎo · good)".
+const menuLabels = async (p) => (await p.locator('.context-menu').first().locator('button span').allTextContents()).map((l) => l.replace(/^(Look up \S+) \(.*$/, '$1'));
 const menuClick = (p, label) => p.locator('.context-menu button', { hasText: label }).first().click();
 
 try {

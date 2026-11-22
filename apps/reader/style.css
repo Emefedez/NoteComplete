@@ -4126,6 +4126,9 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-menu button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 5px 9px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
 .context-menu button:hover:not(:disabled), .context-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
 .context-menu button:disabled { opacity: .45; cursor: default; }
+.context-menu button.context-added { animation: context-added .25s ease-out; }
+@keyframes context-added { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .context-menu button.context-added { animation: none; } }
 .context-menu button.danger { color: #c2410c; }
 .context-menu button svg { flex: none; width: 17px; height: 17px; }
 .context-menu .context-chevron { width: 14px; height: 14px; margin-right: -3px; opacity: .55; }

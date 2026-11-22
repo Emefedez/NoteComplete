@@ -90,7 +90,7 @@ import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
 import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
-import { openContextMenu, closeContextMenu } from "./context-menu.js";
+import { openContextMenu, closeContextMenu, openMenu, extendContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
 import { androidUpdates } from "./android-updates.js";
 import { tabStrip, tabForDigit } from "./tab-strip.js";
@@ -104,7 +104,7 @@ import { runAI, smallSetting } from "./small-model.js";
 import { installModalDialogs } from "./modal-dialogs.js";
 import { chineseField, imeMenuOpen, openSettings as openZhSettings } from "./chinese/ime.js";
 import { configureRuby, noteOpened as zhNoteOpened, rubySvg, rubyForExport, wireRubyControls } from "./chinese/ruby.js";
-import { configureZh, installZhContext, pageZhEntries, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
+import { configureZh, installZhContext, pageZhEntries, pageZhPicture, pageZhLongPress, pageZhSelection, hasHan, svgHit, lookUp as zhLookUp, lookUpTyped, lookupable } from "./chinese/zh-menu.js";
 import { installZhSelection, showBar as showZhBar } from "./chinese/zh-select.js";
 import { embedChineseFont } from "./chinese/fonts.js";
 const $ = (id) => document.getElementById(id),
@@ -7960,11 +7960,14 @@ async function pageMenu(p, at, x, y) {
   if (!doc || !p?.view) return;
   const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
   const tape = tapeAt(p, at);
-  // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js).
+  // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js); on a picture with
+  // no text there, read in the background and added to the open menu once found.
   const zh = await pageZhEntries(p, x, y).catch(() => []);
+  const fromPicture = zh.length ? null : pageZhPicture(p, x, y).catch(() => []);
+  const addWhenRead = (menu) => fromPicture?.then((found) => found.length && extendContextMenu(menu, found));
   try {
     const item = await pickWhole(args);
-    if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh }); }
+    if (item) { selection.show(item); itemMenu(item, x, y, { tape, zh }); addWhenRead(openMenu()); return; }
     const locked = await call("pickLock", args);
     if (locked?.locked) {
       return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
@@ -7974,7 +7977,7 @@ async function pageMenu(p, at, x, y) {
   const sharedUml = getSharedUmlClip();
   const canPastePage = Boolean(clip || sharedUml);
   const runPagePaste = () => (clip && (!sharedUml || (clip.at || 0) >= (sharedUml.at || 0)) ? pasteClip(p, at) : pasteUmlIntoPage(sharedUml, p, at));
-  openContextMenu(x, y, [
+  const menu = openContextMenu(x, y, [
     ...zh,
     ...tapeEntries(p, tape),
     tape && "-",
@@ -7985,6 +7988,7 @@ async function pageMenu(p, at, x, y) {
     ...(doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
     { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
   ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
+  addWhenRead(menu);
 }
 // A finger held still for a moment opens the menu (as a right-click). Not while it draws: a
 // finger that pans, selects or types does; a second finger (two-finger hold, pinch) cancels it.
