@@ -218,10 +218,26 @@ runs at load (no `const` read before it is set that was not read early before), 
 same browser run before and after (open a note, insert a page, the dialogs, item and page
 menus, copy and paste, the prefab chooser, a study import).
 
-Next, the parts that write the note's state: the pointer handlers (`pointerDown`,
-`pointerUp`, `appendPoint`), page rendering (`renderPage`, `buildPages`, thumbnails), the
-layer panel, `load`/`save`/`reset`, and collaboration (`startCollab`, `collabHost`). Those
-need the state itself in one object (`doc`, `page`, `panels`, `tool`, `editing`, …) first.
+Not planned: gathering the state into one object. Of the 104 `let`s, 68 are used by at most
+four statements of one feature (thumbnail timers, detail rendering, pen hover, …) and belong
+in that feature's module, not in a shared object. Only 15 are used across the file (`doc`
+123 statements, `panels`, `page`, `tool`, `editing`, `dirty`, …): putting those in an object
+rewrites about 600 references, conflicts with every feature change, and makes `app.js` no
+smaller, while the `app` getters already let a module read them. The pointer handlers
+(`pointerDown`, `pointerUp`, `appendPoint`) and `renderPage` read and write most of that
+state, so as modules they would take 30+ dependencies: they stay in `app.js`.
+
+Then, the same way, features that own their state, moved out with it: `pdf-detail.js` (fast
+zoom sharpening), `page-thumbnails.js` (the page list's thumbnails and current page),
+`layer-panel.js` (the Layers panel, `ensureEditableLayer`, ink dimmed to the audio) and
+`tool-widths.js` (each tool's width presets and their dialog). Where a variable a feature
+owns was also written from outside, the outside now calls the feature (`refreshThumbnailsSoon`,
+`widthPresetsNow`); `lastScrollAt`, written by the scroll handlers, stayed in `app.js`.
+`app.js` is 7,744 lines, 93 `let`s, 228 functions; same checks and the same browser run
+(plus a layer added, thumbnails drawn, a sharpened zoom and the width dialog).
+
+Left for later: tape (38 lines, and `reset` sets its mode) and zoom (20 lines) are too small
+to be worth a module; tool choices (`buildChoices`, `syncChoices`, tool prefs) is next.
 
 ### Q3 Errors that are dropped `[D]`
 

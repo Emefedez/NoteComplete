@@ -74,7 +74,7 @@ import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { Engine } from "./engine.js";
 import { applyDrawPatch, placeDrawnItem } from "./draw-patch.js";
-import { indexTimedInk, updateTimedInk } from "./ink-timeline.js";
+import { indexTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
 import { typesetMath } from "./math-boxes.js";
@@ -110,6 +110,10 @@ import { figureInserts } from "./figures.js";
 import { itemClipboard } from "./item-clipboard.js";
 import { itemMenus } from "./item-menus.js";
 import { mediaOpener } from "./media-open.js";
+import { toolWidths } from "./tool-widths.js";
+import { layerPanelController } from "./layer-panel.js";
+import { pageThumbnails } from "./page-thumbnails.js";
+import { pdfDetail } from "./pdf-detail.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -314,7 +318,7 @@ function redrawPdfPages() {
 const audio = new AudioController(
   (resource) => call("audio", { resource }),
   jump,
-  syncInk,
+  (...a) => syncInk(...a),
 );
 audio.transcript = new TranscriptController(audio);
 audio.processing = new AudioProcessing(audio.audio);
@@ -1310,109 +1314,23 @@ function underPaper(render) {
 }
 // The raster a page shows (a canvas, or a picture's URL), to release.
 const shownRaster = (render) => render?.querySelector(":scope > canvas.pdf-raster") || render?.querySelector("[data-background] > image:not(.pdf-detail)")?.getAttribute("href");
-// Fast zoom sharpening (Display quality; quality.js loadZoomDetail). A zoomed PDF page keeps
-// its raster at most window-wide, which zooming in never has to wait for, and the part of it on
-// screen (with a margin) is drawn again at the zoomed resolution: a few megapixels instead of a
-// whole page at up to 24, and as a canvas, where a whole zoomed page is too large for many
-// Android GPUs and goes through a PNG first. Redrawn when a pan or zoom pauses, and every
-// DETAIL_PAN_MS during a long pan.
-const DETAIL_PAUSE_MS = 90, DETAIL_PAN_MS = 350, DETAIL_MARGIN = 0.15;
-let detailTimer = 0, detailDue = 0, detailBusy = false, detailAgain = false;
-const rasterWidthFor = (width) => (zoomDetail ? Math.min(width, Math.max(1, $("viewport").clientWidth)) : width);
-// After a zoom step the sharp part waits longer, also when a scroll asks for it meanwhile.
-const ZOOM_DETAIL_PAUSE_MS = 220;
-let zoomHoldUntil = 0;
 // When the pages last scrolled or zoomed (scrollPause: PDF rasters wait for a pause).
 let lastScrollAt = 0;
-function scheduleDetail(pause = DETAIL_PAUSE_MS) {
-  if (!zoomDetail || !doc) return;
-  const now = performance.now();
-  if (pause > DETAIL_PAUSE_MS) zoomHoldUntil = now + pause;
-  detailDue ||= now + DETAIL_PAN_MS;
-  clearTimeout(detailTimer);
-  detailTimer = setTimeout(drawDetail, Math.max(0, Math.min(pause, detailDue - now), zoomHoldUntil - now));
-}
-async function drawDetail() {
-  detailDue = 0;
-  if (detailBusy) { detailAgain = true; return; }
-  detailBusy = true;
-  try {
-    // Nearest the middle of the window first: a long pan shows those sooner.
-    const middle = $("viewport").getBoundingClientRect(), y = (middle.top + middle.bottom) / 2;
-    const order = panels.filter((p) => p.near).sort((a, b) => {
-      const ra = a.el.getBoundingClientRect(), rb = b.el.getBoundingClientRect();
-      return Math.abs((ra.top + ra.bottom) / 2 - y) - Math.abs((rb.top + rb.bottom) / 2 - y);
-    });
-    for (const p of panels) if (!p.near) dropDetail(p);
-    for (const p of order) {
-      // A pinch scales the pages with a transform; its end (setZoom) asks again.
-      if (pinch || !zoomDetail) break;
-      await drawPageDetail(p).catch(() => { /* The page raster stays. */ });
-    }
-  } finally {
-    detailBusy = false;
-    if (detailAgain) { detailAgain = false; scheduleDetail(); }
-  }
-}
-const pageDetail = (p) => p.render?.querySelector(":scope > .pdf-detail, [data-background] > .pdf-detail");
-function dropDetail(p) {
-  const old = pageDetail(p);
-  if (!old) return;
-  old.remove();
-  if (old.localName === "image") URL.revokeObjectURL(old.getAttribute("href"));
-}
-// The part of the window over the PDF's rectangle, as fractions of that rectangle.
-function detailBox(pdf, view, margin) {
-  const mx = view.width * margin, my = view.height * margin;
-  return [
-    (Math.max(view.left - mx, pdf.left) - pdf.left) / pdf.width,
-    (Math.max(view.top - my, pdf.top) - pdf.top) / pdf.height,
-    (Math.min(view.right + mx, pdf.left + pdf.width) - pdf.left) / pdf.width,
-    (Math.min(view.bottom + my, pdf.top + pdf.height) - pdf.top) / pdf.height,
-  ];
-}
-async function drawPageDetail(p) {
-  const background = p.view?.pdf_background, render = p.render;
-  if (!background || !render || p.loading || !p.pdfReady) return;
-  const width = p.el.clientWidth;
-  if (width <= rasterWidthFor(width) * 1.05) return dropDetail(p);
-  const place = backgroundPlacement(background, p.size);
-  const r = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect();
-  const kx = r.width / p.size[0], ky = r.height / p.size[1];
-  const pdf = { left: r.left + place.x * kx, top: r.top + place.y * ky, width: place.width * kx, height: place.height * ky };
-  const seen = detailBox(pdf, view, 0);
-  if (seen[2] <= seen[0] || seen[3] <= seen[1]) return dropDetail(p);
-  const key = JSON.stringify([background, width, displayQuality, globalThis.devicePixelRatio || 1]);
-  const have = pageDetail(p)?.detail;
-  if (have?.key === key && have.box[0] <= seen[0] + 1e-3 && have.box[1] <= seen[1] + 1e-3 && have.box[2] >= seen[2] - 1e-3 && have.box[3] >= seen[3] - 1e-3) return;
-  // Under an SVG with its own paper (a picture-backed page, much ink) only a picture shows.
-  const kind = render.dataset.paper && !(p.inkItems > INK_HEAVY) ? "canvas" : "url";
-  const tile = await backgrounds.region(background, pdf.width, detailBox(pdf, view, DETAIL_MARGIN), displayQuality, kind, () => p.render === render && render.isConnected && p.near);
-  if (p.render !== render || !render.isConnected || p.el.clientWidth !== width || !zoomDetail) {
-    if (typeof tile.raster === "string") URL.revokeObjectURL(tile.raster);
-    return;
-  }
-  const [x0, y0, x1, y1] = tile.box;
-  const at = { x: place.x + x0 * place.width, y: place.y + y0 * place.height, width: (x1 - x0) * place.width, height: (y1 - y0) * place.height };
-  let el;
-  if (typeof tile.raster === "string") {
-    el = pdfImage(tile.raster, at);
-    el.classList.add("pdf-detail");
-  } else {
-    el = placeRaster(tile.raster, at, p.size);
-    el.className = "pdf-detail";
-  }
-  el.detail = { key, box: tile.box };
-  dropDetail(p);
-  if (el.localName === "image") render.querySelector("[data-background]")?.append(el);
-  else render.querySelector(":scope > svg")?.before(el);
-}
-function pdfImage(href, place) {
-  const el = document.createElementNS(ns, "image");
-  for (const [k, v] of Object.entries({ href, x: place.x, y: place.y, width: place.width, height: place.height, preserveAspectRatio: "none" }))
-    el.setAttribute(k, v);
-  return el;
-}
+// Fast zoom sharpening of PDF pages (pdf-detail.js).
+const { ZOOM_DETAIL_PAUSE_MS, dropDetail, pdfImage, rasterWidthFor, scheduleDetail } = pdfDetail({
+  $,
+  INK_HEAVY,
+  ns,
+  placeRaster,
+  app: {
+    get backgrounds() { return backgrounds; },
+    get displayQuality() { return displayQuality; },
+    get doc() { return doc; },
+    get panels() { return panels; },
+    get pinch() { return pinch; },
+    get zoomDetail() { return zoomDetail; },
+  },
+});
 // Tape state is a view choice: a mode for the whole note plus per-tape taps.
 let tapeMode = "note";
 const tapeTaps = new Map();
@@ -1457,109 +1375,22 @@ function setTapeMode(mode) {
   for (const p of panels) applyTapes(p);
   status(mode === "revealed" ? "All tape lifted." : mode === "covered" ? "All tape covering." : "Tape as saved in the note.");
 }
-// Thumbnails render one at a time, top first, so each shows as soon as it is ready
-// instead of all of them starting together and finishing together.
-const thumbQueue = new Set();
-let thumbBusy = false;
-function queueThumbnail(panel) { thumbQueue.add(panel); pumpThumbnails(); }
-async function pumpThumbnails() {
-  if (thumbBusy) return;
-  const next = [...thumbQueue].sort((a, b) => a.index - b.index)[0];
-  if (!next) return;
-  thumbQueue.delete(next);
-  thumbBusy = true;
-  try { await renderThumbnail(next); } finally { thumbBusy = false; pumpThumbnails(); }
-}
-async function renderThumbnail(panel) {
-  if (panel.thumbnailLoading || panel.thumbnailReady || !doc) return;
-  panel.thumbnailLoading = true;
-  const note = epoch, edits = pageEdits(panel), cache = backgrounds;
-  try {
-    const result = panel.view || (await call("view", { page: panel.index }));
-    if (note !== epoch) return;
-    const render = document.createElement("div");
-    render.innerHTML = result.svg;
-    paintTapes(render, `t${panel.index}`);
-    if (result.pdf_background) {
-      const thumb = panel.pageButton.querySelector(".page-thumb");
-      const width = Math.max(80, thumb?.clientWidth || 128);
-      const place = backgroundPlacement(result.pdf_background, panel.size);
-      const image = await cache.image(result.pdf_background, panel.size, Math.min(width, 160) * place.share);
-      render.querySelector("[data-background]")?.append(pdfImage(image, place));
-    }
-    const source = render.querySelector(":scope > svg");
-    const target = panel.pageButton.querySelector(".page-thumb");
-    if (source && target) {
-      // Store a small bitmap, never a duplicate page SVG or full-resolution PDF.
-      const width = 256, height = Math.max(1, Math.round(width * panel.size[1] / panel.size[0]));
-      source.setAttribute("width", width);
-      source.setAttribute("height", height);
-      const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(source)], { type: "image/svg+xml" }));
-      const image = new Image();
-      try {
-        await imageReady(image, url);
-        if (note !== epoch || edits !== pageEdits(panel)) return;
-        const canvas = document.createElement("canvas");
-        canvas.width = width; canvas.height = height;
-        canvas.getContext("2d").drawImage(image, 0, 0, width, height);
-        // Encoded off the main thread (toDataURL would stall it while writing).
-        const blob = await new Promise((done) => canvas.toBlob(done, "image/png"));
-        canvas.width = canvas.height = 0;
-        if (!blob || note !== epoch || edits !== pageEdits(panel)) return;
-        const preview = new Image();
-        preview.alt = "";
-        preview.src = URL.createObjectURL(blob);
-        if (panel.thumbUrl) URL.revokeObjectURL(panel.thumbUrl);
-        panel.thumbUrl = preview.src;
-        target.replaceChildren(preview);
-      } finally { URL.revokeObjectURL(url); }
-      panel.thumbnailReady = true;
-      panel.thumbnailEdits = edits;
-    }
-  } catch {
-    // The numbered fallback remains useful if a thumbnail cannot be decoded.
-  } finally {
-    panel.thumbnailLoading = false;
-    // Edited while it was drawn: again once the pen pauses, not at once (it would redraw
-    // continuously while writing).
-    if (note === epoch && edits !== pageEdits(panel)) updatePagePreview(panel, true);
-  }
-}
-// A page's thumbnail is redrawn once the pen has paused, not after every stroke: drawing it
-// (the page as an image, its PDF background) holds the main thread, and the next stroke's
-// pen events would wait behind it.
-const thumbsDue = new Set();
-let thumbsTimer = 0;
-// Edits made to each page (showEdit), so a thumbnail is redrawn when its own page changed,
-// not because the note did: an edit anywhere used to redraw every page's thumbnail as it
-// was scrolled past, and pages never shown in the panel got one drawn too.
-const pageEdits = (panel) => panel.edits || 0;
-function updatePagePreview(panel, drawing = false) {
-  // Thumbnails not drawn yet are drawn when they come into view in the panel.
-  if (!(panel.thumbnailReady || drawing) || panel.thumbnailEdits === pageEdits(panel)) return;
-  thumbsDue.add(panel);
-  clearTimeout(thumbsTimer);
-  thumbsTimer = setTimeout(refreshThumbnails, 1200);
-}
-function refreshThumbnails() {
-  if (gesture || mutationPending > 0) { thumbsTimer = setTimeout(refreshThumbnails, 600); return; }
-  const due = [...thumbsDue];
-  thumbsDue.clear();
-  for (const panel of due) {
-    if (!panels.includes(panel) || panel.thumbnailEdits === pageEdits(panel)) continue;
-    panel.thumbnailReady = false;
-    queueThumbnail(panel);
-  }
-}
-let markedPage = -1;
-function markPage() {
-  panels[markedPage]?.pageButton?.removeAttribute("aria-current");
-  // The list can be rebuilt: clear stray marks only then.
-  if (markedPage < 0) for (const panel of panels) panel.pageButton?.removeAttribute("aria-current");
-  panels[page]?.pageButton?.setAttribute("aria-current", "page");
-  markedPage = page;
-  syncPageMoveMenus();
-}
+// Thumbnails in the page list, and its current page (page-thumbnails.js).
+const { markPage, pageEdits, queueThumbnail, refreshThumbnailsSoon, thumbQueue, thumbsDue, updatePagePreview } = pageThumbnails({
+  call,
+  paintTapes,
+  pdfImage,
+  syncPageMoveMenus,
+  app: {
+    get backgrounds() { return backgrounds; },
+    get doc() { return doc; },
+    get epoch() { return epoch; },
+    get gesture() { return gesture; },
+    get mutationPending() { return mutationPending; },
+    get page() { return page; },
+    get panels() { return panels; },
+  },
+});
 // Phones held upright (narrow) and phones held sideways (short) both get the compact
 // layout: the page list is a drawer over the pages and undo, redo and the panel toggles
 // share the page row, so the chrome does not eat a short screen.
@@ -2405,276 +2236,19 @@ async function applyShared({ op, args }, mine, live = null) {
     if (!held) live?.remove();
   }
 }
-// Dims ink not yet written at the playing time. Only pages on screen are touched (others catch up
-// when they come into view), and nothing at all while sync is off and the ink is already whole.
-let inkSyncedOff = false;
-function syncInk() {
-  const recording = audio.recording,
-    time = audio.time;
-  if (!recording && inkSyncedOff) return;
-  inkSyncedOff = !recording;
-  const addedTimings = recording?.timings;
-  for (const p of panels) {
-    if (!p.view || (recording && p.near === false)) continue;
-    if (addedTimings && recording) {
-      const key = `${recording.id}:${p.inkRevision ?? 0}`;
-      if (p.addedInkKey !== key) {
-        p.addedInkKey = key;
-        p.addedInk = indexTimedInk(p.el, addedTimings);
-      }
-      updateTimedInk(p.addedInk || [], recording.id, time);
-    } else {
-      updateTimedInk(p.ink || [], recording?.id, time);
-    }
-  }
-}
-function syncActiveLayerHighlight() {
-  for (const el of $("layersList").querySelectorAll(".layer")) {
-    const active = Number(el.dataset.layerId) === activeLayer;
-    el.classList.toggle("active", active);
-    el.setAttribute("aria-selected", String(active));
-  }
-  const current = doc?.layers?.find((l) => l.id === activeLayer);
-  if ($("layersToggle")) {
-    if (current?.locked) $("layersToggle").dataset.locked = "true";
-    else delete $("layersToggle").dataset.locked;
-  }
-}
-function ensureEditableLayer() {
-  if (!doc?.layers?.length) return null;
-  let layer = doc.layers.find((l) => l.id === activeLayer);
-  if (layer?.visible && !layer.locked) return layer;
-  const fallback = doc.layers.findLast((l) => l.visible && !l.locked);
-  if (fallback) {
-    activeLayer = fallback.id;
-    syncActiveLayerHighlight();
-    return fallback;
-  }
-  status(
-    layer?.locked
-      ? "Layer is locked. Click the padlock icon in Layers (Shift+L) to unlock it."
-      : "Layer is hidden. Click the eye icon in Layers (Shift+L) to show it.",
-    true,
-  );
-  return null;
-}
-function layerPanel(layers) {
-  const current = layers.find((l) => l.id === activeLayer);
-  if (!current || !current.visible || current.locked) {
-    const unlocked = layers.findLast((l) => l.visible && !l.locked);
-    if (unlocked) activeLayer = unlocked.id;
-    else if (!current) activeLayer = layers[0]?.id || 0;
-  }
-  $("layersList").replaceChildren();
-  const moveLayer = (fromIndex, toIndex) => {
-    if (toIndex < 0 || toIndex >= layers.length || fromIndex === toIndex) return;
-    const order = layers.map((l) => l.id);
-    const [moved] = order.splice(fromIndex, 1);
-    order.splice(toIndex, 0, moved);
-    action("reorderLayers", { order });
-  };
-  layers.forEach((layer, index) => {
-    const row = document.createElement("div");
-    row.className =
-      "layer" +
-      (layer.id === activeLayer ? " active" : "") +
-      (layer.locked ? " locked" : "") +
-      (!layer.visible ? " hidden-layer" : "");
-    row.dataset.layerId = String(layer.id);
-    row.tabIndex = 0;
-    row.setAttribute("role", "option");
-    row.setAttribute("aria-selected", String(layer.id === activeLayer));
-    row.setAttribute("aria-label", `Select ${layer.name}`);
-    const chooseThisLayer = () => {
-      if (activeLayer === layer.id) return;
-      activeLayer = layer.id;
-      syncActiveLayerHighlight();
-    };
-    row.onclick = (e) => {
-      if (e.target.closest("button, input[type='range']")) return;
-      chooseThisLayer();
-    };
-    row.onkeydown = (e) => {
-      if (e.target !== row) return;
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        chooseThisLayer();
-      } else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        e.preventDefault();
-        moveLayer(index, index + (e.key === "ArrowUp" ? -1 : 1));
-      }
-    };
-    const controls = document.createElement("div");
-    controls.className = "layer-controls";
-    const grip = document.createElement("span");
-    grip.className = "layer-grip";
-    grip.title = "Drag to reorder layer";
-    grip.append(icon("grip"));
-    const name = document.createElement("input");
-    name.className = "layer-title";
-    name.value = layer.name;
-    name.setAttribute("aria-label", `Layer name ${layer.id + 1}`);
-    name.onfocus = chooseThisLayer;
-    name.onchange = () =>
-      action("layer", { layer: { ...layer, name: name.value } });
-    const actions = document.createElement("div");
-    actions.className = "layer-actions";
-    const up = document.createElement("button");
-    up.type = "button";
-    up.className = "icon-button layer-move";
-    up.disabled = index === 0;
-    up.title = "Move layer up";
-    up.setAttribute("aria-label", `Move ${layer.name} up`);
-    up.append(icon("arrowUp"));
-    up.onclick = (e) => {
-      e.stopPropagation();
-      moveLayer(index, index - 1);
-    };
-    const down = document.createElement("button");
-    down.type = "button";
-    down.className = "icon-button layer-move";
-    down.disabled = index === layers.length - 1;
-    down.title = "Move layer down";
-    down.setAttribute("aria-label", `Move ${layer.name} down`);
-    down.append(icon("arrowDown"));
-    down.onclick = (e) => {
-      e.stopPropagation();
-      moveLayer(index, index + 1);
-    };
-    const visible = document.createElement("button");
-    visible.type = "button";
-    visible.className = "icon-button layer-visible";
-    visible.setAttribute("aria-label", layer.visible ? `Hide ${layer.name}` : `Show ${layer.name}`);
-    visible.setAttribute("aria-pressed", String(layer.visible));
-    visible.title = layer.visible ? "Visible (click to hide)" : "Hidden (click to show)";
-    visible.append(icon(layer.visible ? "eye" : "eyeOff"));
-    visible.onclick = (e) => {
-      e.stopPropagation();
-      action("layer", { layer: { ...layer, visible: !layer.visible } });
-    };
-    const lock = document.createElement("button");
-    lock.type = "button";
-    lock.className = "icon-button layer-lock";
-    lock.setAttribute("aria-label", `${layer.locked ? "Unlock" : "Lock"} ${layer.name}`);
-    lock.setAttribute("aria-pressed", String(layer.locked));
-    lock.title = layer.locked ? "Locked (click to unlock)" : "Unlocked (click to lock)";
-    lock.append(icon(layer.locked ? "lock" : "unlock"));
-    lock.onclick = (e) => {
-      e.stopPropagation();
-      action("layer", { layer: { ...layer, locked: !layer.locked } });
-    };
-    actions.append(up, down, visible, lock);
-    controls.append(grip, name, actions);
-    const meta = document.createElement("div");
-    meta.className = "layer-opacity-row";
-    if (layer.locked) {
-      const badge = document.createElement("span");
-      badge.className = "layer-badge locked";
-      badge.textContent = "Locked";
-      meta.append(badge);
-    } else if (!layer.visible) {
-      const badge = document.createElement("span");
-      badge.className = "layer-badge muted";
-      badge.textContent = "Hidden";
-      meta.append(badge);
-    }
-    const opacity = document.createElement("input");
-    opacity.type = "range";
-    opacity.min = 0;
-    opacity.max = 1;
-    opacity.step = 0.05;
-    opacity.value = layer.opacity;
-    opacity.setAttribute("aria-label", `Opacity ${layer.name}`);
-    const pct = document.createElement("output");
-    pct.className = "layer-opacity-value";
-    pct.textContent = `${Math.round(layer.opacity * 100)}%`;
-    opacity.oninput = () => {
-      pct.textContent = `${Math.round(Number(opacity.value) * 100)}%`;
-    };
-    opacity.onchange = () =>
-      action("layer", { layer: { ...layer, opacity: Number(opacity.value) } });
-    meta.append(opacity, pct);
-    row.append(controls, meta);
-    $("layersList").append(row);
-  });
-  syncActiveLayerHighlight();
-}
-// Drag a layer card vertically to reorder layers.
-$("layersList").addEventListener("pointerdown", (down) => {
-  const item = down.target.closest(".layer");
-  if (!item || down.button !== 0 || down.target.closest("button, input")) return;
-  const container = $("layersList");
-  const startY = down.clientY, pointer = down.pointerId;
-  let dragging = false, grab = 0;
-  const siblings = () => [...container.querySelectorAll(".layer")];
-  const initialOrder = siblings().map((el) => Number(el.dataset.layerId));
-  const move = (event) => {
-    if (event.pointerId !== pointer) return;
-    if (!dragging) {
-      if (Math.abs(event.clientY - startY) < 6) return;
-      dragging = true;
-      grab = startY - item.getBoundingClientRect().top;
-      item.classList.add("dragging");
-      try { item.setPointerCapture(pointer); } catch { /* Released already. */ }
-    }
-    item.style.transform = "";
-    const others = siblings().filter((el) => el !== item);
-    const top = event.clientY - grab, centre = top + item.offsetHeight / 2;
-    const index = others.filter((el) => {
-      const r = el.getBoundingClientRect();
-      return r.top + r.height / 2 < centre;
-    }).length;
-    const ref = others[index];
-    if (ref ? item.nextElementSibling !== ref : others.at(-1)?.nextElementSibling !== item) {
-      if (ref) container.insertBefore(item, ref);
-      else others.at(-1)?.after(item);
-    }
-    item.style.transform = `translateY(${top - item.getBoundingClientRect().top}px)`;
-  };
-  const finish = (event) => {
-    if (event.pointerId !== pointer) return;
-    removeEventListener("pointermove", move);
-    removeEventListener("pointerup", finish);
-    removeEventListener("pointercancel", finish);
-    item.classList.remove("dragging");
-    item.style.transform = "";
-    if (!dragging) return;
-    const nextOrder = siblings().map((el) => Number(el.dataset.layerId));
-    if (nextOrder.some((id, i) => id !== initialOrder[i])) {
-      action("reorderLayers", { order: nextOrder });
-    }
-  };
-  addEventListener("pointermove", move);
-  addEventListener("pointerup", finish);
-  addEventListener("pointercancel", finish);
+// Layers: the panel, the layer edits go to, and ink dimmed to the audio (layer-panel.js).
+const { ensureEditableLayer, layerPanel, syncInk } = layerPanelController({
+  $,
+  action,
+  audio,
+  resize,
+  status,
+  app: {
+    get activeLayer() { return activeLayer; }, set activeLayer(v) { activeLayer = v; },
+    get doc() { return doc; },
+    get panels() { return panels; },
+  },
 });
-$("closeLayers").onclick = () => {
-  $("layersPanel").hidden = true;
-  $("layersToggle").setAttribute("aria-expanded", "false");
-  $("layersToggle").focus();
-  resize();
-};
-$("layersToggle").onclick = () => {
-  $("layersPanel").hidden = !$("layersPanel").hidden;
-  $("layersToggle").setAttribute(
-    "aria-expanded",
-    String(!$("layersPanel").hidden),
-  );
-  resize();
-};
-$("addLayer").onclick = () => {
-  const id = Math.max(...doc.layers.map((l) => l.id), -1) + 1;
-  activeLayer = id;
-  action("layer", {
-    layer: {
-      id,
-      name: `Layer ${id + 1}`,
-      visible: true,
-      locked: false,
-      opacity: 1,
-    },
-  });
-};
 function cancelGesture() {
   selection.cancel();
   const g = gesture;
@@ -2774,7 +2348,7 @@ function pointerDown(e, p) {
     }
     if (tool !== "pan") { chooseTool("pan"); return; }
   }
-  if (thumbsDue.size) { clearTimeout(thumbsTimer); thumbsTimer = setTimeout(refreshThumbnails, 1200); }
+  if (thumbsDue.size) refreshThumbnailsSoon();
   if (gesture) {
     if (e.pointerId === gesture.id) return;
     // A stylus has one tip: a new pen-down means the last stroke's lift never arrived
@@ -3599,116 +3173,16 @@ function restoreToolPrefs() {
   if (pref.width) setWidthValue(pref.width);
   buildWidthRow();
 }
-// Each tool's widths (in px): the presets shown in the tool bar and the quick menu. Hold
-// one (or right-click it) to set its value; any width from 0.5 to 100 px. Remembered.
-const WIDTH_DEFAULTS = {
-  // The pen: 4 px is the width that reads right next to Noteful's, with a slightly thicker
-  // finest and a gentle ramp around it.
-  draw: [2, 3, 4, 7, 11, 16],
-  // Six for the pen, the highlighter and shapes: a 2 × 3 grid beside the colours.
-  highlight: [8, 12, 16, 24, 32, 40],
-  tape: [20, 40, 64],
-  shape: [1, 2, 3, 4, 6, 8],
-};
-const WIDTH_LADDER = [1, 2, 4, 8, 16, 24, 40, 64];
-let widthPresets = { ...WIDTH_DEFAULTS };
-try {
-  const saved = JSON.parse(localStorage.getItem("notecomplete-widths") || "{}");
-  // The pen's earlier untouched presets (1, 2, 4, 8) give way to the new ones; edited ones stay.
-  if (["[1,2,4,8]", "[2,4,7,11]"].includes(JSON.stringify(saved.draw))) delete saved.draw;
-  // Untouched four-width pens, highlighters and shapes get the six widths.
-  if (JSON.stringify(saved.highlight) === "[8,16,24,40]") delete saved.highlight;
-  if (JSON.stringify(saved.shape) === "[1,2,4,8]") delete saved.shape;
-  widthPresets = { ...WIDTH_DEFAULTS, ...saved };
-} catch { /* Optional. */ }
-const widthLabel = (v) => `${Number(v)} px`;
-// The width select holds every value in use; one typed in is added to it.
-function setWidthValue(value) {
-  const v = String(Number(value));
-  if (!$("width").querySelector(`option[value="${v}"]`)) $("width").append(new Option(widthLabel(v), v));
-  $("width").value = v;
-}
-function lineIcon(value) {
-  const svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  // A gentle (log) scale, so the thin widths (1, 2, 3 px) still look different from each other.
-  const stroke = Math.min(12, 0.7 + 2.6 * Math.log1p(Number(value) / 2));
-  svg.innerHTML = `<path d="M3 12h18" stroke-width="${stroke.toFixed(2)}"/>`;
-  return svg;
-}
-// The tool bar's width row: this tool's presets, each held (or right-clicked) to change it.
-function buildWidthRow() {
-  const row = document.querySelector('.choice-row[data-for="width"]');
-  if (!row) return;
-  const presets = widthPresets[tool], values = presets || WIDTH_LADDER;
-  row.replaceChildren(...values.map((value, index) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.dataset.value = String(value);
-    b.setAttribute("role", "radio");
-    b.title = presets ? `${widthLabel(value)} (hold or right-click to change it)` : widthLabel(value);
-    b.setAttribute("aria-label", widthLabel(value));
-    b.append(lineIcon(value));
-    let held = false;
-    b.onclick = () => { if (held) { held = false; return; } setWidthValue(value); $("width").dispatchEvent(new Event("change")); syncChoices(); };
-    if (presets) {
-      b.oncontextmenu = (e) => { e.preventDefault(); editWidth(tool, index); };
-      b.addEventListener("pointerdown", (down) => {
-        if (down.button !== 0) return;
-        const timer = setTimeout(() => { held = true; editWidth(tool, index); }, 450);
-        const stop = () => { clearTimeout(timer); removeEventListener("pointerup", stop, true); removeEventListener("pointercancel", stop, true); };
-        addEventListener("pointerup", stop, true);
-        addEventListener("pointercancel", stop, true);
-      });
-    }
-    return b;
-  }));
-  syncChoices();
-}
-// The width editor: a number and a slider in px, with a preview of the line.
-let widthEditing = null;
-function editWidth(name, index) {
-  widthEditing = { name, index };
-  const value = widthPresets[name][index];
-  $("widthTitle").textContent = `${({ draw: "Pen", highlight: "Highlighter", tape: "Tape", shape: "Shapes" })[name] || "Tool"} width`;
-  $("widthValue").value = $("widthRange").value = value;
-  previewWidth();
-  $("widthDialog").showModal();
-  $("widthValue").select();
-}
-function previewWidth() {
-  const v = Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1));
-  const path = $("widthPreview").querySelector("path");
-  path.setAttribute("stroke-width", Math.min(56, v));
-  path.style.color = $("color").value;
-}
-$("widthRange").oninput = () => { $("widthValue").value = $("widthRange").value; previewWidth(); };
-$("widthValue").oninput = () => { $("widthRange").value = $("widthValue").value; previewWidth(); };
-$("widthValue").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("widthSave").click(); } };
-$("widthCancel").onclick = () => $("widthDialog").close();
-$("widthReset").onclick = () => {
-  const { name } = widthEditing || {};
-  if (!name) return;
-  widthPresets[name] = [...WIDTH_DEFAULTS[name]];
-  saveWidths();
-  $("widthDialog").close();
-};
-$("widthSave").onclick = () => {
-  const { name, index } = widthEditing || {};
-  const v = Math.round(Math.min(100, Math.max(0.5, Number($("widthValue").value) || 1)) * 2) / 2;
-  if (!name) return;
-  widthPresets[name] = widthPresets[name].map((w, i) => (i === index ? v : w));
-  saveWidths();
-  if (tool === name) { setWidthValue(v); $("width").dispatchEvent(new Event("change")); }
-  $("widthDialog").close();
-};
-function saveWidths() {
-  try { localStorage.setItem("notecomplete-widths", JSON.stringify(widthPresets)); } catch { /* Optional. */ }
-  buildWidthRow();
-  try { quick.redraw(); } catch { /* The menu is not made yet. */ }
-}
-buildWidthRow();
+// Each tool's widths: the tool bar's width row and its editor (tool-widths.js).
+const { WIDTH_LADDER, buildWidthRow, editWidth, lineIcon, saveWidths, setWidthValue, widthLabel, widthPresetsNow } = toolWidths({
+  $,
+  ns,
+  syncChoices,
+  app: {
+    get quick() { return quick; },
+    get tool() { return tool; },
+  },
+});
 function saveToolPrefs() {
   if (!TOOL_DEFAULTS[tool]) return;
   toolPrefs[tool] = { color: $("color").value, width: $("width").value };
@@ -3974,7 +3448,7 @@ const fromButtons = (selector, attr) => [...document.querySelectorAll(selector)]
   key: b.dataset[attr], label: b.title, icon: b.querySelector("svg"), active: () => b.getAttribute("aria-checked") === "true", run: () => b.click(), stay: () => true,
 }));
 // A tool's width presets in the quick menu: each held (or right-clicked) to change it.
-const widthEntries = (name) => widthPresets[name].map((value, i) => ({
+const widthEntries = (name) => widthPresetsNow()[name].map((value, i) => ({
   key: `w${i}`,
   label: `${widthLabel(value)} (hold or right-click to change it)`,
   icon: lineIcon(value),
@@ -4153,8 +3627,8 @@ const quick = quickMenu({
     if (section === "inner") {
       quickOrder = order;
       remember("notecomplete-quick-order", order);
-    } else if (section === "bottom" && widthPresets[tool] && order.every((k) => k.startsWith("w"))) {
-      widthPresets[tool] = order.map((k) => widthPresets[tool][Number(k.slice(1))]);
+    } else if (section === "bottom" && widthPresetsNow()[tool] && order.every((k) => k.startsWith("w"))) {
+      widthPresetsNow()[tool] = order.map((k) => widthPresetsNow()[tool][Number(k.slice(1))]);
       saveWidths();
     } else if (section === "top" && palettes[tool]) {
       // Colours folded behind the + are not in the dragged order: they keep their places after it.
@@ -7360,7 +6834,7 @@ const { itemMenu, itemPicture, longPress, pageMenu } = itemMenus({
     get gesture() { return gesture; },
     get panels() { return panels; },
     get tapeMode() { return tapeMode; },
-    get widthPresets() { return widthPresets; },
+    get widthPresets() { return widthPresetsNow(); },
   },
 });
 // Page pixels for OCR: the PDF at about 2200 px wide under the ink and images.
