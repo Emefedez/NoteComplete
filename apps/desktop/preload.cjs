@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   // The file the system asked this tab to open (Open with…), or null.
   launched: () => ipcRenderer.invoke('files:launched'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
+  openExternalPath: file => ipcRenderer.invoke('files:open-external-path', file),
   readLocalNote: file => ipcRenderer.invoke('files:read-local-note', file),
   statLocalNote: file => ipcRenderer.invoke('files:stat-local-note', file),
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
@@ -158,4 +159,18 @@ contextBridge.exposeInMainWorld('notecompleteCollab', {
   onOnlineEnded: callback => ipcRenderer.on('collab:online-ended', () => callback()),
   minimize: () => ipcRenderer.invoke('collab:minimize'),
   onEnded: callback => ipcRenderer.on('collab:ended', (_event, detail) => callback(detail)),
+});
+// R Math & Statistics Bridge (r-bridge.js): connects to R Commander Studio or local Rscript fallback.
+contextBridge.exposeInMainWorld('notecompleteRBridge', {
+  status: () => ipcRenderer.invoke('rbridge:status'),
+  evalFigure: request => ipcRenderer.invoke('rbridge:eval-figure', request || {}),
+  evalCode: request => ipcRenderer.invoke('rbridge:eval-code', request || {}),
+  openInStudio: request => ipcRenderer.invoke('rbridge:open-studio', request || {}),
+  installStudio: onProgress => {
+    const listener = (_event, p) => { if (typeof onProgress === 'function') onProgress(p); };
+    ipcRenderer.on('rbridge:install-progress', listener);
+    return ipcRenderer.invoke('rbridge:install-studio').finally(() => ipcRenderer.removeListener('rbridge:install-progress', listener));
+  },
+  pickFolder: defaultPath => ipcRenderer.invoke('rbridge:pick-folder', typeof defaultPath === 'string' ? defaultPath : ''),
+  createItem: request => ipcRenderer.invoke('rbridge:create-item', request || {}),
 });

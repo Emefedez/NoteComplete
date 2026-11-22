@@ -3,12 +3,12 @@ import { icon } from '../icons.js';
 import { rubySettings, RUBY_DEFAULTS } from './ruby.js';
 
 export const ZH_DEFAULTS = Object.freeze({
-  mode: 'off',          // new fields and notes: off | hanzi | pinyin
+  mode: 'off',          // new fields and notes: off | hanzi
   script: 'simplified', // simplified | traditional
-  shortcut: true,       // Ctrl+Shift+Space cycles Off → Hanzi → Pinyin
+  shortcut: true,       // Ctrl+Shift+Space toggles Off ↔ Hanzi
   shiftLatin: true,     // Shift alone: Latin letters for a while
-  enter: 'auto',        // Enter with a buffer in Hanzi mode: auto | letters | marks
-  fullWidth: true,      // ， 。 ？ ！ in Hanzi mode
+  enter: 'choose',      // Enter with a buffer in Hanzi mode: choose | letters
+  fullWidth: false,     // ， 。 ？ ！ in Hanzi mode (opt-in; normal ASCII punctuation by default)
   perPage: 9,           // 5 | 9 candidates
   bothScripts: false,   // the other script's form beside a candidate
   toneColours: true,    // tone colours on the pinyin over candidates
@@ -17,44 +17,55 @@ export const ZH_DEFAULTS = Object.freeze({
 });
 const KEY = (k) => `notecomplete-zh-${k}`;
 const store = () => { try { return globalThis.localStorage || null; } catch { return null; } };
+const normalizeZhMode = (v) => (v === 'hanzi' || v === 'pinyin' ? 'hanzi' : 'off');
+const normalizeEnter = (v) => (v === 'letters' ? 'letters' : 'choose');
 
 // zhSettings() → the current values; zhSettings({fullWidth: false}) saves and returns them.
 export function zhSettings(patch = null) {
   const ls = store();
   if (patch && ls) {
-    for (const [k, v] of Object.entries(patch)) if (k in ZH_DEFAULTS) try { ls.setItem(KEY(k), JSON.stringify(v)); } catch { /* Full or blocked. */ }
+    for (const [k, v] of Object.entries(patch)) if (k in ZH_DEFAULTS) try {
+      const val = k === 'mode' ? normalizeZhMode(v) : k === 'enter' ? normalizeEnter(v) : v;
+      ls.setItem(KEY(k), JSON.stringify(val));
+    } catch { /* Full or blocked. */ }
     globalThis.dispatchEvent?.(new CustomEvent('zh-settings', { detail: zhSettings() }));
   }
   const out = { ...ZH_DEFAULTS };
   if (ls) for (const k of Object.keys(ZH_DEFAULTS)) {
     try { const v = ls.getItem(KEY(k)); if (v != null) out[k] = JSON.parse(v); } catch { /* Default. */ }
   }
+  out.mode = normalizeZhMode(out.mode);
+  out.enter = normalizeEnter(out.enter);
   return out;
 }
 
 // A field's remembered mode ("notecomplete-zh-mode-<field>"); new fields start with the default mode.
 export function fieldMode(field) {
-  try { const v = store()?.getItem(KEY(`mode-${field}`)); if (v) return v; } catch { /* Default. */ }
+  try { const v = store()?.getItem(KEY(`mode-${field}`)); if (v) return normalizeZhMode(v); } catch { /* Default. */ }
   return zhSettings().mode;
 }
 export function setFieldMode(field, mode) {
-  try { store()?.setItem(KEY(`mode-${field}`), mode); if (mode !== 'off') store()?.setItem(KEY('used'), '1'); } catch { /* Not kept. */ }
+  const next = normalizeZhMode(mode);
+  try { store()?.setItem(KEY(`mode-${field}`), next); if (next !== 'off') store()?.setItem(KEY('used'), '1'); } catch { /* Not kept. */ }
 }
 // Chinese mode was turned on once: the small 中 buttons appear in the other fields.
 export const zhEverUsed = () => { try { return store()?.getItem(KEY('used')) === '1'; } catch { return false; } };
 
-const MODES = [['off', 'Off'], ['hanzi', 'Hanzi (characters)'], ['pinyin', 'Pinyin with tone marks']];
+const MODES = [['off', 'Off'], ['hanzi', 'Hanzi (characters)']];
 
 const fmtBytes = (n) => (!n ? '' : n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))} KB` : `${(n / 1e6).toFixed(1)} MB`);
 
 let dialog = null;
 // The Settings → Chinese window. `client`: () => Promise of chinese() (packs, installPack, removePack).
-export function openZhSettings({ client = null } = {}) {
+export function openZhSettings({ client = null, tab = 'input', onClose = null } = {}) {
   if (!dialog) dialog = build(client);
+  else if (client) dialog.__client = client;
+  dialog.__onClose = onClose;
   fill();
-  dialog.showModal();
-  listPacks(client);
-  listFavourites(client);
+  const tabBtn = dialog.querySelector(`[data-zh-tab="${tab}"]`) || dialog.querySelector('[data-zh-tab="input"]');
+  tabBtn?.click();
+  if (!dialog.open) dialog.showModal();
+  listPacks(dialog.__client);
 }
 
 function build(client) {
@@ -75,12 +86,12 @@ function build(client) {
       <div class="zh-settings-grid">
         <label>Default mode (new notes)<select name="mode" data-native>${MODES.map(([v, t]) => opt(v, t)).join('')}</select></label>
         <label>Character script<select name="script" data-native>${opt('simplified', 'Simplified 简体')}${opt('traditional', 'Traditional 繁體')}</select></label>
-        <label>Enter key in Pinyin buffer<select name="enter" data-native>${opt('auto', 'Auto (match surrounding text)')}${opt('letters', 'Keep raw Latin letters')}${opt('marks', 'Convert to tone-marked Pinyin')}</select></label>
+        <label>Enter key in Pinyin buffer<select name="enter" data-native>${opt('choose', 'Pick Chinese character (default)')}${opt('letters', 'Keep raw Latin letters')}</select></label>
         <label>Number keys (1–5) in Hanzi<select name="digits" data-native>${opt('tone', 'Filter by tone (ma3 → 马)')}${opt('choose', 'Pick candidate n')}</select></label>
         <label>Candidates per page<select name="perPage" data-native>${opt(5, '5 candidates')}${opt(9, '9 candidates')}</select></label>
       </div>
       <div class="zh-settings-checks">
-        <label class="ocr-skip"><input type="checkbox" name="shortcut"> <span><kbd>Ctrl Shift Space</kbd> cycles Off → Hanzi → Pinyin</span></label>
+        <label class="ocr-skip"><input type="checkbox" name="shortcut"> <span><kbd>Ctrl Shift Space</kbd> toggles Off ↔ Hanzi</span></label>
         <label class="ocr-skip"><input type="checkbox" name="shiftLatin"> <span>Tap <kbd>Shift</kbd> alone to type temporary Latin letters</span></label>
         <label class="ocr-skip"><input type="checkbox" name="fullWidth"> <span>Full-width Chinese punctuation in Hanzi mode (，。？！)</span></label>
         <label class="ocr-skip"><input type="checkbox" name="bothScripts"> <span>Show Simplified / Traditional counterpart beside candidates</span></label>
@@ -100,15 +111,18 @@ function build(client) {
       <ul class="zh-packs" aria-live="polite"><li class="muted">Loading…</li></ul>
       <div class="zh-user-card">
         <div class="zh-user-info">
-          <strong>Favourites</strong>
-          <small class="muted">Starred in a look-up or the stroke order window: Chinese input offers them first. Click one to take it off.</small>
+          <strong>Import local dictionary</strong>
+          <small class="muted">Load CC-CEDICT (<code>.u8</code>/<code>.txt</code>), JSON, TSV, or CSV vocabulary files</small>
         </div>
-        <div class="zh-favs" data-favs aria-live="polite"></div>
+        <div class="zh-user">
+          <button type="button" class="chip" data-pack-import>Import file…</button>
+          <span class="muted" data-pack-status></span>
+        </div>
       </div>
       <div class="zh-user-card">
         <div class="zh-user-info">
-          <strong>Learned vocabulary &amp; frequency</strong>
-          <small class="muted">Backup or transfer your personal word choices across devices</small>
+          <strong>Favorites &amp; learned vocabulary</strong>
+          <small class="muted">Backup or transfer your starred words and personal choices across devices</small>
         </div>
         <div class="zh-user">
           <button type="button" class="chip" data-user-export>Export…</button>
@@ -120,6 +134,7 @@ function build(client) {
   </div>
   <div class="ocr-actions zh-settings-foot"><span class="spacer"></span><button type="button" class="primary" data-close>Done</button></div>`;
   document.body.append(d);
+  d.querySelector('[data-pack-import]')?.prepend(icon('import'));
   d.querySelector('[data-user-export]')?.prepend(icon('export'));
   d.querySelector('[data-user-import]')?.prepend(icon('import'));
   for (const tabBtn of d.querySelectorAll('[data-zh-tab]')) {
@@ -143,10 +158,28 @@ function build(client) {
     zhSettings({ [t.name]: t.type === 'checkbox' ? t.checked : t.name === 'perPage' ? Number(t.value) : t.value });
   });
   d.querySelector('[data-close]').onclick = () => d.close();
+  d.addEventListener('close', () => { const fn = d.__onClose; d.__onClose = null; fn?.(); });
+  const sayPack = (t) => { const el = d.querySelector('[data-pack-status]'); if (el) el.textContent = t; };
+  d.querySelector('[data-pack-import]').onclick = () => {
+    const input = Object.assign(document.createElement('input'), { type: 'file', accept: '.u8,.txt,.cedict,.json,.tsv,.csv,text/plain,application/json' });
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      sayPack('Importing…');
+      try {
+        const zh = await d.__client?.();
+        if (!zh?.installLocalPack) throw new Error('Dictionary engine unavailable.');
+        const row = await zh.installLocalPack(file.name, await file.text());
+        sayPack(`Imported ${row.words.length.toLocaleString()} words.`);
+        listPacks(d.__client);
+      } catch (e) { sayPack(`Import failed: ${e.message}`); }
+    };
+    input.click();
+  };
   const say = (t) => { d.querySelector('[data-user-status]').textContent = t; };
   d.querySelector('[data-user-export]').onclick = async () => {
     try {
-      const data = await (await client?.())?.exportUser?.();
+      const data = await (await d.__client?.())?.exportUser?.();
       if (!data) return say('Nothing to export.');
       const a = Object.assign(document.createElement('a'), { download: 'notecomplete-chinese-words.json', href: URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' })) });
       a.click();
@@ -159,14 +192,13 @@ function build(client) {
     input.onchange = async () => {
       try {
         const data = JSON.parse(await input.files[0].text());
-        await (await client?.())?.importUser?.(data);
+        await (await d.__client?.())?.importUser?.(data);
         say('Imported.');
       } catch (e) { say(`Import failed: ${e.message}`); }
     };
     input.click();
   };
   d.__client = client;
-  addEventListener('zh-favourites', () => { if (d.open) listFavourites(client); });
   return d;
 }
 
@@ -184,20 +216,8 @@ async function listPacks(client) {
   try { zh = await client?.(); } catch { zh = null; }
   let packs = null;
   try { packs = zh ? await zh.packs() : null; } catch (e) { list.replaceChildren(row('Dictionaries could not be read: ' + e.message)); return; }
-  if (!packs) { list.replaceChildren(row('The dictionary is not available in this build. Pinyin with tone marks works without it.')); return; }
+  if (!packs) { list.replaceChildren(row('The dictionary is not available in this build.')); return; }
   list.replaceChildren(...packs.map((p) => packRow(zh, p, client)));
-}
-async function listFavourites(client) {
-  const box = dialog.querySelector('[data-favs]');
-  let zh = null, list = [];
-  try { zh = await client?.(); list = zh ? await zh.favourites() : []; } catch { /* Shown as none. */ }
-  if (!list.length) { box.replaceChildren(Object.assign(document.createElement('small'), { className: 'muted', textContent: 'None yet: click ☆ beside a character in its look-up.' })); return; }
-  box.replaceChildren(...list.map((hanzi) => {
-    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'chip zh-cjk', title: `Take ${hanzi} off the favourites` });
-    b.append(icon('star'), document.createTextNode(hanzi));
-    b.onclick = async () => { b.disabled = true; try { await zh.setFavourite(hanzi, false); } catch { b.disabled = false; } };
-    return b;
-  }));
 }
 const row = (text) => Object.assign(document.createElement('li'), { className: 'muted', textContent: text });
 

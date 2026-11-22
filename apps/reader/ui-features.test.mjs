@@ -262,3 +262,12 @@ test('text file covers wrap long lines inside the card and stop at its bottom', 
   assert.ok(Math.max(...texts.map((t) => Number(t[2]))) <= 320 - 14, 'stops at the page end');
   assert.ok(texts.length > 4, 'long line wrapped onto several rows');
 });
+
+test('app.js blocks Linux middle-click primary-selection paste and zh-select.js filters falsy toolbar buttons', () => {
+  assert.match(appJs, /let middleMouseAt = -Infinity/);
+  assert.match(appJs, /performance\.now\(\) - middleMouseAt < 400/);
+  assert.match(appJs, /\["mousedown", "mouseup", "auxclick"\]/);
+  const zhSelectJs = readFileSync(new URL('./chinese/zh-select.js', import.meta.url), 'utf8');
+  assert.match(zhSelectJs, /bar\.replaceChildren\(\.\.\.\[[\s\S]*?\]\.filter\(Boolean\)\)/);
+  assert.doesNotMatch(zhSelectJs, /for \(const b of \[\.\.\.bar\.children\]\) if \(!\(b instanceof Element\)\)/);
+});

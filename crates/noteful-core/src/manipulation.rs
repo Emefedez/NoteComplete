@@ -749,7 +749,15 @@ impl Editor {
             .rev()
             .filter(|l| l.visible && !l.locked)
         {
-            for (id, line) in added.iter().rev().filter(|(_, l)| l.layer == layer.id) {
+            let images: Vec<_> = self
+                .images(page)
+                .filter(|(_, image)| image.layer == layer.id)
+                .collect();
+            for (id, line) in added
+                .iter()
+                .rev()
+                .filter(|(_, l)| l.layer == layer.id && !l.under)
+            {
                 if !deleted.contains(id.as_str())
                     && !skip(id, false)
                     && hit_geometry(
@@ -764,13 +772,7 @@ impl Editor {
                     return Ok(Some(id.clone()));
                 }
             }
-            for (id, image) in self
-                .images(page)
-                .collect::<Vec<_>>()
-                .iter()
-                .rev()
-                .filter(|(_, image)| image.layer == layer.id)
-            {
+            for (id, image) in images.iter().rev().filter(|(_, image)| !image.under) {
                 let item = image.item(id.clone());
                 if !deleted.contains(id.as_str())
                     && !skip(id, false)
@@ -803,6 +805,41 @@ impl Editor {
                     )
                 {
                     return Ok(Some(item.id.clone()));
+                }
+            }
+            for (id, line) in added
+                .iter()
+                .rev()
+                .filter(|(_, l)| l.layer == layer.id && l.under)
+            {
+                if !deleted.contains(id.as_str())
+                    && !skip(id, false)
+                    && hit_geometry(
+                        p,
+                        tolerance,
+                        &line_geometry(line),
+                        &line.points,
+                        adjustments.get(id.as_str()).copied(),
+                        false,
+                    )
+                {
+                    return Ok(Some(id.clone()));
+                }
+            }
+            for (id, image) in images.iter().rev().filter(|(_, image)| image.under) {
+                let item = image.item(id.clone());
+                if !deleted.contains(id.as_str())
+                    && !skip(id, false)
+                    && hit_geometry(
+                        p,
+                        tolerance,
+                        &item_geometry(&item),
+                        &[],
+                        adjustments.get(id.as_str()).copied(),
+                        true,
+                    )
+                {
+                    return Ok(Some(id.clone()));
                 }
             }
         }

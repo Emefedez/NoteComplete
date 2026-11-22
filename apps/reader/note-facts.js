@@ -1,5 +1,5 @@
 // Filterable facts about a note, read with byte ranges like its cover:
-import { TEXT_NAME, OFFICE_NAME } from './text-types.js';
+import { TEXT_NAME, OFFICE_NAME, IMAGE_NAME, AUDIO_NAME, VIDEO_NAME } from './text-types.js';
 // title and recordings from the n: and d: blocks (d:/7/0: recordings with a
 // duration in tag 6), and Noteful tags from the editable sets (object kind 19,
 // names in payload tag 14) when those sets are small enough to fetch.
@@ -49,8 +49,10 @@ export const TYPES = {
   pdf: ['PDF', /\.pdf$/i],
   html: ['HTML', /\.html?$/i],
   text: ['Text', TEXT_NAME],
-  image: ['Image', /\.(png|jpe?g|webp)$/i],
+  image: ['Image', IMAGE_NAME],
   office: ['Office', OFFICE_NAME],
+  audio: ['Audio', AUDIO_NAME],
+  video: ['Video', VIDEO_NAME],
   noteful: ['Noteful', /\.noteful$/i],
   notepart: ['NotePart', /\.notepart$/i],
   notecomp: ['NoteComp', /\.notecomp(lete)?$/i],
@@ -69,7 +71,7 @@ export function matches(note, filters) {
 export const SIZES = { small: ['Under 10 MB', 0, 10e6], medium: ['10–100 MB', 10e6, 100e6], large: ['Over 100 MB', 100e6, Infinity] };
 const inSize = (bytes, key) => Number.isFinite(Number(bytes)) && Number(bytes) >= SIZES[key][1] && Number(bytes) < SIZES[key][2];
 // Sorting: natural A–Z by default ("Tema 2" before "Tema 10").
-export const SORTS = { name: 'A – Z', opened: 'Last opened', favourites: 'Favourites first', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
+export const SORTS = { name: 'A – Z', opened: 'Last opened', favourites: 'Favorites first', newest: 'Newest', oldest: 'Oldest', largest: 'Largest', smallest: 'Smallest' };
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 export function compareNotes(sort = 'name') {
   return (a, b) => {

@@ -71,11 +71,22 @@ function searchButton(select, models, current, pick) {
     };
     pop.append(input, list);
     document.body.append(pop);
-    const r = button.getBoundingClientRect(), w = Math.min(300, innerWidth - 16);
+    const zRaw = parseFloat(document.documentElement.style.zoom);
+    const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+    const vw = innerWidth / z, vh = innerHeight / z;
+    const r = button.getBoundingClientRect(), w = Math.min(300, vw - 16);
     pop.style.width = `${w}px`;
-    pop.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    pop.style.top = `${r.bottom + 6}px`;
-    pop.style.maxHeight = `${Math.max(160, innerHeight - r.bottom - 20)}px`;
+    pop.style.left = `${Math.max(8, Math.min(vw - w - 8, r.right / z - w))}px`;
+    const spaceBelow = vh - r.bottom / z - 12;
+    const spaceAbove = r.top / z - 12;
+    if (spaceBelow < 180 && spaceAbove > spaceBelow) {
+      const mh = Math.max(120, Math.min(320, spaceAbove));
+      pop.style.maxHeight = `${mh}px`;
+      pop.style.top = `${Math.max(8, r.top / z - mh - 6)}px`;
+    } else {
+      pop.style.top = `${r.bottom / z + 6}px`;
+      pop.style.maxHeight = `${Math.max(160, spaceBelow - 8)}px`;
+    }
     button.setAttribute('aria-expanded', 'true');
     draw();
     input.focus();

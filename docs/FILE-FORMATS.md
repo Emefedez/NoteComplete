@@ -39,12 +39,17 @@ These are read, never written back over.
 
 | File | Opens as |
 | --- | --- |
-| PDF, PNG, JPEG, WebP | A new note with the file as its pages, to write on |
+| PDF, PNG, JPEG, WebP, GIF, BMP, AVIF, ICO | A new note with the file as its pages, to write on |
 | `.html`, `.htm` | The page itself, in its own view |
-| `.md`, `.txt` and other text (source code, `.json`, `.log`…) | A text document: Markdown formatted, other text as written; **Edit** saves it back |
-| `.docx` (Word), `.odt` (OpenDocument text) | Markdown: headings, paragraphs, lists, tables, links, bold, italic, footnotes and pictures (kept as files in a `<name>_files` folder beside the saved copy, and linked from it; pictures a browser cannot show, such as EMF, are named only). Layout and comments are left out |
-| `.xlsx` (Excel), `.ods` (OpenDocument spreadsheet) | Markdown: a `##` heading per sheet and its cells as a table, as formatted in the file (dates, decimals). Formulas show their last result. Up to 1000 rows and 50 columns a sheet, with a note when a sheet is cut |
+| `.md`, `.txt` and other text (source code, `.json`, `.log`, `.rst`, `.adoc`, `.org`, `.rmd`, `.qmd`…) | A text document: Markdown formatted, other text as written; **Edit** saves it back |
+| `.docx`, `.docm`, `.dotx`, `.doc` (Word), `.odt`, `.fodt` (OpenDocument text), `.rtf` (Rich Text) | Markdown: headings, paragraphs, lists, tables, links, bold, italic, footnotes and pictures (kept as files in a `<name>_files` folder beside the saved copy, and linked from it; pictures a browser cannot show, such as EMF, are named only). `.docx` uses mammoth with a built-in pure-JS OOXML fallback; legacy `.doc` reads OLE2 WordDocument piece tables directly (as well as RTF/HTML-disguised `.doc`) |
+| `.xlsx`, `.xlsm`, `.xlsb`, `.xls` (Excel), `.ods`, `.fods` (OpenDocument spreadsheet) | Markdown: a `##` heading per sheet and its cells as a table, as formatted in the file (dates, decimals). Formulas show their last result. Up to 1000 rows and 50 columns a sheet, with a note when a sheet is cut |
+| `.pptx`, `.pptm`, `.ppt` (PowerPoint), `.odp` (OpenDocument presentation) | Markdown: one `## Slide N` section per slide with titles, bullet/numbered lists, tables, embedded pictures (`<name>_files`) and speaker notes |
+| `.epub` (EPUB e-book) | Markdown: title, author, chapters in reading order and embedded pictures (`<name>_files`) |
+| `.ipynb` (Jupyter notebook) | Markdown: Markdown cells, fenced code cells with kernel language, text outputs and embedded plot images (`<name>_files`) |
 | `.csv`, `.tsv` | Markdown: one table, the first row as its header. Quoted fields may hold commas, quotes and line breaks; `;` is used when the first line has more of them than commas |
+| `.mp3`, `.m4a`, `.wav`, `.ogg`, `.oga`, `.opus`, `.flac`, `.aac`, `.weba` | Plays in the top global audio bar without closing your current note |
+| `.mp4`, `.m4v`, `.webm`, `.mkv`, `.mov`, `.avi`, `.ogv` | Opens in your computer's default media player (or a browser tab on the web) |
 
 The converted files behave like an opened `.md` file (Find, study tools, MD on or off, **File → New from Markdown…** starts from them), and can be edited as Markdown (**Edit**). **Save** never writes over the original: it writes a `.md` copy beside it (a taken name becomes `Name (2).md`; a document kept from Drive goes to the downloads folder), with the pictures in `<name>_files` (never over different files there: a taken folder becomes `<name> (2)_files`, and the links follow). The next Save in the same session updates that copy. In a browser, **Save** downloads the `.md`, or a `.zip` of the `.md` and its pictures folder when there are pictures. `.odt` and CSV are read by the app itself; `.docx` goes through [mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause) and `.xlsx`/`.ods` through [SheetJS](https://sheetjs.com) Community Edition (Apache-2.0). Both are fetched the first time such a file is opened, then kept for offline use.
 

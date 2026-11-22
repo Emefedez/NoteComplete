@@ -401,22 +401,46 @@ export async function pngOf(canvas) {
 }
 
 export class PdfBackgrounds {
-  constructor(read) {
+  constructor(read, { maxKept = RASTERS_KEPT } = {}) {
     this.read = read;
     this.documents = new Map();
     this.images = new Map();
     this.rasters = new Map();
     this.drawing = new Map();
     this.wants = new Map();
+    this.maxKept = Math.max(RASTERS_KEPT, Number(maxKept) || RASTERS_KEPT);
     this.closed = false;
   }
+  setMaxKept(limit) {
+    this.maxKept = Math.max(RASTERS_KEPT, Math.min(48, Math.round(Number(limit) || RASTERS_KEPT)));
+    while (this.rasters.size > this.maxKept) {
+      const [oldest, old] = this.rasters.entries().next().value;
+      this.rasters.delete(oldest);
+      this.release(old);
+    }
+  }
+  rasterKey(background, size, displayWidth = size[0], settings, kind = "canvas") {
+    const rasterSettings = settings ? { scale: settings.scale, megapixels: settings.megapixels } : settings;
+    return JSON.stringify([background, size, Math.ceil(displayWidth), rasterSettings, globalThis.devicePixelRatio || 1, kind]);
+  }
+  // Synchronous cache hit check so scrolling back to a preloaded page attaches on the same frame
+  // without waiting for scrollPause (eliminates blank white flicker).
+  peekRaster(background, size, displayWidth = size[0], settings, kind = "canvas") {
+    const key = this.rasterKey(background, size, displayWidth, settings, kind);
+    const kept = this.rasters.get(key);
+    if (kept) {
+      this.rasters.delete(key);
+      this.rasters.set(key, kept);
+    }
+    return kept || null;
+  }
   // The PDF page for the page view, as a canvas or a blob: URL (`kind`, see above; a canvas
-  // too large for some screens comes as a URL). The last RASTERS_KEPT stay, for scrolling
+  // too large for some screens comes as a URL). The last `maxKept` stay, for scrolling
   // back; release() lets go of one no longer shown.
   // `wanted()`: false once the page has moved on (scrolled away, redrawn): a raster still
   // waiting its turn is then not drawn at all.
   async raster(background, size, displayWidth = size[0], settings, kind = "canvas", wanted = null) {
-    const key = JSON.stringify([background, size, Math.ceil(displayWidth), settings, globalThis.devicePixelRatio || 1, kind]);
+    const key = this.rasterKey(background, size, displayWidth, settings, kind);
     const kept = this.rasters.get(key);
     if (kept) {
       this.rasters.delete(key);
@@ -444,7 +468,7 @@ export class PdfBackgrounds {
         throw Error("Document closed");
       }
       this.rasters.set(key, shown);
-      while (this.rasters.size > RASTERS_KEPT) {
+      while (this.rasters.size > this.maxKept) {
         const [oldest, old] = this.rasters.entries().next().value;
         this.rasters.delete(oldest);
         this.release(old);

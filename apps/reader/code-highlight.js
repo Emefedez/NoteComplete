@@ -680,8 +680,9 @@ function scanMarkdown(code, out = []) {
   for (let k = 0; k < lines.length; k++) {
     if (k) push('', '\n');
     const line = lines[k];
-    const fence = /^(\s{0,3})(`{3,}|~{3,})\s*([\w+#.-]*)(.*)$/.exec(line);
+    const fence = /^(\s{0,3})(`{3,}|~{3,})\s*(\{\s*[\w+#.-]+|[\w+#.-]*)(.*)$/.exec(line);
     if (fence) {
+      const langTok = fence[3].replace(/^\{\s*/, '');
       push('', fence[1]); push('tk-op', fence[2]); push('tk-anno', fence[3]); push('', fence[4]);
       // The block up to its closing fence, highlighted in its language.
       const body = [];
@@ -690,7 +691,7 @@ function scanMarkdown(code, out = []) {
       while (e < lines.length && !closer.test(lines[e])) body.push(lines[e++]);
       if (body.length) {
         push('', '\n');
-        const lang = resolveLang(fence[3]);
+        const lang = resolveLang(langTok);
         const inner = lang ? tokenize(body.join('\n'), lang) : [['', body.join('\n')]];
         for (const [c, t] of inner) push(c, t);
       }
@@ -753,7 +754,7 @@ const ALIASES = {
   yaml: 'yaml', yml: 'yaml',
   toml: 'toml',
   ini: 'ini', conf: 'ini', cfg: 'ini', properties: 'ini', editorconfig: 'ini', gitconfig: 'ini', desktop: 'ini', service: 'ini',
-  markdown: 'markdown', md: 'markdown', mdown: 'markdown', mkd: 'markdown',
+  markdown: 'markdown', md: 'markdown', mdown: 'markdown', mkd: 'markdown', rmd: 'markdown', qmd: 'markdown',
   plantuml: 'plantuml', puml: 'plantuml', pu: 'plantuml', iuml: 'plantuml', wsd: 'plantuml', uml: 'plantuml',
   diff: 'diff', patch: 'diff',
   asm: 'asm', s: 'asm', nasm: 'asm', x86asm: 'asm', armasm: 'asm', arm: 'asm', riscv: 'asm', mips: 'asm', gas: 'asm', assembly: 'asm',

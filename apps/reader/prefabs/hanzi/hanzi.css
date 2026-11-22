@@ -1,40 +1,38 @@
-/* The hanzi module's editor (editor.js): the stroke player or practice in the middle, the
-   look-up's header under it, and the look-up's sections on the right. */
+/* The hanzi module's editor (editor.js): the stroke player or practice in the middle. */
 .hz-editor .hz-canvas { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; touch-action: auto; }
 .hz-stage-host { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .hz-player { display: grid; gap: 10px; }
+.hz-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.hz-cell { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
 .hz-stage svg, .hz-practice svg { background: #fff; border-radius: 6px; }
+.hz-cell-loop { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; min-height: 0; padding: 0; border-radius: 50%; display: inline-grid; place-items: center; border: 1px solid color-mix(in srgb, var(--k-line) 85%, #0002); background: rgba(255, 255, 255, 0.9); color: #57606a; cursor: pointer; z-index: 2; }
+.hz-cell-loop:hover { border-color: var(--k-accent); color: var(--k-accent); }
+.hz-cell-loop svg { width: 14px; height: 14px; display: block; background: transparent; border-radius: 0; }
+.hz-cell-loop[aria-pressed="true"] { background: var(--k-accent); border-color: var(--k-accent); color: #fff; }
+.hz-loop-all[aria-pressed="true"] { background: var(--k-accent) !important; border-color: var(--k-accent) !important; color: #fff !important; }
+.hz-loop-all.is-partial { background: var(--k-soft) !important; border-color: var(--k-accent) !important; color: var(--k-accent) !important; }
 .hz-practice-status { margin: 6px 0 0; text-align: center; }
-.hz-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.hz-views { display: inline-flex; gap: 4px; }
+.hz-actions { display: flex; align-items: center; gap: 6px; }
 /* Chosen: pale accent, as everywhere in the app (the solid accent is for small marks). */
 .hz-editor .pk-button[aria-pressed="true"],
 .hz-editor .pk-button.is-active { background: var(--k-soft); border-color: color-mix(in srgb, var(--k-accent) 45%, var(--k-line)); color: var(--k-accent); font-weight: 600; }
 .hz-sheet-preview { margin-top: 4px; padding: 8px; border: 1px solid var(--k-line); border-radius: 8px; background: #fff; overflow-x: auto; text-align: center; }
 .hz-sheet-preview svg { display: inline-block; max-width: 100%; height: auto; max-height: 180px; }
 
-/* The header under the player: the characters, their pinyin (each syllable plays), listen,
-   favourite, level; then the meaning on the page. */
+/* The dictionary bar under the player: the characters, their reading and the meaning on the
+   page. Every meaning is in the side panel (.hz-defs), each one a toggle (pale accent: on the
+   page). */
 .hz-dict-bar { display: grid; gap: 4px; padding: 8px 12px; border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-chrome); font-size: 12.5px; }
-.hz-dict-head { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
-.hz-dict-chars { font-size: 20px; flex: none; }
-.hz-dict-head .zh-lk-py { font-size: 14px; }
-.hz-dict-gloss { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* The side panel's look-up: collapsible sections. */
-.hz-lookup { display: grid; gap: 8px; }
-.hz-section { border-top: 1px solid var(--k-line); padding-top: 6px; }
-.hz-section > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
-.hz-section > summary > span { flex: 1; min-width: 0; }
-.hz-section[open] > summary { margin-bottom: 6px; }
-.hz-section > .zh-lk-row + .zh-lk-row { margin-top: 6px; }
-.hz-section > summary > small { font-weight: 400; }
-.hz-tools { display: flex; align-items: center; gap: 2px; margin-bottom: 4px; }
-.hz-editor .hz-tool { min-height: 24px; padding: 2px 4px; border-color: transparent; background: transparent; }
-.hz-editor .hz-tool:hover:not(:disabled) { border-color: var(--k-line); }
-/* The meanings: a small scrolling box of toggles (pale accent: on the page). */
-.hz-defs-box { max-height: 168px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border: 1px solid var(--k-line); border-radius: 8px; background: var(--k-surface); }
-.hz-defs-box:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+.hz-dict-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.hz-dict-chars { font-size: 16px; flex: none; }
+.hz-dict-pinyin { color: var(--k-accent); font-weight: 600; flex: none; }
+.hz-dict-gloss { flex: 1 1 160px; min-width: 0; max-height: 58px; overflow-y: auto; white-space: normal; word-break: break-word; line-height: 1.4; }
+.hz-defs { display: grid; gap: 6px; min-width: 0; }
+.hz-defs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hz-defs-head h4 { margin: 0; }
+.hz-defs-tools { flex: 1; min-width: 0; align-items: center; gap: 2px; }
+.hz-defs-tools .pk-button { min-height: 26px; min-width: 26px; padding: 2px 4px; justify-content: center; }
+.hz-defs-box { max-height: 150px; overflow-y: auto; padding: 6px 8px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); user-select: text; -webkit-user-select: text; }
 .hz-defs-list { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
 .hz-defs-list > li { line-height: 1.55; }
 .hz-defs-reading { margin-right: 4px; color: var(--k-accent); font-weight: 600; }
@@ -42,18 +40,34 @@
 .hz-editor .hz-def:hover { border-color: var(--k-line); }
 .hz-editor .hz-def[aria-pressed="true"] { background: var(--k-soft); color: var(--k-accent); }
 .hz-def:focus-visible { outline: 2px solid var(--k-accent); outline-offset: 1px; }
+/* Narrow (a phone, a small window): the actions wrap, the player shrinks with the width. */
+.hz-actions { flex-wrap: wrap; }
+.hz-stage-host svg { max-width: 100%; height: auto; }
+@container pk-editor (max-width: 640px) {
+  .hz-editor .hz-canvas { gap: 8px; }
+  .hz-stage-host { flex: 0 0 auto; }
+  .hz-defs-box { max-height: 120px; }
+}
+/* The side panel's look-up: collapsible sections (meanings, forms, structure, words, on the page). */
+.hz-lookup { display: grid; gap: 8px; min-width: 0; }
+.hz-section { border-top: 1px solid var(--k-line); padding-top: 6px; }
+.hz-section > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer; font-weight: 600; font-size: 12.5px; }
+.hz-section > summary > span { flex: 1; min-width: 0; }
+.hz-section > summary > small { font-weight: 400; }
+.hz-section[open] > summary { margin-bottom: 6px; }
+.hz-section > .zh-lk-row + .zh-lk-row { margin-top: 6px; }
 .hz-struct-char { margin: 8px 0 4px; font-size: 16px; font-weight: 600; }
 .hz-struct-char:first-of-type { margin-top: 0; }
 .hz-words { max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
-.hz-compare { margin-top: 8px; }
-
-.hz-stage-host svg { max-width: 100%; height: auto; }
-.hz-ime-btn { min-width: 30px; justify-content: center; flex: none; }
-.hz-yb-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.hz-yb-btn { color: var(--k-accent); }
-.hz-char-row { display: flex; align-items: center; gap: 6px; }
 @media (pointer: coarse) {
   .hz-editor .hz-def { padding: 4px 8px; }
-  .hz-editor .hz-tool { min-height: 36px; min-width: 36px; justify-content: center; }
+  .hz-defs-tools .pk-button { min-height: 36px; min-width: 36px; }
   .hz-section > summary { min-height: 40px; }
 }
+.hz-ime-btn { min-width: 30px; justify-content: center; flex: none; }
+.hz-yb-wrap, .hz-variants { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.hz-variants { display: flex; font-size: 12px; }
+.hz-variants .pk-button { min-height: 24px; padding: 0 8px; font-size: 12px; }
+.hz-yb-btn { color: var(--k-accent); }
+.hz-char-row { display: flex; align-items: center; gap: 6px; }
+@media (pointer: coarse) { .hz-variants .pk-button { min-height: 36px; } }

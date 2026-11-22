@@ -1,12 +1,12 @@
 // The parts of a character's look-up shared by the character panel (lookup-panel.js) and the
 // stroke order window (prefabs/hanzi/editor.js): pinyin whose syllables play their tone, the
-// listen button, the favourite star, and the rows of Forms and Structure. `link(t)` makes the
-// element that opens `t` (the panel looks it up, the stroke window traces it).
+// listen button, and the rows of Forms and Structure. `link(t)` makes the element for a character
+// or part (the panel looks it up, the stroke window traces it).
 import { icon } from '../icons.js';
 import { speak, speakSyllable, canSpeak } from './speech.js';
 import { HAN } from './vocab.js';
 
-const IDC = /[⿰-⿿]/u;
+export const IDC = /[⿰-⿿]/u;
 // How the parts sit (the first Ideographic Description Character of the decomposition).
 const IDC_NAMES = { '⿰': 'left and right', '⿱': 'top and bottom', '⿲': 'left, middle and right', '⿳': 'top, middle and bottom', '⿴': 'enclosed', '⿵': 'open at the bottom', '⿶': 'open at the top', '⿷': 'open at the right', '⿸': 'from the top left', '⿹': 'from the top right', '⿺': 'from the bottom left', '⿻': 'overlaid' };
 const ETYMOLOGY = { ideographic: 'Ideographic', pictographic: 'Pictographic', pictophonetic: 'Sound and meaning' };
@@ -56,32 +56,6 @@ export function syllables(pinyin, chars, say) {
   });
   return s;
 }
-// The ☆ / ★ of `t`: a favourite comes first among Chinese input's candidates when it fits what
-// is typed (client.js). `onChange(on)` after a click.
-export function favouriteButton(t, { reading = '', status = () => {}, onChange = null } = {}) {
-  const b = el('button', 'zh-fav');
-  b.type = 'button';
-  b.append(icon('star'));
-  const paint = (on) => {
-    b.setAttribute('aria-pressed', String(on));
-    b.title = on ? `${t} is a favourite: Chinese input offers it first (click to remove)` : `Add ${t} to favourites: Chinese input offers it first`;
-    b.setAttribute('aria-label', b.title);
-  };
-  paint(false);
-  const client = () => import('./client.js').then(({ chinese }) => chinese());
-  client().then((zh) => zh.isFavourite(t)).then(paint, () => { b.hidden = true; });
-  b.onclick = async () => {
-    const on = b.getAttribute('aria-pressed') !== 'true';
-    try {
-      await (await client()).setFavourite(t, on, reading);
-      paint(on);
-      status(on ? `${t} is a favourite: Chinese input offers it first.` : `${t} is no longer a favourite.`);
-      onChange?.(on);
-    } catch (e) { status(e.message, true); }
-  };
-  return b;
-}
-
 // Simplified, traditional and other forms ([{ label, chars }], lookup-panel.js formsOf): a row each.
 export function formRows(forms, link) {
   return forms.map((f) => {
@@ -92,7 +66,7 @@ export function formRows(forms, link) {
 }
 // The radical, the parts and how the character was made (`c`: a look-up's `char`): rows, or [].
 export function structureRows(c, link) {
-  if (!c) return [];
+  if (!c || !(c.radical || c.decomposition || c.etymology)) return [];
   const rows = [];
   if (c.radical?.char) {
     const row = el('div', 'zh-lk-row');

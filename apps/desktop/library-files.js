@@ -4,10 +4,10 @@
 import { chmod, mkdir, open as openFile, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-// Notes, PDFs, HTML, images, Word/OpenDocument/Excel files, text formats (as in the
+// Notes, PDFs, HTML, images, media, Office/e-book/notebook files, text formats (as in the
 // reader's text-types.js), and names without an extension, which open as text when their content is.
-const TEXT = 'txt|md|markdown|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|sh|bash|zsh|fish|py|c|h|cc|cpp|hpp|java|m?js|ts|rs|go|rb|php|sql|tex|bib|r|m|asm|s|lua|vhdl?|v|sv|mk|awk|sed|diff|patch|puml|plantuml|pu|iuml|wsd';
-const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf|png|jpe?g|webp|docx|odt|xlsx|ods|${TEXT})$)|^[^.]+$`, 'i');
+const TEXT = 'txt|md|markdown|rst|adoc|asciidoc|org|rmd|qmd|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|properties|sh|bash|zsh|fish|ps1|bat|py|c|h|cc|cpp|hpp|cs|java|kt|swift|dart|m?js|cjs|jsx|ts|tsx|css|scss|rs|go|rb|php|sql|tex|bib|r|m|jl|hs|asm|s|lua|vhdl?|v|sv|mk|cmake|nix|proto|awk|sed|diff|patch|puml|plantuml|pu|iuml|wsd';
+const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf|png|jpe?g|webp|gif|bmp|avif|ico|mp3|m4a|wav|ogg|oga|opus|flac|aac|weba|mp4|m4v|webm|mkv|mov|avi|ogv|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|rdata|rda|rds|${TEXT})$)|^[^.]+$`, 'i');
 // A file without an extension is listed only when its start has no NUL bytes (text).
 async function textStart(file) {
   const handle = await openFile(file, 'r');
@@ -125,6 +125,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     if (!inFolder) throw Error('That file was not opened from this device.');
   };
   return {
+    async assertOpened(file) { await opened(file); },
     // Saves an edited text document over its file: written beside it, then renamed, keeping its mode.
     async writeOpened(file, bytes) {
       await opened(file);

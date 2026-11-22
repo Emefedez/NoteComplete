@@ -27,6 +27,9 @@ pub struct Image {
     /// One part of a graph or table (part.rs).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part: Option<crate::Part>,
+    /// Drawn below the page's imported ink (e.g. a sticky note card under handwriting).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub under: bool,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

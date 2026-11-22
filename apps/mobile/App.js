@@ -24,7 +24,8 @@ async function readIncoming(uri, bundled) {
  finally{files.release(token);}
 }
 // The reader's updater (android-updates.js) needs this app's version to compare releases.
-const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '', canShareQr: !!files?.shareFile })};true;`;
+// SafeAreaView already applies top/bottom system bar insets, so mark the root to avoid double inset padding.
+const appInfo = `window.notecompleteApp=${JSON.stringify({ platform: Platform.OS, version: Constants.expoConfig?.version || Constants.nativeApplicationVersion || '', canShareQr: !!files?.shareFile })};document.documentElement.classList.add('nc-native-app');true;`;
 export default function App() {
  const web = useRef(null), sharing = useRef(false), incoming = useRef(null), driveSession = useRef({generation:0,busy:false});
  const [notice, setNotice] = useState('');

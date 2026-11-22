@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.2.56",
+  "version": "1.2.71",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -32,6 +32,7 @@
       "html-pdf.js",
       "library-files.js",
       "diagrams.js",
+      "r-bridge.js",
       "open-with.js",
       "linux-integration.js",
       "ai-runner.js",
@@ -141,6 +142,30 @@
         },
         {
           "ext": [
+            "gif"
+          ],
+          "name": "GIF image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "bmp"
+          ],
+          "name": "BMP image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "avif"
+          ],
+          "name": "AVIF image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
             "tar"
           ],
           "name": "Tar archive",
@@ -183,7 +208,9 @@
         },
         {
           "ext": [
-            "docx"
+            "docx",
+            "docm",
+            "dotx"
           ],
           "name": "Word document",
           "role": "Viewer",
@@ -191,7 +218,24 @@
         },
         {
           "ext": [
-            "odt"
+            "doc"
+          ],
+          "name": "Word 97-2003 document",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "rtf"
+          ],
+          "name": "Rich Text document",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "odt",
+            "fodt"
           ],
           "name": "OpenDocument text",
           "role": "Viewer",
@@ -199,7 +243,9 @@
         },
         {
           "ext": [
-            "xlsx"
+            "xlsx",
+            "xlsm",
+            "xlsb"
           ],
           "name": "Excel workbook",
           "role": "Viewer",
@@ -207,9 +253,59 @@
         },
         {
           "ext": [
-            "ods"
+            "xls"
+          ],
+          "name": "Excel 97-2003 workbook",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "ods",
+            "fods"
           ],
           "name": "OpenDocument spreadsheet",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "pptx",
+            "pptm"
+          ],
+          "name": "PowerPoint presentation",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "ppt"
+          ],
+          "name": "PowerPoint 97-2003 presentation",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "odp"
+          ],
+          "name": "OpenDocument presentation",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "epub"
+          ],
+          "name": "EPUB e-book",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "ipynb"
+          ],
+          "name": "Jupyter notebook",
           "role": "Viewer",
           "rank": "Alternate"
         },
@@ -226,6 +322,57 @@
             "tsv"
           ],
           "name": "TSV table",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "mp3"
+          ],
+          "name": "MP3 audio",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "m4a"
+          ],
+          "name": "M4A audio",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "wav"
+          ],
+          "name": "WAV audio",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "ogg",
+            "oga",
+            "opus"
+          ],
+          "name": "OGG audio",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "flac"
+          ],
+          "name": "FLAC audio",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "mp4",
+            "m4v"
+          ],
+          "name": "MP4 video",
           "role": "Viewer",
           "rank": "Alternate"
         },
@@ -331,17 +478,34 @@
         "image/png",
         "image/jpeg",
         "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/avif",
         "application/x-tar",
         "application/zip",
         "text/markdown",
         "text/plain",
         "text/html",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/msword",
+        "application/rtf",
         "application/vnd.oasis.opendocument.text",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
         "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/epub+zip",
+        "application/x-ipynb+json",
         "text/csv",
         "text/tab-separated-values",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/wav",
+        "audio/ogg",
+        "audio/flac",
+        "video/mp4",
         "text/vnd.plantuml"
       ]
     },

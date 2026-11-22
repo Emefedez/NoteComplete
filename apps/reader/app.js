@@ -12,6 +12,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
+import { isAudioName, isVideoName, isRDataName, isRScriptName } from "./text-types.js";
 import { savedUmlView } from "./uml.js";
 import { saveNoteUmlClip, readUmlClipFromText, getSharedUmlClip } from "./uml-clipboard.js";
 import { addClipChunk, readClipChunk, validClip, isPng } from "./png-clip.js";
@@ -90,8 +91,12 @@ import { editGraph, editTable } from "./compound-dialogs.js";
 import { editorKind, canBeExercise } from "./chart-model.js";
 import { moduleOf, editorOf } from "./prefab-registry.js";
 import { PREFABS, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg, recentPrefabs } from "./prefabs.js";
+import { syncStickyNotes } from "./sticky-notes.js";
+import { createMathBar } from "./math/math-bar.js";
+import { openNewRDialog } from "./math/new-r-dialog.js";
 import { openContextMenu, closeContextMenu, openMenu, extendContextMenu } from "./context-menu.js";
 import { audioTrim } from "./audio-trim.js";
+import { globalAudioController } from "./global-audio.js";
 import { androidUpdates } from "./android-updates.js";
 import { tabStrip, tabForDigit } from "./tab-strip.js";
 import { NavHistory, mouseNavDirection, keyNavDirection } from "./nav-history.js";
@@ -113,6 +118,96 @@ const $ = (id) => document.getElementById(id),
 const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
 enhanceSelects();
 decorateIcons();
+const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
+const isMp3Name = (name, type = "") => isAudioName(name, type);
+const isMp4Name = (name, type = "") => isVideoName(name, type);
+async function rememberMediaInRecent(file, { path = "", name = "", origin = "Imported" } = {}) {
+  try {
+    const fileName = file?.name || name || (path ? path.split(/[\\/]/).pop() : "");
+    if (!fileName) return;
+    if (path && typeof library !== "undefined" && library?.rememberLocal) {
+      await library.rememberLocal(path, fileName, file?.size || 0);
+    } else if (file && typeof library !== "undefined" && library?.rememberImported) {
+      await library.rememberImported(file, { origin });
+    }
+    if (typeof home !== "undefined" && home?.visible) home.renderRecent?.();
+  } catch { /* Best-effort Recent tracking. */ }
+}
+async function openExternalVideo(path, name = "video.mp4", file = null, { origin = "Imported" } = {}) {
+  await rememberMediaInRecent(file, { path, name, origin });
+  if (path && window.notecompleteFiles?.openExternalPath) {
+    await window.notecompleteFiles.openExternalPath(path);
+    status(`Opened ${name} in your system player.`);
+    return true;
+  }
+  if (file) {
+    const blobUrl = URL.createObjectURL(file.type ? file : new Blob([file], { type: "video/mp4" }));
+    const opened = window.open(blobUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = name;
+      a.click();
+    }
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    status(`Opened ${name} in an external player.`);
+    return true;
+  }
+  status(`Could not open ${name} in an external player.`, true);
+  return true;
+}
+async function openRStudioTarget({ filePath = "", folderPath = "", title = "", code = "", kind = "r", embed = false } = {}) {
+  if (!window.notecompleteRBridge) {
+    status("R Commander Studio bridge requires the NoteComplete desktop app.", true);
+    return false;
+  }
+  const res = await window.notecompleteRBridge.openInStudio({ filePath, folderPath, title, code, kind, embed });
+  if (res?.ok) {
+    status(res.connected ? "Opened in R Commander Studio." : "Launching R Commander Studio…");
+    return true;
+  }
+  if (res?.notInstalled) {
+    await openNewRDialog({
+      status,
+      onOpenStudio: openRStudioTarget,
+      onCreatedWorkspace: async (created) => {
+        if (created?.folderPath && created?.folderListing) {
+          await groups.openFolder({ folder: created.folderPath, name: created.name, files: created.folderListing });
+          home?.renderRecent?.();
+        }
+      },
+      onCreatedFile: async (created) => {
+        if (created?.filePath) {
+          await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
+          home?.renderRecent?.();
+        }
+      },
+    });
+    return true;
+  }
+  status(res?.error || "Could not open R Commander Studio.", true);
+  return false;
+}
+async function openMediaFile(file, { path = "", origin = "Imported" } = {}) {
+  if (!file) return false;
+  if (isRDataName(file.name)) {
+    await rememberMediaInRecent(file, { path, name: file.name, origin });
+    await openRStudioTarget({ filePath: path, title: file.name });
+    return true;
+  }
+  if (isMp3Name(file.name, file.type)) {
+    await rememberMediaInRecent(file, { path, name: file.name, origin });
+    await globalAudio.playFile(file);
+    return true;
+  }
+  if (isMp4Name(file.name, file.type)) {
+    return openExternalVideo(path, file.name, file, { origin });
+  }
+  return false;
+}
+if ($("helpGithub")) {
+  $("helpGithub").onclick = () => window.open("https://github.com/Emefedez", "_blank", "noopener,noreferrer");
+}
 // Command bar menus close on outside clicks and after choosing an item.
 document.addEventListener("click", (event) => {
   for (const menu of document.querySelectorAll("details.menu[open]"))
@@ -123,6 +218,11 @@ document.addEventListener("toggle", (event) => {
   if (!event.target.matches?.("details.bar-menu") || !event.target.open) return;
   for (const menu of document.querySelectorAll("details.bar-menu[open]"))
     if (menu !== event.target) menu.open = false;
+  const bar = $("commandBar");
+  if (bar) {
+    const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    document.documentElement.style.setProperty("--bar-bottom", `${Math.max(36, Math.round(bar.getBoundingClientRect().bottom / z))}px`);
+  }
 }, true);
 document.addEventListener("pointerdown", (event) => {
   if (event.target.closest("#toolbar,.select-menu")) return;
@@ -227,7 +327,39 @@ lagLog.start();
   $("lagLogSave").onclick = () => download(new Blob([lagLog.report()], { type: "text/plain" }), `NoteComplete lag log ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}.txt`, "text/plain");
   $("lagLogClose").onclick = () => dialog.close();
 }
-qualitySettings((value, rasterChanged, detail) => {
+function preloadMargin() {
+  const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
+  return `${count * 950}px 0px`;
+}
+function preloadCacheSize() {
+  const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
+  return Math.max(6, Math.min(48, count * 2 + 4));
+}
+function attachPageObserver() {
+  observer?.disconnect();
+  if (!panels.length) return;
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const p = panels[Number(entry.target.dataset.page)];
+        if (!p || p.el !== entry.target) continue;
+        p.near = entry.isIntersecting;
+        if (p.near) {
+          if (!p.view) renderPage(p);
+        } else if (gesture?.panel !== p) {
+          p.token++;
+          p.view = null;
+          p.ink = null;
+          p.pdfReady = false;
+          placeholder(p);
+        }
+      }
+    },
+    { root: $("viewport"), rootMargin: preloadMargin() },
+  );
+  for (const p of panels) observer.observe(p.el);
+}
+qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   displayQuality = value;
   zoomDetail = detail;
   // A filter list (never "none"): dark pages append invert() to it, and "none invert()" is
@@ -235,6 +367,10 @@ qualitySettings((value, rasterChanged, detail) => {
   // identity filter still makes every page a filtered layer, redrawn whole on each change.
   if (value.contrast === 100 && value.brightness === 100) document.documentElement.style.removeProperty("--page-filter");
   else document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
+  if (preloadChanged) {
+    backgrounds?.setMaxKept(preloadCacheSize());
+    attachPageObserver();
+  }
   if (rasterChanged) redrawPdfPages();
 });
 // PDF pages drawn again: another quality, or a screen with another pixel density (the window
@@ -285,13 +421,18 @@ const selection = new SelectionController({
 let statusTimer = 0;
 // Never over the tool bars: above the lowest bar that sits at the bottom (phones, a
 // tablet's dock held upright), also after the screen turns.
+function uiZoom() {
+  const z = parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
 function placeStatus() {
+  const z = uiZoom(), vh = innerHeight / z;
   let bottom = 0;
   for (const bar of document.querySelectorAll("#toolbar, .navigation, #tabletDock")) {
     const r = bar.getBoundingClientRect();
-    if (r.height && r.top > innerHeight / 2) bottom = Math.max(bottom, innerHeight - r.top);
+    if (r.height && r.top / z > vh / 2) bottom = Math.max(bottom, vh - r.top / z);
   }
-  $("status").style.setProperty("--above-bars", `${bottom}px`);
+  $("status").style.setProperty("--above-bars", `${Math.round(bottom)}px`);
 }
 addEventListener("resize", () => { if ($("status").classList.contains("show")) placeStatus(); });
 function status(text, error = false) {
@@ -445,7 +586,9 @@ async function openLaunched() {
   try {
     const desktop = await window.notecompleteFiles?.launched?.();
     if (desktop) {
+      if (isMp4Name(desktop.name)) return await openExternalVideo(desktop.path, desktop.name);
       const file = new File([desktop.bytes], desktop.name);
+      if (await openMediaFile(file, { path: desktop.path })) return;
       if (await openArchiveFile(file, { path: desktop.path })) return;
       await load(file);
       return await openedLocal(desktop.path, desktop.name, file);
@@ -453,6 +596,7 @@ async function openLaunched() {
     if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
     const [file, ...rest] = launchedFiles.splice(0);
     if (!file || busy()) return;
+    if (await openMediaFile(file)) return;
     if (await openArchiveFile(file, { origin: "Opened file" })) return;
     if (!canReplace()) return;
     await load(file);
@@ -550,6 +694,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   thumbsDue.clear();
   backgrounds?.close();
   stopRecording();
+  if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
   audio.reset();
   panels = [];
   doc = null;
@@ -705,7 +850,7 @@ async function load(file, preparedDocument = null) {
     backgrounds = new PdfBackgrounds((resource) => {
       if (token !== epoch) throw Error("Document closed");
       return call("pdf", { resource });
-    });
+    }, { maxKept: preloadCacheSize() });
     $("title").textContent = result.title || "Untitled note";
     document.title = `${$("title").textContent} — NoteComplete`;
     tabBar.update({ title: $("title").textContent, dirty: dirty && changed });
@@ -734,7 +879,7 @@ async function load(file, preparedDocument = null) {
     // A Goodnotes or Notability notebook is now a note: it is saved as a .nfedit that keeps it.
     if (prepared.kind === "notebook") {
       const left = result.import_warnings || [];
-      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, left.length > 0);
+      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, false);
     } else status("Document opened.");
     collab?.documentChanged();
     autosave.opened(recovering);
@@ -907,9 +1052,8 @@ function buildPages(sizes) {
       if (!doc || editing || busy() || !p.view) return;
       // Not while text is selected: a right-click there means copy, not delete.
       const chosen = selectedText(window.getSelection());
-      // Chinese selected in the text layer: look it up, make cards (chinese/zh-menu.js).
-      if (chosen && hasHan(chosen)) return pageZhSelection(chosen, event.clientX, event.clientY);
-      if (chosen) return status("Press Ctrl+C to copy the selected text.");
+      // Text selected in the page text layer: Translate (with favorites/search), Chinese lookup, and Copy.
+      if (chosen) return pageZhSelection(chosen, event.clientX, event.clientY);
       if (!event.shiftKey) return pageMenu(p, point(event, p), event.clientX, event.clientY);
       const zh = hasHan(p.el.textContent) && svgHit(p.el, event.clientX, event.clientY);
       if (zh && !zh.item && await pageZhLongPress(p, event.clientX, event.clientY)) return;
@@ -959,26 +1103,7 @@ function buildPages(sizes) {
   buildPageList();
   resize();
   $("viewport").scrollTop = 0;
-  observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        const p = panels[Number(entry.target.dataset.page)];
-        if (!p || p.el !== entry.target) continue;
-        p.near = entry.isIntersecting;
-        if (p.near) {
-          if (!p.view) renderPage(p);
-        } else if (gesture?.panel !== p) {
-          p.token++;
-          p.view = null;
-          p.ink = null;
-          p.pdfReady = false;
-          placeholder(p);
-        }
-      }
-    },
-    { root: $("viewport"), rootMargin: "600px 0px" },
-  );
-  for (const p of panels) observer.observe(p.el);
+  attachPageObserver();
 }
 async function movePage(from, to) {
   if (!doc || doc.canvas || editing || busy()) return;
@@ -1151,6 +1276,7 @@ $("pageList").addEventListener("pointerdown", (down) => {
 const textBox = textBoxController({
   call,
   action: (...a) => action(...a),
+  patch: (...a) => patchItem(...a),
   status,
   selection,
   swatches: SWATCHES,
@@ -1175,6 +1301,27 @@ const textBox = textBoxController({
 // Chinese input (chinese/ime.js) in the other places text is typed; Settings → Chinese in View.
 for (const id of ["chatInput", "findInput", "quizCheckText", "practiceFixFront", "practiceFixBack", "practiceExplainedArea", "practiceAskInput"]) if ($(id)) chineseField($(id));
 if ($("zhSettingsOpen")) $("zhSettingsOpen").onclick = openZhSettings;
+// Math Mode toolbar & R Statistics Bridge (math/math-bar.js).
+const mathBar = createMathBar({
+  container: $("mathModeBar"),
+  status,
+  onInsertMathBox: async (tex) => {
+    const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
+    if (!p || !ensureEditableLayer()) return;
+    await textBox.placeMath(p, tex);
+  },
+  onPlotFunction: async (expr) => {
+    const cleaned = String(expr || "").replace(/^\s*(?:y|f\(x\))\s*=\s*/i, "").trim();
+    await insertCompound(panels[page], "graph", null, { functions: [cleaned || "x^2"] });
+  },
+  onInsertRPrefab: async () => {
+    const rCard = PREFABS.find((c) => c.id === "r-normal") || { id: "r-normal", kind: "prefab", module: "r-math", label: "Normal distribution (R)", spec: { type: "r_figure", schemaVersion: 1, preset: "normal", title: "Normal(0, 1) — 95% Interval", params: { mean: 0, sd: 1, from: -1.96, to: 1.96, region: "between", color: "#245dc4" }, width: 480, height: 300 } };
+    await insertPrefab(panels[page], null, rCard);
+  },
+});
+if ($("mathModePill")) $("mathModePill").onclick = () => mathBar.toggle();
+if ($("viewMathMode")) $("viewMathMode").onclick = () => { closeMenus?.(); mathBar.toggle(); };
+if ($("mathSettingsOpen")) $("mathSettingsOpen").onclick = () => { closeMenus?.(); mathBar.openSettings("math"); };
 // Edit PDF (pdf-edit.js): a PDF's printed text turned into text boxes, block by block.
 const pdfEdit = pdfEditController({
   call,
@@ -1699,15 +1846,37 @@ async function renderPage(p, provided) {
     // placeholder until the sharper one arrives.
     const inkItems = result.pdf_background ? inkCount(result.svg) : null;
     const kind = result.pdf_background && (inkItems > INK_HEAVY ? "url" : "canvas");
-    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, displayQuality, globalThis.devicePixelRatio || 1, kind]);
+    const rasterQual = displayQuality ? { scale: displayQuality.scale, megapixels: displayQuality.megapixels } : displayQuality;
+    const pdfKey = result.pdf_background && JSON.stringify([result.pdf_background, p.size, displayWidth, rasterQual, globalThis.devicePixelRatio || 1, kind]);
     const previous = result.pdf_background && p.pdfKey && JSON.stringify(JSON.parse(p.pdfKey).slice(0, 2)) === JSON.stringify([result.pdf_background, p.size])
       ? p.render?.querySelector(":scope > canvas.pdf-raster, [data-background] > image:not(.pdf-detail)") : null;
     // A canvas (this page's, or the previous one kept until the new raster is ready) lies
     // beneath the SVG, so the SVG's paper must let it through.
     if (kind === "canvas" || previous?.localName === "canvas") underPaper(render);
-    if (previous?.localName === "canvas") render.prepend(previous);
-    else if (previous) render.querySelector("[data-background]")?.append(previous);
-    const kept = pdfKey === p.pdfKey ? previous : null;
+    let kept = pdfKey === p.pdfKey ? previous : null;
+    if (kept) {
+      if (kept.localName === "canvas") render.prepend(kept);
+      else render.querySelector("[data-background]")?.append(kept);
+    } else if (result.pdf_background) {
+      // Synchronous cache hit: attach preloaded PDF raster immediately with zero scrollPause flicker.
+      const place = backgroundPlacement(result.pdf_background, p.size);
+      const cached = backgrounds?.peekRaster(result.pdf_background, p.size, displayWidth * place.share, displayQuality, kind);
+      if (cached) {
+        if (typeof cached === "string") render.querySelector("[data-background]")?.append(pdfImage(cached, place));
+        else {
+          underPaper(render);
+          const canvas = cached.isConnected && cached.parentNode !== render ? copyCanvas(cached) : cached;
+          render.prepend(placeRaster(canvas, place, p.size));
+        }
+        if (previous) backgrounds?.release(previous.localName === "canvas" ? previous : previous.getAttribute("href"));
+        p.pdfKey = pdfKey;
+        p.rasterWidth = displayWidth;
+        kept = cached;
+      } else if (previous) {
+        if (previous.localName === "canvas") render.prepend(previous);
+        else render.querySelector("[data-background]")?.append(previous);
+      }
+    }
     applyTapes({ ...p, view: result }, render);
     const overlay = document.createElementNS(ns, "svg");
     overlay.classList.add("overlay");
@@ -1729,6 +1898,7 @@ async function renderPage(p, provided) {
     // Text boxes made from a PDF are drawn in its own font (pdf-edit.js), also in a later session.
     pdfEdit.fontsFor(p);
     typesetMath(render, result.texts);
+    syncStickyNotes({ ...p, view: result }, render, `${epoch}`);
     // Pinyin over the Chinese in text boxes, when on (chinese/ruby.js).
     // Math and Chinese pinyin overlays on page text boxes, drawn on the SVG after render.
     const svgEl = render.querySelector(":scope > svg");
@@ -1813,9 +1983,11 @@ function updateTools(result) {
   $("pageLabel").textContent = `of ${doc.pages}`;
   // The box fits the longest page number (no clipped digits in narrow and compact bars).
   $("pageNumber").style.setProperty("--digits", String(Math.max(2, String(doc.pages).length)));
-  $("counts").textContent =
-    `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
-  $("warnings").textContent = result.warnings.join(" ");
+  if (result && result.visible_imported != null) {
+    $("counts").textContent =
+      `${result.visible_imported} ${result.visible_imported === 1 ? "item" : "items"} · ${result.visible_added} new`;
+  }
+  if (Array.isArray(result?.warnings)) $("warnings").textContent = result.warnings.join(" ");
   $("svg").disabled = !panels[page]?.pdfReady;
 }
 function setPage(index) {
@@ -2057,10 +2229,11 @@ function placeToolOptions() {
   const opts = $("toolOptions"), placed = !!toolOptionsPlace && !opts.classList.contains("inline");
   opts.classList.toggle("placed", placed);
   if (!placed) { opts.style.top = ""; if (opts.style.position) opts.style.position = ""; return; }
-  // Kept inside the window, however it was resized since.
+  // Kept inside the window, however it was resized or zoomed since.
+  const z = uiZoom(), vw = innerWidth / z, vh = innerHeight / z;
   const w = opts.offsetWidth || 200, h = opts.offsetHeight || 40;
-  opts.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, toolOptionsPlace.x))}px`;
-  opts.style.top = `${Math.max(4, Math.min(innerHeight - h - 4, toolOptionsPlace.y))}px`;
+  opts.style.left = `${Math.max(4, Math.min(vw - w - 4, toolOptionsPlace.x))}px`;
+  opts.style.top = `${Math.max(4, Math.min(vh - h - 4, toolOptionsPlace.y))}px`;
 }
 function resetToolOptionsPlace() {
   toolOptionsPlace = null;
@@ -2071,11 +2244,12 @@ function resetToolOptionsPlace() {
 $("toolOptionsGrip").addEventListener("pointerdown", (down) => {
   if (down.button !== 0) return;
   down.preventDefault();
-  const opts = $("toolOptions"), r = opts.getBoundingClientRect(), dx = down.clientX - r.left, dy = down.clientY - r.top;
+  const z0 = uiZoom();
+  const opts = $("toolOptions"), r = opts.getBoundingClientRect(), dx = down.clientX / z0 - r.left / z0, dy = down.clientY / z0 - r.top / z0;
   const grip = $("toolOptionsGrip");
   try { grip.setPointerCapture(down.pointerId); } catch { /* Released already. */ }
   opts.classList.add("dragging");
-  const move = (e) => { toolOptionsPlace = { x: Math.round(e.clientX - dx), y: Math.round(e.clientY - dy) }; placeToolOptions(); };
+  const move = (e) => { const z = uiZoom(); toolOptionsPlace = { x: Math.round(e.clientX / z - dx), y: Math.round(e.clientY / z - dy) }; placeToolOptions(); };
   const up = () => {
     grip.removeEventListener("pointermove", move); grip.removeEventListener("pointerup", up); grip.removeEventListener("pointercancel", up);
     opts.classList.remove("dragging");
@@ -2164,6 +2338,19 @@ function edited(op, args, result) {
   // A tablet's copy is the computer's note: the computer saves it, not the tablet.
   if (collab?.role !== "tablet") dirty = changed = true;
   revision++;
+  // Item-level patches (adjust/crop) only carry delta metadata, not a full document summary.
+  if (!Array.isArray(result?.page_sizes)) {
+    if (prevDoc && result) {
+      Object.assign(prevDoc, {
+        can_undo: result.can_undo ?? prevDoc.can_undo,
+        can_redo: result.can_redo ?? prevDoc.can_redo,
+        edit_count: result.edit_count ?? prevDoc.edit_count,
+      });
+    }
+    doc = prevDoc;
+    savedState();
+    return false;
+  }
   doc = result;
   savedState();
   const audioStateKey = (d) => `${d?.audio?.length || 0}:${(d?.recordings || []).map((r) => `${r.id}${r.animation ? "a" : ""}`).join(",")}`;
@@ -2200,9 +2387,10 @@ function edited(op, args, result) {
 }
 function showEdit(op, args, result) {
   updateTools(result);
-  layerPanel(result.layers);
+  if (Array.isArray(result.layers)) layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
   const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  const fullView = Boolean(result?.size && Array.isArray(result?.layers));
   const newBackground = op === "setPageBackgrounds" || op === "replacePdfText";
   const affected = newBackground && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
   const bgDirty = newBackground || op === "undo" || op === "redo";
@@ -2224,7 +2412,7 @@ function showEdit(op, args, result) {
     // for the whole page to be rebuilt.
     if (op === "draw" && p.index === result.page && addDrawn(p, result)) continue;
     if (op === "draw" && !args.line?.shape && p.index === result.page) laterRender(p, result);
-    else renderPage(p, p.index === result.page ? result : undefined);
+    else renderPage(p, fullView && p.index === result.page ? result : undefined);
   }
   if (op === "setPageBackgrounds" && Array.isArray(args.pages))
     status(`Updated background on ${args.pages.length} page${args.pages.length === 1 ? "" : "s"}. One undo restores it.`);
@@ -2742,9 +2930,9 @@ const hideTip = () => { clearTimeout(tipTimer); clearTimeout(tipHide); tip.hidde
 function showTip(el) {
   tip.textContent = tipText(el).split("\n")[0];
   tip.hidden = false; tipFor = el;
-  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
-  tip.style.top = `${r.top - h - 8 > 4 ? r.top - h - 8 : r.bottom + 8}px`;
+  const z = uiZoom(), r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = `${Math.max(8, Math.min(innerWidth / z - w - 8, (r.left + r.width / 2) / z - w / 2))}px`;
+  tip.style.top = `${r.top / z - h - 8 > 4 ? r.top / z - h - 8 : r.bottom / z + 8}px`;
   clearTimeout(tipHide); tipHide = setTimeout(hideTip, 2800);
 }
 document.addEventListener("pointerdown", (e) => {
@@ -2899,7 +3087,67 @@ function pointerDown(e, p) {
   }
   if (tool === "text") {
     e.preventDefault();
-    textBox.open(p, point(e, p));
+    const at = point(e, p);
+    if (textBox.active || e.button !== 0 || e.pointerType !== "mouse") {
+      textBox.open(p, at);
+      return;
+    }
+    // In Text mode: holding left click (≥ 220ms) or dragging (> 5px) on an existing text box moves
+    // it directly without switching to Select or entering edit mode; a quick click edits it.
+    const startX = e.clientX, startY = e.clientY, pointerId = e.pointerId, noteToken = epoch;
+    let lastEv = e, finished = false, picked = null, startedDrag = false, holdTimer = 0;
+    const cleanup = () => {
+      clearTimeout(holdTimer);
+      window.removeEventListener("pointermove", onMove, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onCancel, true);
+    };
+    const startDrag = () => {
+      if (finished || startedDrag || !picked || noteToken !== epoch || tool !== "text") return;
+      startedDrag = true;
+      finished = true;
+      cleanup();
+      selection.dragItem(lastEv, p, picked, { keepTool: true });
+    };
+    const onMove = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      lastEv = ev;
+      if (picked && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 5) startDrag();
+    };
+    const onUp = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      finished = true;
+      cleanup();
+      if (noteToken === epoch && tool === "text") textBox.open(p, at);
+    };
+    const onCancel = (ev) => {
+      if (ev.pointerId !== pointerId || finished) return;
+      finished = true;
+      cleanup();
+    };
+    window.addEventListener("pointermove", onMove, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onCancel, true);
+    call("pick", { page: p.index, x: at[0], y: at[1], tolerance: 4 }).then((item) => {
+      if (finished || noteToken !== epoch || tool !== "text") return;
+      if (item?.kind !== "text") {
+        finished = true;
+        cleanup();
+        textBox.open(p, at);
+        return;
+      }
+      picked = item;
+      if (Math.hypot(lastEv.clientX - startX, lastEv.clientY - startY) > 5) {
+        startDrag();
+      } else {
+        holdTimer = setTimeout(startDrag, 220);
+      }
+    }).catch(() => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      if (noteToken === epoch && tool === "text") textBox.open(p, at);
+    });
     return;
   }
   if (tool === "lock") {
@@ -3212,12 +3460,23 @@ function stylusPressure(g) {
 }
 // Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
 // documents scroll the same way. It never auto-scrolls or pastes the primary selection.
+let middleMouseAt = -Infinity;
+for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclick"]) {
+  document.addEventListener(type, (e) => {
+    if (e.button !== 1) return;
+    middleMouseAt = performance.now();
+    if ((type === "mouseup" || type === "auxclick") && !e.target?.closest?.("input, textarea, [contenteditable], .TinyMDE, math-field")) {
+      e.preventDefault();
+    }
+  }, true);
+}
 function middlePan(el) {
   let drag = null;
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 1 || e.pointerType !== "mouse") return;
     // Editors with their own canvas (UML: a .puml file, a prefab on the page) pan it themselves.
     if (e.target.closest?.(".uml-editor")) return;
+    middleMouseAt = performance.now();
     e.preventDefault();
     e.stopPropagation();
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
@@ -3241,6 +3500,7 @@ function middlePan(el) {
   }, true);
   const end = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
+    middleMouseAt = performance.now();
     if (latest) { cancelAnimationFrame(frame); apply(); }
     latest = null;
     drag = null;
@@ -3248,7 +3508,8 @@ function middlePan(el) {
   };
   el.addEventListener("pointerup", end, true);
   el.addEventListener("pointercancel", end, true);
-  for (const type of ["mousedown", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) e.preventDefault(); }, true);
+  for (const type of ["mousedown", "mouseup", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) { middleMouseAt = performance.now(); e.preventDefault(); } }, true);
+  el.addEventListener("paste", (e) => { if (performance.now() - middleMouseAt < 400) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 }
 middlePan($("viewport"));
 // Rows that scroll sideways when the window is narrow (the menubar, the tools): a mouse
@@ -4400,7 +4661,7 @@ const SHORTCUTS = [
 // The tool row can be put in any order by dragging its buttons; remembered here.
 const toolGroup = document.querySelector("#toolbar .segmented");
 const toolKey = (el) => el.dataset.tool || el.id;
-const toolItems = 'button[data-tool], #importImage';
+const toolItems = 'button[data-tool], #importImage, #mathModePill';
 const defaultToolOrder = [...toolGroup.querySelectorAll(toolItems)].map(toolKey);
 function arrangeTools(order) {
   const rank = (key) => { const i = order.indexOf(key); return i < 0 ? order.length + defaultToolOrder.indexOf(key) : i; };
@@ -4571,6 +4832,11 @@ document.addEventListener("keydown", (e) => {
     $("newWindow").click();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "m") {
+    e.preventDefault();
+    mathBar.toggle();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "j" && doc) {
     e.preventDefault();
     showDocument();
@@ -4645,6 +4911,30 @@ function closeHomeFileMenu() {
   if ($("homeFileMenu")) $("homeFileMenu").hidden = true;
   if ($("emptyOpen")) $("emptyOpen").setAttribute("aria-expanded", "false");
 }
+function placeHomeFileMenu() {
+  const btn = $("emptyOpen"), menu = $("homeFileMenu");
+  if (!btn || !menu || menu.hidden) return;
+  const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+  const vw = innerWidth / z, vh = innerHeight / z;
+  const r = btn.getBoundingClientRect();
+  const leftEdge = r.left / z, rightEdge = r.right / z, topEdge = r.top / z, bottomEdge = r.bottom / z;
+  const w = Math.min(menu.offsetWidth || 260, vw - 16);
+  const preferRight = rightEdge > vw * 0.55;
+  const x = preferRight ? rightEdge - w : leftEdge;
+  menu.style.maxWidth = `${Math.max(180, Math.round(vw - 16))}px`;
+  menu.style.left = `${Math.round(Math.max(8, Math.min(vw - w - 8, x)))}px`;
+  menu.style.right = "auto";
+  const h = menu.offsetHeight || 260;
+  const below = vh - bottomEdge - 10, above = topEdge - 10;
+  if (below >= h || below >= above) {
+    menu.style.top = `${Math.round(bottomEdge + 6)}px`;
+    menu.style.maxHeight = `${Math.max(140, Math.round(below))}px`;
+  } else {
+    const mh = Math.max(140, Math.round(above));
+    menu.style.maxHeight = `${mh}px`;
+    menu.style.top = `${Math.round(Math.max(8, topEdge - Math.min(h, mh) - 6))}px`;
+  }
+}
 if ($("emptyOpen")) {
   $("emptyOpen").onclick = (e) => {
     const menu = $("homeFileMenu");
@@ -4653,7 +4943,10 @@ if ($("emptyOpen")) {
     const next = menu.hidden;
     menu.hidden = !next;
     $("emptyOpen").setAttribute("aria-expanded", String(next));
-    if (next && e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
+    if (next) {
+      placeHomeFileMenu();
+      if (e.detail === 0) menu.querySelector("button:not([hidden])")?.focus();
+    }
   };
   // Esc closes it (back on the File button), ↑ ↓ move between its items.
   $("homeFileMenu")?.addEventListener("keydown", (e) => {
@@ -4957,6 +5250,56 @@ if ($("newNoteMenuDialog")) {
 }
 if ($("newMarkdownDoc")) $("newMarkdownDoc").onclick = () => openNewMarkdown();
 if ($("homeNewMarkdown")) $("homeNewMarkdown").onclick = () => { closeHomeFileMenu(); openNewMarkdown(); };
+const launchNewRDialog = () => {
+  if ($("newNoteMenuDialog")?.open) $("newNoteMenuDialog").close();
+  closeHomeFileMenu();
+  openNewRDialog({
+    status,
+    onOpenStudio: openRStudioTarget,
+    onCreatedWorkspace: async (created) => {
+      if (created?.folderPath && created?.folderListing) {
+        await groups.openFolder({ folder: created.folderPath, name: created.name, files: created.folderListing });
+        home?.renderRecent?.();
+      }
+    },
+    onCreatedFile: async (created) => {
+      if (created?.filePath) {
+        await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
+        home?.renderRecent?.();
+      }
+    },
+  });
+};
+if ($("newRStudioDoc")) $("newRStudioDoc").onclick = launchNewRDialog;
+if ($("homeMenuRStudio")) $("homeMenuRStudio").onclick = launchNewRDialog;
+if ($("textOpenRStudio")) {
+  $("textOpenRStudio").onclick = async () => {
+    const filePath = docMember?.source === "local" ? docMember.path : "";
+    const name = docMember?.name || `${textView.name || "script"}.R`;
+    const kind = /\.(rmd|qmd)$/i.test(name) ? "rmd" : "r";
+    await openRStudioTarget({ filePath, title: name, code: filePath ? "" : textView.text, kind });
+  };
+}
+// When an R script or text file opened from disk is edited externally in R Commander Studio,
+// focusing NoteComplete reloads the updated file cleanly if there are no unsaved in-app edits.
+window.addEventListener("focus", async () => {
+  if (!textView?.visible || !textView?.hasDocument || (dirty && changed)) return;
+  if (docMember?.source !== "local" || !docMember?.path || !window.notecompleteFiles?.readRecent) return;
+  try {
+    const bytes = await window.notecompleteFiles.readRecent(docMember.path);
+    if (!bytes) return;
+    const diskText = new TextDecoder("utf-8").decode(bytes);
+    if (diskText && diskText !== textView.text) {
+      await textView.open({
+        text: diskText,
+        name: textView.name,
+        markdown: textView.markdown,
+        key: docMember.name,
+      });
+      status(`Synced ${docMember.name} from disk.`);
+    }
+  } catch { /* File moved or unreadable. */ }
+});
 if ($("homeCreatePrefab")) $("homeCreatePrefab").onclick = () => insertPrefab(panels[page]);
 if ($("homeMenuNewHub")) $("homeMenuNewHub").onclick = () => { closeHomeFileMenu(); $("newNoteOpen")?.click(); };
 if ($("homeMenuBlank")) $("homeMenuBlank").onclick = () => { closeHomeFileMenu(); $("newDocument")?.click(); };
@@ -5127,7 +5470,7 @@ $("notesResize").onpointerdown = (down) => {
   down.preventDefault();
   const start = down.clientX, width = $("notesPanel").offsetWidth;
   $("notesResize").setPointerCapture(down.pointerId);
-  $("notesResize").onpointermove = (e) => { $("notesPanel").style.width = `${Math.max(240, Math.min(innerWidth * 0.7, width + start - e.clientX))}px`; };
+  $("notesResize").onpointermove = (e) => { const z = uiZoom(); $("notesPanel").style.width = `${Math.max(240, Math.min((innerWidth / z) * 0.7, width + (start - e.clientX) / z))}px`; };
   $("notesResize").onpointerup = () => {
     $("notesResize").onpointermove = $("notesResize").onpointerup = null;
     try { localStorage.setItem("notecomplete-notes-width", String($("notesPanel").offsetWidth)); } catch { /* Optional. */ }
@@ -5261,7 +5604,7 @@ function textToolFlyout(button) {
       { label: "Math (LaTeX ∑)", icon: "graph", checked: $("textMath")?.getAttribute("aria-pressed") === "true", run: () => $("textMath")?.click() },
       "-",
       {
-        label: isZh ? `Chinese input (${zhMode === "pinyin" ? "Pinyin tones" : "Hanzi"})` : "Chinese input (中)",
+        label: isZh ? "Chinese input (Hanzi)" : "Chinese input (中)",
         icon: "text",
         checked: isZh,
         run: () => { $("zhModeToggle")?.click(); setTimeout(openMenu, 0); },
@@ -5340,12 +5683,46 @@ function stepZoom(direction) {
 
 receiveNativeFiles({ open: openImportedFile, canReplace, isBusy: busy, status });
 
-// Audio and transcript live in a side panel opened from the toolbar (A).
-function toggleAudio(open = $("audioBar").hidden) {
+// Audio and transcript live in a floating panel opened from the toolbar (A).
+// Closing it docks active note audio to the top global audio bar; Shift+click × (or Shift+X inside
+// the Audio window, or clicking × on the top bar) stops and closes it completely.
+function dockNoteAudioToGlobalBar() {
+  const hasAudio = audio.entries?.length > 0 && (!audio.paused || audio.time > 0);
+  if (!hasAudio) return;
+  const sel = $("recording");
+  globalAudio.attachExternal({
+    getTitle: () => sel?.options?.[sel.selectedIndex]?.textContent?.trim() || "Note audio",
+    getTime: () => audio.time,
+    getDuration: () => audio.duration,
+    isPaused: () => audio.paused,
+    isMuted: () => Boolean(audio.muted),
+    getRate: () => audio.rate,
+    togglePlay: () => $("playAudio")?.click(),
+    skip: (delta) => audio.seek(Math.max(0, Math.min(audio.duration || Infinity, audio.time + delta))),
+    seek: (t) => audio.seek(t),
+    toggleMute: () => { if (typeof audio.setMuted === "function") audio.setMuted(!audio.muted); else audio.audio.muted = !audio.audio.muted; },
+    stepRate: (dir) => audio.stepRate(dir),
+    onOpen: () => toggleAudio(true),
+    onStop: () => {
+      if (audio.virtual) { audio.virtual.paused = true; audio.update?.(); }
+      else audio.audio?.pause();
+    },
+  });
+}
+function toggleAudio(open = $("audioBar").hidden, { forceStop = false } = {}) {
   if ($("audioToggle").hidden) return;
   $("audioBar").hidden = !open;
   $("audioToggle").setAttribute("aria-expanded", String(open));
-  if (open) audio.transcript.lookup();
+  if (open) {
+    if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
+    audio.transcript.lookup();
+  } else if (forceStop) {
+    if (globalAudio.isExternal) globalAudio.detachExternal({ stop: false });
+    if (audio.virtual) { audio.virtual.paused = true; audio.update?.(); }
+    else audio.audio?.pause();
+  } else {
+    dockNoteAudioToGlobalBar();
+  }
 }
 // Dark pages: inverts the document and its page previews (presentation only, never exported).
 // HTML documents follow the same switch (Dark Reader inside the page, see htmlDarkApply).
@@ -5372,6 +5749,30 @@ for (const b of document.querySelectorAll("#pageAlign [data-align]")) b.onclick 
 $("pageAlignFree").onclick = () => setPageAlign($("pages").dataset.align === "free" ? "center" : "free");
 for (const b of document.querySelectorAll("[data-align-menu]")) b.onclick = () => { setPageAlign(b.dataset.alignMenu); for (const m of document.querySelectorAll("details.menu")) m.open = false; };
 try { setPageAlign(["left", "right", "free"].includes(localStorage.getItem("notecomplete-page-align")) ? localStorage.getItem("notecomplete-page-align") : "center"); } catch { setPageAlign("center"); }
+// Markdown / text viewer & editor side spacing (width) and snap alignment (left, center, right); remembered.
+const TEXT_WIDTHS = new Set(["480", "640", "760", "1000", "1280", "full"]);
+function setTextAlign(align) {
+  const next = ["left", "right"].includes(align) ? align : "center";
+  const view = $("textView");
+  if (view) view.dataset.textAlign = next;
+  for (const b of document.querySelectorAll("#textAlign [data-align]")) b.setAttribute("aria-checked", String(b.dataset.align === next));
+  try { localStorage.setItem("notecomplete-text-align", next); } catch { /* Optional. */ }
+}
+function setTextWidth(width) {
+  const next = TEXT_WIDTHS.has(String(width)) ? String(width) : "760";
+  const view = $("textView");
+  if (view) {
+    view.dataset.textWidth = next;
+    view.style.setProperty("--text-width", next === "full" ? "100%" : `${next}px`);
+  }
+  const sel = $("textWidth");
+  if (sel) sel.value = next;
+  try { localStorage.setItem("notecomplete-text-width", next); } catch { /* Optional. */ }
+}
+for (const b of document.querySelectorAll("#textAlign [data-align]")) b.onclick = () => setTextAlign(b.dataset.align);
+if ($("textWidth")) $("textWidth").onchange = (e) => setTextWidth(e.target.value);
+try { setTextAlign(localStorage.getItem("notecomplete-text-align") || "center"); } catch { setTextAlign("center"); }
+try { setTextWidth(localStorage.getItem("notecomplete-text-width") || "760"); } catch { setTextWidth("760"); }
 // Side-by-side 2-up page spread toggle; remembered on this device.
 function setPageSpread(value) {
   const next = Number(value) === 2 ? 2 : 1;
@@ -5436,15 +5837,25 @@ try { setDarkPages(localStorage.getItem("notecomplete-dark-pages") === "1"); } c
 $("audioToggle").onclick = () => toggleAudio();
 // Floating windows may cover the whole screen below the top bar (menus stay reachable).
 // Floating windows may go anywhere on the screen, over the top bar too (floating.js `.over-bar`).
-const screenArea = () => ({ left: 0, top: 0, width: innerWidth, height: innerHeight });
+const screenArea = () => { const z = uiZoom(); return { left: 0, top: 0, width: Math.round(innerWidth / z), height: Math.round(innerHeight / z) }; };
 floatingWindow($("audioBar"), { screen: screenArea, key: "notecomplete-audio-window", head: $("audioBar").querySelector(".audio-head"), close: $("audioClose"), label: "Audio", compact: { cls: "compact" }, scroll: true });
 floatingWindow($("chatPanel"), { screen: screenArea, key: "notecomplete-chat-window", head: $("chatPanel").querySelector(".chat-head"), close: $("chatClose"), label: "Ask AI", compact: { cls: "compact" }, minHeight: 220 });
-$("audioClose").onclick = () => toggleAudio(false);
+$("audioClose").title = "Close panel (keeps audio in top bar; Shift+click or Shift+X to stop & close)";
+$("audioClose").onclick = (e) => toggleAudio(false, { forceStop: Boolean(e?.shiftKey) });
+$("audioBar").addEventListener("keydown", (e) => {
+  if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "x" && !e.target.closest?.("input, textarea, [contenteditable]")) {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleAudio(false, { forceStop: true });
+  }
+});
 $("transcriptEdit").onclick = () => audio.transcript.toggleEdit();
 
 // Opening from Drive or Recent goes through the same unsaved-changes check as local files.
-async function openChosen(file) {
+async function openChosen(file, entry = null) {
   if (!ready || busy()) throw Error("Wait for the current operation to finish, then choose the file again.");
+  const localPath = entry?.source === "local" ? (entry.path || "") : "";
+  if (await openMediaFile(file, { path: localPath, origin: entry?.origin || "Recent" })) return false;
   if (await openArchiveFile(file)) return false;
   if (!canReplace()) return false;
   await load(file);
@@ -5731,7 +6142,7 @@ async function restoreAfterUpdate() {
 }
 async function openFromLibrary(file, entry) {
   if (await openArchiveFile(file, { key: entry?.key || "", entry })) return false;
-  const opened = await openChosen(file);
+  const opened = await openChosen(file, entry);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
     // Search inside notes from Recent finds this note's kept text without reading it again.
@@ -5853,6 +6264,7 @@ function drawPlantuml(text) {
 const textView = textViewer({
   root: $("textView"), body: $("textBody"), editorHost: $("textEditor"), title: $("textTitle"), format: $("textMarkdown"), edit: $("textEdit"),
   zoom: { out: $("textZoomOut"), into: $("textZoomIn"), value: $("textZoomValue") },
+  editorZoom: { out: $("textEditorZoomOut"), into: $("textEditorZoomIn"), value: $("textEditorZoomValue") },
   toHtml: (value) => call("markdownHtml", { text: value }),
   imageUrl: textImageUrl,
   // PlantUML files are drawn by the desktop app's PlantUML; includes come from the file's folder.
@@ -6205,7 +6617,12 @@ async function openLocal() {
   try {
     const chosen = await bridge.openFile();
     if (!chosen) return;
+    if (chosen.external || isMp4Name(chosen.name)) {
+      await openExternalVideo(chosen.path, chosen.name);
+      return;
+    }
     const file = new File([chosen.bytes], chosen.name);
+    if (await openMediaFile(file, { path: chosen.path })) return;
     if (busy()) return;
     if (await openArchiveFile(file, { path: chosen.path })) return;
     if (!canReplace()) return;
@@ -6240,6 +6657,7 @@ function showArchiveTitle(title) {
 }
 async function openFromArchive(file, title, member = null) {
   if (!ready || busy()) { status("Wait for the current operation to finish.", true); return false; }
+  if (await openMediaFile(file)) return true;
   if (!canReplace()) return false;
   notePath = noteEntryKey = "";
   await load(file);
@@ -6429,6 +6847,14 @@ function setDocMember(member) {
   return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch((e) => console.warn("Group panel:", e));
 }
 async function openMember(member) {
+  if (member.source === "local" && isMp4Name(member.name)) {
+    return openExternalVideo(member.path, member.name);
+  }
+  if (member.source === "local" && isMp3Name(member.name)) {
+    const bytes = await window.notecompleteFiles?.readRecent(member.path);
+    if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
+    return openMediaFile(new File([bytes], member.name), { path: member.path });
+  }
   if ((doc || sideView()) && docMember && docMember.key !== member.key)
     navHistory.record(currentStop(), { view: "doc", key: member.key, member, page: 0 });
   if (member.source === "web") return openWeb(member);
@@ -6438,6 +6864,7 @@ async function openMember(member) {
     const bytes = await window.notecompleteFiles?.readRecent(member.path);
     if (!bytes) throw Error(`${member.name} is no longer in its folder.`);
     const file = new File([bytes], member.name);
+    if (await openMediaFile(file, { path: member.path })) return;
     if (await openArchiveFile(file, { path: member.path })) return;
     if (!canReplace()) return;
     await load(file);
@@ -6446,6 +6873,7 @@ async function openMember(member) {
   const entry = await library.store.get("entries", member.key).catch(() => null);
   const file = entry && await library.open(entry);
   if (!file) throw Error(`${member.name} is not kept on this device any more. Open it again from Drive.`);
+  if (await openMediaFile(file)) return;
   await openFromLibrary(file, entry);
 }
 if (window.notecompleteFiles?.openFolder) {
@@ -6456,8 +6884,9 @@ if (window.notecompleteFiles?.openFolder) {
       const chosen = await window.notecompleteFiles.openFolder();
       if (!chosen) return;
       await groups.openFolder(chosen);
-      if (!chosen.files.length) return status(`${chosen.name} has no notes, PDFs, HTML, text or images.`, true);
-      await openMember(localMember(chosen.files[0].path, chosen.files[0].name));
+      if (!chosen.files.length) return status(`${chosen.name} has no notes, PDFs, HTML, text, media or images.`, true);
+      const firstDoc = chosen.files.find((f) => !isMp3Name(f.name) && !isMp4Name(f.name)) || chosen.files[0];
+      await openMember(localMember(firstDoc.path, firstDoc.name));
     } catch (error) { status(error.message, true); }
   };
   $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
@@ -6621,6 +7050,7 @@ function documentControls() {
   const open = !!doc;
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
+  if ($("textOpenRStudio")) $("textOpenRStudio").hidden = !(textView.hasDocument && isRScriptName(docMember?.name || textView.key || textView.name));
   for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
@@ -6856,7 +7286,8 @@ $("grabKeep").onclick = async () => {
   if (!grabbed) return;
   try {
     exerciseRefs.push({ name: `Snippet, page ${grabbed.page + 1}`, src: await grabImage(), kind: "image" });
-    status("Kept: it shows beside the canvas when you fill in or solve a figure (right-click it → Fill in / Solve).");
+    syncKeptRefsUi();
+    status(`Kept for exercises (${exerciseRefs.length}) — open from ★ Kept in the top bar or Study → Kept for exercises…`);
     clearGrab();
   } catch (e) { status(e.message, true); }
 };
@@ -7198,6 +7629,101 @@ async function insertPrefab(p, box = null, choice = null) {
 // Snippets kept from the Grab tool (Keep for exercises), shown while filling a figure in; for
 // this session only.
 const exerciseRefs = [];
+let keptRefsWin = null;
+function syncKeptRefsUi() {
+  const n = exerciseRefs.length;
+  const pill = $("keptRefsPill");
+  const count = $("keptRefsCount");
+  if (pill) pill.hidden = !n;
+  if (count) count.textContent = `Kept (${n})`;
+  const menuBtn = $("keptRefsOpen");
+  if (menuBtn) {
+    const label = n ? `Kept for exercises (${n})…` : "Kept for exercises…";
+    const textNode = [...menuBtn.childNodes].find((c) => c.nodeType === 3 && c.textContent.trim());
+    if (textNode) textNode.textContent = label;
+    else menuBtn.append(document.createTextNode(label));
+  }
+  keptRefsWin?.render?.();
+}
+async function openExerciseRefsWindow() {
+  if (keptRefsWin) { keptRefsWin.show(); keptRefsWin.render(); return; }
+  const { movableWindow } = await import("./prefabs/kit/window.js");
+  const win = movableWindow({
+    key: "kept-refs",
+    title: "Kept for exercises",
+    width: 420,
+    height: 520,
+    minWidth: 280,
+    minHeight: 240,
+    onClose: () => { win.destroy(); keptRefsWin = null; },
+  });
+  const host = document.createElement("div");
+  host.className = "kept-refs-window";
+  const bar = document.createElement("div");
+  bar.className = "kept-refs-bar";
+  const fileIn = Object.assign(document.createElement("input"), { type: "file", accept: "image/*", multiple: true, hidden: true });
+  const addBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip" });
+  addBtn.append(icon("image"), document.createTextNode("Add picture…"));
+  addBtn.onclick = () => fileIn.click();
+  fileIn.onchange = () => {
+    for (const f of fileIn.files || []) {
+      exerciseRefs.push({ name: f.name, src: URL.createObjectURL(f), kind: "image" });
+    }
+    fileIn.value = "";
+    syncKeptRefsUi();
+  };
+  const clearBtn = Object.assign(document.createElement("button"), { type: "button", className: "chip danger" });
+  clearBtn.append(icon("trash"), document.createTextNode("Clear all"));
+  clearBtn.onclick = () => { exerciseRefs.length = 0; syncKeptRefsUi(); };
+  bar.append(addBtn, fileIn, Object.assign(document.createElement("span"), { className: "spacer" }), clearBtn);
+  const list = document.createElement("div");
+  list.className = "kept-refs-list";
+  host.append(bar, list);
+  win.body.append(host);
+  const render = () => {
+    clearBtn.hidden = !exerciseRefs.length;
+    if (!exerciseRefs.length) {
+      list.replaceChildren(Object.assign(document.createElement("p"), {
+        className: "muted",
+        textContent: "No snippets kept yet. Use the Grab tool on any page and tap ★ Keep for exercises, or add a picture above. Kept snippets also appear inside figure/chart editors.",
+      }));
+      return;
+    }
+    list.replaceChildren(...exerciseRefs.map((ref, i) => {
+      const fig = document.createElement("figure");
+      fig.className = "kept-ref-card";
+      const cap = document.createElement("figcaption");
+      const nameSpan = Object.assign(document.createElement("span"), { textContent: ref.name || `Snippet ${i + 1}` });
+      const copyBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Copy image", ariaLabel: "Copy image" });
+      copyBtn.append(icon("copy"));
+      copyBtn.onclick = async () => {
+        try {
+          const blob = await (await fetch(ref.src)).blob();
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+          status("Copied snippet image.");
+        } catch { status("Could not copy image on this browser.", true); }
+      };
+      const rmBtn = Object.assign(document.createElement("button"), { type: "button", className: "icon-button", title: "Remove", ariaLabel: `Remove ${ref.name || "snippet"}` });
+      rmBtn.append(icon("close"));
+      rmBtn.onclick = () => { exerciseRefs.splice(i, 1); syncKeptRefsUi(); };
+      cap.append(nameSpan, copyBtn, rmBtn);
+      fig.append(cap);
+      if (ref.src && ref.kind === "image") {
+        const img = Object.assign(document.createElement("img"), { src: ref.src, alt: ref.name || "Kept snippet" });
+        img.onclick = () => {
+          const viewer = $("imageViewer"), vImg = $("imageViewerImg");
+          if (viewer && vImg) { vImg.src = ref.src; vImg.alt = ref.name || ""; viewer.showModal(); }
+        };
+        fig.append(img);
+      }
+      return fig;
+    }));
+  };
+  keptRefsWin = { show: () => { win.el.classList.remove("in-tray"); win.el.style.zIndex = "44"; }, render };
+  render();
+}
+if ($("keptRefsOpen")) $("keptRefsOpen").onclick = () => { closeMenus(); openExerciseRefsWindow(); };
+if ($("keptRefsPill")) $("keptRefsPill").onclick = () => openExerciseRefsWindow();
 // The menu bar stays usable over the editors: if another note was opened (or this one closed)
 // meanwhile, what the editor returns is not put on it.
 function sameNote(note, startedEmpty = false) {
@@ -7236,7 +7762,7 @@ async function openFigureEditor(spec, { editing = false, mode = "author", refere
   if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
     try {
       const { openChartEditor } = await loading(import("./chart-editor.js"));
-      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) exerciseRefs.push(ref); }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
+      return keepModule(await openChartEditor(spec, { editing, mode, references: [...references, ...exerciseRefs], onReference: (ref) => { if (!exerciseRefs.includes(ref)) { exerciseRefs.push(ref); syncKeptRefsUi(); } }, notePages, recentNotes: recentReferenceNotes, markdown: (text) => call("markdownHtml", { text }) }));
     } catch (e) {
       status(`The chart editor could not open: ${e.message}`, true);
       return null;
@@ -7306,7 +7832,7 @@ async function placePrefab(p, spec, box = null, replace = null, id = undefined) 
   else {
     // A tap (no box dragged) places it from that point; nothing, in the middle of the view.
     // A UML diagram keeps its own size (its units are the page's), when it fits.
-    const natural = spec?.type === "uml" ? prefabSvg(spec)?.width || 440 : 440;
+    const natural = spec?.type === "uml" || spec?.type === "stickynote" ? prefabSvg(spec)?.width || (spec?.type === "stickynote" ? 256 : 440) : 440;
     const w = Math.min(natural, p.size[0] - 60, (p.size[1] - 60) / aspect), h = w * aspect;
     at = box ? [Math.max(20, Math.min(box[0], p.size[0] - w - 20)), Math.max(20, Math.min(box[1], p.size[1] - h - 20)), w, h] : compoundBox(p, "graph", null, [w, h]);
   }
@@ -7443,6 +7969,7 @@ async function pickWhole(args) {
   }
   if (!part) return item;
   const own = parts.filter((q) => q.id === part.id), frame = own.find((q) => q.spec);
+  if (!frame) return item;
   const members = (await Promise.all(own.map((q) => call("selection", { page: args.page, itemId: q.item }).catch(() => null)))).filter(Boolean);
   if (members.length < 2) return item;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -7695,6 +8222,12 @@ for (const type of ["copy", "cut"]) document.addEventListener(type, (event) => {
 });
 document.addEventListener("paste", (event) => {
   if (!itemKeys(event)) return;
+  // Middle-click (click wheel) on Linux fires a primary-selection paste event on mouseup;
+  // never turn an accidental wheel click into a text box on the page.
+  if (performance.now() - middleMouseAt < 400) {
+    event.preventDefault();
+    return;
+  }
   const text = event.clipboardData?.getData("text/plain") || "";
   const images = [...(event.clipboardData?.files || [])].filter((f) => /^image\//.test(f.type));
   // A copy made in NoteComplete: this tab's own, or (its picture carrying another copy) one
@@ -8563,11 +9096,12 @@ const study = studyController({
   showNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); },
   openNotes: async () => { const api = await notesApi(); if (!api.visible) notesButton().click(); api.scrollToIndex?.(api.text.length); },
 });
-// The stroke order editor for `target`, put on the page (or in the Markdown being edited).
+// The stroke order editor for `target`, put on the page (or in the Markdown being edited/viewed).
 async function openTracePrefab(target) {
+  const inTextDoc = textView.visible && !textView.diagram;
   const chosen = await figureEditor({ type: "hanzi", text: target || "你好", show: "steps", grid: "mi", outline: true }, { editing: false });
   if (!chosen) return;
-  if (textView.visible && textView.editing && textView.insertTraceSpec) {
+  if (inTextDoc && textView.insertTraceSpec) {
     await textView.insertTraceSpec(chosen);
     status(`${prefabName(chosen)} inserted into Markdown.`);
     return;
@@ -9035,14 +9569,19 @@ try {
   const savedUiZoom = Number(localStorage.getItem("notecomplete-ui-zoom"));
   if (Number.isFinite(savedUiZoom) && savedUiZoom >= 0.7 && savedUiZoom <= 1.6) webUiZoom = savedUiZoom;
 } catch { /* Optional. */ }
-if (!windows?.zoom && webUiZoom !== 1) document.documentElement.style.zoom = String(webUiZoom);
+function syncWebUiZoom(z) {
+  document.documentElement.style.zoom = z === 1 ? "" : String(z);
+  if (z === 1) document.documentElement.style.removeProperty("--ui-zoom");
+  else document.documentElement.style.setProperty("--ui-zoom", String(z));
+}
+if (!windows?.zoom && webUiZoom !== 1) syncWebUiZoom(webUiZoom);
 function applyUiSize(step) {
   if (windows?.zoom) {
     windows.zoom(step).then((z) => status(`Interface size ${Math.round(z * 100)}%`)).catch((e) => status(e.message, true));
     return;
   }
   webUiZoom = step === 0 ? 1 : Math.round(Math.min(1.6, Math.max(0.7, webUiZoom + step * 0.1)) * 100) / 100;
-  document.documentElement.style.zoom = webUiZoom === 1 ? "" : String(webUiZoom);
+  syncWebUiZoom(webUiZoom);
   try { localStorage.setItem("notecomplete-ui-zoom", String(webUiZoom)); } catch { /* Optional. */ }
   status(`Interface size ${Math.round(webUiZoom * 100)}%`);
 }
@@ -9479,7 +10018,9 @@ async function importStudyFile(file, kindHint = null) {
 }
 
 async function openImportedFile(file, meta = {}) {
-  if (!file || busy()) return;
+  if (!file) return;
+  if (await openMediaFile(file)) return;
+  if (busy()) return;
   try {
     const { classifyImport } = await import("./import-route.js");
     const kind = await classifyImport(file);

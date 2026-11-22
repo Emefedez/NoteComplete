@@ -78,8 +78,10 @@ fn goodnotes_ink_text_shapes_and_pictures() {
         ("goodnotes", "Lecture 3.goodnotes")
     );
     assert_eq!(origin.bytes, bytes);
-    // What was imported is the note itself, not edits on it.
-    assert_eq!(imported.editor.view(0).unwrap()["edit_count"], 0);
+    // What was imported is locked under the undo floor, while its shapes stay real editable shapes.
+    let v0 = imported.editor.view(0).unwrap();
+    assert_eq!(v0["can_undo"], false);
+    assert_eq!(v0["shapes"].as_array().unwrap().len(), 2);
 }
 
 #[test]
@@ -159,6 +161,7 @@ fn imported_notes_edit_save_and_reopen_like_any_note() {
                     }),
                     joined: false,
                     part: None,
+                    under: false,
                 },
             )
             .unwrap();
@@ -302,6 +305,40 @@ fn goodnotes_pictures_stay_under_the_ink() {
     let bytes = goodnotes_page(vec![stroke(100.), stroke(300.), photo()]);
     let editor = import("Photo.goodnotes", &bytes).unwrap().editor;
     assert_eq!(drawn(&editor, 0), "pss");
+}
+
+#[test]
+fn goodnotes_filled_shapes_stay_real_editable_shapes_without_flattening() {
+    use oblyx::doc::{Item, ShapeEl, ShapeKind};
+    let rect = Item::Shape(ShapeEl {
+        kind: ShapeKind::Rect,
+        x: 100.,
+        y: 120.,
+        w: 180.,
+        h: 90.,
+        points: vec![],
+        rotation: 0.,
+        fill: [0.2, 0.4, 0.8, 0.25],
+        stroke: [0.2, 0.4, 0.8, 1.0],
+        width: 2.,
+        dash: None,
+        radius: 0.,
+        uuid: None,
+        from_f9: false,
+    });
+    let bytes = goodnotes_page(vec![rect]);
+    let imported = import("Shapes.goodnotes", &bytes).unwrap();
+    assert!(imported.warnings.is_empty(), "{:?}", imported.warnings);
+    let view = imported.editor.view(0).unwrap();
+    let shapes = view["shapes"].as_array().unwrap();
+    assert_eq!(shapes.len(), 1, "shape must stay a real Shape object");
+    assert_eq!(shapes[0]["line"]["shape"]["kind"], "rectangle");
+    assert!(shapes[0]["line"]["shape"]["fill"].is_array());
+    // Must not have been flattened into highlighter bands (tool == 1).
+    assert!(!view["svg"]
+        .as_str()
+        .unwrap()
+        .contains("mix-blend-mode:multiply"));
 }
 
 #[test]

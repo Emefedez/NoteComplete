@@ -145,6 +145,7 @@ export function keepHeld(p, version, ink) {
 export function textBoxController({
   call,
   action,
+  patch = null,
   status,
   selection,
   swatches = [],
@@ -203,7 +204,7 @@ export function textBoxController({
   function syncZhSubOptions() {
     const mode = currentZhMode();
     const isZh = mode !== "off";
-    zhToggle.textContent = mode === "pinyin" ? "ā" : "中";
+    zhToggle.textContent = "中";
     zhToggle.setAttribute("aria-pressed", String(isZh));
     zhToggle.dataset.zhMode = mode;
     // 拼 stays for a box with Chinese in it (to read it), 笔 only while typing Chinese.
@@ -212,8 +213,7 @@ export function textBoxController({
   }
   zhToggle.addEventListener("click", () => {
     if (!textEditor?.area) {
-      const cur = currentZhMode();
-      const next = cur === "off" ? "hanzi" : cur === "hanzi" ? "pinyin" : "off";
+      const next = currentZhMode() === "hanzi" ? "off" : "hanzi";
       setFieldMode(zhKey(), next);
       setNoteMode(next);
     }
@@ -515,18 +515,24 @@ export function textBoxController({
     const layer = currentDoc.layers.find((l) => l.id === activeLayer);
     // A click on a typed text box edits it; elsewhere it starts a new one.
     let existing = known;
+    let pickedItem = null;
     if (!existing) try {
       const item = await call("pick", { page: p.index, x, y, tolerance: 2 });
       if (item?.kind === "text") {
         existing = (p.view.texts || []).find((t) => t.id === item.id);
         if (!existing) return status("Text from Noteful cannot be edited here yet; move it with Select.", true);
-        // Where it is now: moved since it was typed, its bounds are where it was typed.
-        if (item.adjustment && item.bounds) try {
-          const [mx, my] = mapPoint(itemMatrix(item), [item.bounds[0], item.bounds[1]]);
-          existing = { ...existing, bounds: [mx, my, existing.bounds[2], existing.bounds[3]] };
-        } catch { /* As typed. */ }
+        pickedItem = item;
       }
     } catch { /* Nothing under the pointer. */ }
+    if (existing && !pickedItem) try {
+      pickedItem = await call("selection", { page: p.index, itemId: existing.id });
+    } catch { /* As typed. */ }
+    const baseAdj = pickedItem?.adjustment ? structuredClone(pickedItem.adjustment) : { translation: [0, 0], scale: [1, 1], rotation: 0 };
+    if (existing && pickedItem?.adjustment && pickedItem?.bounds) try {
+      // Where it is now: moved/scaled/rotated since it was typed, its bounds are where it was typed.
+      const [mx, my] = mapPoint(itemMatrix(pickedItem), [pickedItem.bounds[0], pickedItem.bounds[1]]);
+      existing = { ...existing, bounds: [mx, my, existing.bounds[2], existing.bounds[3]] };
+    } catch { /* As typed. */ }
     if (!existing && (!layer?.visible || layer.locked)) return status("Select a visible, unlocked layer.", true);
     const style = existing ? boxStyleOf(existing) : styleOf(null);
     let [bx, by] = existing ? existing.bounds : [x - 5, y - 8 - style.size * 0.8];
@@ -550,20 +556,37 @@ export function textBoxController({
         color: `rgba(${style.rgba.slice(0, 3).map((c) => Math.round(c * 255)).join(",")},${style.rgba[3]})`,
       });
     };
+    const placeRuby = () => {
+      if (rubyPreview.hidden) return;
+      const s = p.el.clientWidth / p.size[0];
+      Object.assign(rubyPreview.style, {
+        left: area.style.left,
+        top: `calc(${area.style.top} + ${area.style.height} + 6px)`,
+        fontSize: `${Math.max(12, style.size * s)}px`,
+        color: area.style.color,
+      });
+    };
+    const placeMath = () => {
+      if (field) placeField();
+      else if (!mathPreview.hidden) {
+        Object.assign(mathPreview.style, { left: area.style.left, top: `calc(${area.style.top} + ${area.style.height} + 6px)` });
+      }
+    };
+    const reposition = () => { fit(); placeDiscard(); placeRuby(); placeMath(); placeTextFormat(); };
     // The ⋮⋮ grip at the top-left corner lets the box be dragged into place while typing.
     const drag = Object.assign(doc.createElement("button"), { type: "button", className: "text-drag", textContent: "⋮⋮", title: "Drag to move text box" });
     drag.setAttribute("aria-label", "Move text box");
     drag.addEventListener("pointerdown", (down) => {
       down.preventDefault();
       down.stopPropagation();
-      const s = p.el.clientWidth / p.size[0] || 1;
+      const scaleX = p.el.getBoundingClientRect().width / p.size[0] || 1;
       const startX = down.clientX, startY = down.clientY, startBx = bx, startBy = by;
       const move = (ev) => {
-        bx = Math.max(0, Math.min(p.size[0] - 24, startBx + (ev.clientX - startX) / s));
-        by = Math.max(0, Math.min(p.size[1] - 16, startBy + (ev.clientY - startY) / s));
+        bx = Math.max(0, Math.min(p.size[0] - 24, startBx + (ev.clientX - startX) / scaleX));
+        by = Math.max(0, Math.min(p.size[1] - 16, startBy + (ev.clientY - startY) / scaleX));
         if (textEditor?.area === area) { textEditor.bx = bx; textEditor.by = by; }
         if (placing) placing.bounds = [bx, by, 0, 0];
-        refit();
+        reposition();
       };
       const done = () => {
         globalThis.removeEventListener("pointermove", move);
@@ -574,6 +597,43 @@ export function textBoxController({
       globalThis.addEventListener("pointermove", move);
       globalThis.addEventListener("pointerup", done);
       globalThis.addEventListener("pointercancel", done);
+    });
+    // Also allow moving the box without switching to Select if the user holds left click in the
+    // box and drags outside its bounds without selecting any text.
+    area.addEventListener("pointerdown", (down) => {
+      if (down.button !== 0 || down.pointerType !== "mouse") return;
+      const startX = down.clientX, startY = down.clientY, startBx = bx, startBy = by;
+      const scaleX = p.el.getBoundingClientRect().width / p.size[0] || 1;
+      const initRect = area.getBoundingClientRect();
+      let dragging = false;
+      const move = (ev) => {
+        if (!dragging) {
+          if (area.selectionStart !== area.selectionEnd) return;
+          const outside = ev.clientX < initRect.left - 2 || ev.clientX > initRect.right + 2 || ev.clientY < initRect.top - 2 || ev.clientY > initRect.bottom + 2;
+          if (!outside || Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+          dragging = true;
+          area.style.cursor = "grabbing";
+        }
+        ev.preventDefault();
+        bx = Math.max(0, Math.min(p.size[0] - 24, startBx + (ev.clientX - startX) / scaleX));
+        by = Math.max(0, Math.min(p.size[1] - 16, startBy + (ev.clientY - startY) / scaleX));
+        if (textEditor?.area === area) { textEditor.bx = bx; textEditor.by = by; }
+        if (placing) placing.bounds = [bx, by, 0, 0];
+        reposition();
+      };
+      const done = () => {
+        globalThis.removeEventListener("pointermove", move, true);
+        globalThis.removeEventListener("pointerup", done, true);
+        globalThis.removeEventListener("pointercancel", done, true);
+        if (dragging) {
+          area.style.cursor = "";
+          textFormatPressed = Date.now();
+          area.focus({ preventScroll: true });
+        }
+      };
+      globalThis.addEventListener("pointermove", move, true);
+      globalThis.addEventListener("pointerup", done, true);
+      globalThis.addEventListener("pointercancel", done, true);
     });
     // The × at the box's top-right corner discards the typing.
     const discard = Object.assign(doc.createElement("button"), { type: "button", className: "text-discard", textContent: "×", title: "Discard (Shift + Esc)" });
@@ -587,21 +647,19 @@ export function textBoxController({
     // Live Pinyin-on-top preview under plain-text boxes whenever Pinyin over characters is on.
     const rubyPreview = Object.assign(doc.createElement("div"), { className: "text-ruby-preview", hidden: true });
     rubyPreview.setAttribute("aria-hidden", "true");
+    let lastRubyText = "";
     const showRuby = () => {
       const value = area.value;
       const show = !style.math && rubyOn() && HAN_SCRIPT.test(value);
       rubyPreview.hidden = !show;
-      if (!show) { rubyPreview.textContent = ""; return; }
-      const s = p.el.clientWidth / p.size[0];
+      if (!show) { rubyPreview.textContent = ""; lastRubyText = ""; return; }
       rubyPreview.classList.toggle("light-ink", isLightInk(style.rgba));
-      Object.assign(rubyPreview.style, {
-        left: area.style.left,
-        top: `calc(${area.style.top} + ${area.style.height} + 6px)`,
-        fontSize: `${Math.max(12, style.size * s)}px`,
-        color: area.style.color,
-      });
-      rubyPreview.textContent = value;
-      rubyElement(rubyPreview).catch(() => {});
+      placeRuby();
+      if (value !== lastRubyText) {
+        lastRubyText = value;
+        rubyPreview.textContent = value;
+        rubyElement(rubyPreview).catch(() => {});
+      }
     };
     const onRubyChange = () => { if (textEditor?.area === area) { showRuby(); placeTextFormat(); } };
     globalThis.addEventListener?.("zh-ruby-refresh", onRubyChange);
@@ -677,7 +735,7 @@ export function textBoxController({
     hideText(p, existing?.id);
     p.el.append(area, drag, discard, rubyPreview, mathPreview);
     selection.clear();
-    textEditor = { p, area, drag, discard, rubyPreview, mathPreview, existing, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, origBx, origBy, layer: activeLayer, fit: refit, after, cleanup: () => globalThis.removeEventListener?.("zh-ruby-refresh", onRubyChange) };
+    textEditor = { p, area, drag, discard, rubyPreview, mathPreview, existing, baseAdj, style, initial: { ...style }, spans: boxSpansOf(existing), initialText: area.value, bx, by, origBx, origBy, layer: activeLayer, fit: refit, after, cleanup: () => globalThis.removeEventListener?.("zh-ruby-refresh", onRubyChange) };
     showTextFormat(p, [bx, by, 0, 0], style, () => { refit(); area.focus(); }, area);
     // Chinese input (its keys come first, in the capture phase: Esc with pinyin typed only clears it).
     textEditor.ime = attachIme(area, { kind: "pagebox", getMode: () => noteMode(fieldMode(zhKey())), setMode: (m) => { setFieldMode(zhKey(), m); setNoteMode(m); syncZhSubOptions(); placeTextFormat(); } });
@@ -780,11 +838,25 @@ export function textBoxController({
     const hold = holdText();
     if (t.existing && !value.trim()) return action("remove", { page: t.p.index, itemId: t.existing.id }, hold);
     if (t.existing) {
-      if (same && moved) return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: { translation: [dx, dy], scale: [1, 1], rotation: 0 } }, hold);
+      const adj = {
+        ...(t.baseAdj || { translation: [0, 0], scale: [1, 1], rotation: 0 }),
+        translation: [(t.baseAdj?.translation?.[0] || 0) + dx, (t.baseAdj?.translation?.[1] || 0) + dy],
+      };
+      if (same && moved) {
+        if (patch) {
+          try { await patch({ page: t.p.index, id: t.existing.id }, adj); } finally { letGo(hold); }
+          return;
+        }
+        return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: adj }, hold);
+      }
       const [w, h] = await boxSize(value || " ", t.style);
       if (!moved) return action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h }, hold);
       await action("editText", { page: t.p.index, itemId: t.existing.id, text, width: w, height: h });
-      return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: { translation: [dx, dy], scale: [1, 1], rotation: 0, joined: true } }, hold);
+      if (patch) {
+        try { await patch({ page: t.p.index, id: t.existing.id }, { ...adj, joined: true }); } finally { letGo(hold); }
+        return;
+      }
+      return action("adjust", { page: t.p.index, itemId: t.existing.id, adjustment: { ...adj, joined: true } }, hold);
     }
     const [w, h] = await boxSize(value || " ", t.style);
     await action("image", { page: t.p.index, image: { base64: "", mime: "", bounds: [t.bx, t.by, w, h], layer: t.layer, text } }, hold);
@@ -832,6 +904,25 @@ export function textBoxController({
     doc.querySelector('#toolbar [data-tool="select"]')?.click();
     await selection.selectId(p.index, `image:${getDoc().edit_count - 1}`);
     status("Pasted as a text box: drag it into place, double-click to edit.");
+  }
+
+  // Math Mode formula onto a page: a math-enabled text box near the top of what is in view.
+  async function placeMath(p, tex) {
+    const currentDoc = getDoc(), activeLayer = getActiveLayer();
+    const layer = currentDoc?.layers.find((l) => l.id === activeLayer);
+    const cleaned = String(tex || "").trim();
+    if (!currentDoc || !p?.view || !cleaned || isEditing() || isBusy()) return false;
+    if (!layer?.visible || layer.locked) return status("Select a visible, unlocked layer first.", true), false;
+    const style = { ...textDefaults, math: true };
+    const [w, h] = await boxSize(cleaned, style);
+    const rect = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect(), scale = rect.width / p.size[0] || 1;
+    const y = Math.min(Math.max(20, (view.top - rect.top) / scale + 60), Math.max(20, p.size[1] - h - 20));
+    const x = Math.max(20, Math.min((p.size[0] - w) / 2, p.size[0] - w - 20));
+    await action("image", { page: p.index, image: { base64: "", mime: "", bounds: [x, y, w, h], layer: activeLayer, text: textPayload(cleaned, style) } });
+    doc.querySelector('#toolbar [data-tool="select"]')?.click();
+    await selection.selectId(p.index, `image:${getDoc().edit_count - 1}`);
+    status("Formula inserted as a Math Text Box: drag it into place, double-click to edit.");
+    return true;
   }
 
   function isTypingOn(p) {
@@ -904,6 +995,7 @@ export function textBoxController({
     restoreOnRender,
     answerToTextBox,
     placeText,
+    placeMath,
     mathKeys,
   };
 }

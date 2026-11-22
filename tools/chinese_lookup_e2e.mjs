@@ -202,10 +202,11 @@ try {
   await noteWithText(q);
   await q.evaluate(async () => { const m = await import('./chinese/zh-menu.js'); await m.lookUp('好'); });
   const sheet = q.locator('.zh-lookup.zh-sheet');
-  await sheet.locator('.hz-stage svg').waitFor({ timeout: 10000 });
-  const r = await sheet.boundingBox();
-  assert.ok(Math.abs(r.y + r.height - 844) < 2 && r.width >= 388, `a bottom sheet: ${JSON.stringify(r)}`);
+  await sheet.locator('.hz-cell > svg').first().waitFor({ timeout: 10000 });
   await sleep(600);
+  // Against the layout viewport (a page a few pixels wider than the phone scales it).
+  const r = await sheet.boundingBox(), [vw, vh] = await q.evaluate(() => [innerWidth, innerHeight]);
+  assert.ok(Math.abs(r.y + r.height - vh) < 2 && r.width >= vw - 2, `a bottom sheet: ${JSON.stringify(r)} in ${vw} × ${vh}`);
   if (DIR) await q.screenshot({ path: `${DIR}/zh-phone.png` });
   console.log('· phone: bottom sheet');
   assert.deepEqual(errors, [], errors.join('\n'));

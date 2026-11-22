@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
-import { packManager, extractLevels, forgetDownload, PACKS, HSK_URL } from './packs.js';
+import { packManager, extractLevels, parseCustomDictionary, forgetDownload, PACKS, HSK_URL } from './packs.js';
 import { memoryStore } from './user-dict.js';
 import { writeContainer, readContainer, encodeStrings } from './pack.js';
 
@@ -79,4 +79,27 @@ test('pack container round trip', () => {
   assert.throws(() => readContainer(new Uint8Array(16)), /Not a Chinese data pack/);
   const shifted = new Uint8Array(out.length + 1); shifted.set(out, 1);
   assert.equal(readContainer(shifted.subarray(1)).strings(2, 3).get(0), '你好');
+});
+
+test('local dictionary import parses CC-CEDICT, JSON, and TSV and persists in packManager', async () => {
+  const cedict = '# comment\n中文 中文 [Zhong1 wen2] /Chinese language/\n電腦 电脑 [dian4 nao3] /computer/\n';
+  assert.deepEqual(parseCustomDictionary(cedict), [
+    { simp: '中文', trad: '中文', n: 'zhong1 wen2', gloss: 'Chinese language', level: 0 },
+    { simp: '电脑', trad: '電腦', n: 'dian4 nao3', gloss: 'computer', level: 0 },
+  ]);
+  const tsv = '学习\txué xí\tto study\t學習\n';
+  assert.deepEqual(parseCustomDictionary(tsv)[0], { simp: '学习', trad: '學習', n: 'xue2 xi2', gloss: 'to study', level: 0 });
+  const store = memoryStore();
+  const pm = packManager({ store, core: async () => ({ words: 100, bytes: 1000 }) });
+  const row = await pm.installLocalPack('MyClass.u8', cedict);
+  assert.equal(row.name, 'MyClass');
+  assert.equal(row.words.length, 2);
+  const all = await pm.packs();
+  const custom = all.find(p => p.id === row.id);
+  assert.equal(custom.custom, true);
+  assert.equal(custom.installed, true);
+  assert.equal(custom.words, 2);
+  assert.equal((await pm.installedWords()).length, 2);
+  await pm.removePack(row.id);
+  assert.equal((await pm.installedWords()).length, 0);
 });

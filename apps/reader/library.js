@@ -1,4 +1,5 @@
 // Downloaded and recently opened notes. Metadata and covers live in a small
+import { isVideoName, isRDataName } from './text-types.js';
 // key-value store (IndexedDB in the app); note bytes live in a folder:
 //   folder     the desktop app's chosen directory (Electron bridge)
 //   directory  a directory this browser was granted (File System Access)
@@ -438,6 +439,7 @@ export class Library {
   async open(entry) {
     if (entry.source === 'web' || entry.source === 'archive') return null;
     if (entry.source === 'local') {
+      if (isVideoName(entry.name) || isRDataName(entry.name)) return new File([], entry.name);
       const bytes = await this.bridge?.readRecent(entry.path);
       return bytes ? new File([bytes], entry.name) : null;
     }

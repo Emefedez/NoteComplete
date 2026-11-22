@@ -1,5 +1,5 @@
 import { openPdf } from "./pdf-background.js";
-import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName } from "./text-types.js";
+import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName, isImageName } from "./text-types.js";
 const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
 // A v13 .nfedit: a tar whose first member, manifest.json, names the project format. A file may
@@ -32,6 +32,12 @@ export function fileKind(name, bytes) {
     new TextDecoder().decode(bytes.subarray(8, 12)) === "WEBP"
   )
     return "image";
+  // GIF, BMP, ICO and AVIF raster images (decoded to PNG via canvas/createImageBitmap).
+  const magic6 = new TextDecoder("latin1").decode(bytes.subarray(0, 6));
+  if (magic6 === "GIF87a" || magic6 === "GIF89a") return "image";
+  if (bytes[0] === 0x42 && bytes[1] === 0x4d && isImageName(name)) return "image";
+  if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00 && /\.ico$/i.test(name)) return "image";
+  if (bytes.length >= 12 && new TextDecoder("latin1").decode(bytes.subarray(4, 12)).startsWith("ftypavi")) return "image";
   // Goodnotes and Notability notebooks (zip archives), imported as Noteful notes.
   if (/\.(goodnotes|ntb)$/i.test(name)) return "notebook";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
@@ -60,7 +66,7 @@ export function fileKind(name, bytes) {
   // A zip without a name that says what it is: maybe a notebook (the engine checks).
   if (!hasExtension(name) && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4) return "notebook";
   throw Error(
-    "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Word, OpenDocument or Excel file, PNG, JPEG or WebP image.",
+    "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Office document (Word, OpenDocument, Excel, PowerPoint, RTF), EPUB, Jupyter notebook, image, audio or video file.",
   );
 }
 

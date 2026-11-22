@@ -17,10 +17,10 @@ test('launch arguments give the supported files, skipping the executable, app fo
 });
 
 test('only supported extensions are opened', () => {
-  for (const ok of ['/a/b.noteful', '/a/b.nfedit', '/a/b.notecomp', '/a/b.notepart', '/a/b.notecomplete', '/a/b.pdf', '/a/b.JPG', '/a/b.webp',
-    '/a/b.md', '/a/b.txt', '/a/b.html', '/a/b.docx', '/a/b.odt', '/a/b.xlsx', '/a/b.ods', '/a/b.csv', '/a/b.tsv'])
+  for (const ok of ['/a/b.noteful', '/a/b.nfedit', '/a/b.notecomp', '/a/b.notepart', '/a/b.notecomplete', '/a/b.pdf', '/a/b.JPG', '/a/b.webp', '/a/b.gif', '/a/b.avif',
+    '/a/b.md', '/a/b.txt', '/a/b.html', '/a/b.docx', '/a/b.doc', '/a/b.rtf', '/a/b.odt', '/a/b.xlsx', '/a/b.xls', '/a/b.ods', '/a/b.pptx', '/a/b.ppt', '/a/b.odp', '/a/b.epub', '/a/b.ipynb', '/a/b.csv', '/a/b.tsv', '/a/b.mp3', '/a/b.mp4'])
     assert.equal(openablePath(ok), true, ok);
-  for (const bad of ['/a/b.exe', '/a/b.pdf.exe', '/a/noext', '/a/b.mp3', 'b.pdf', '', null, 42, '/a/b.pdf/'])
+  for (const bad of ['/a/b.exe', '/a/b.pdf.exe', '/a/noext', '/a/b.dll', 'b.pdf', '', null, 42, '/a/b.pdf/'])
     assert.equal(openablePath(bad), false, String(bad));
 });
 

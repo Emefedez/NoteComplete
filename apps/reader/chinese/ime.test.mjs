@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert';
 import { imeReduce, imeInitial, nextMode } from './ime.js';
 
 // Feeds keys; candidates for an input come from `dict` as soon as they are asked for.
-function run(mode, keys, { dict = {}, opts = {}, lineBefore = '' } = {}) {
+function run(mode, keys, { dict = {}, opts = {} } = {}) {
   let s = imeInitial(mode, opts);
   const out = { text: '', handled: [], passed: [], learned: [] };
   const step = (k) => {
@@ -21,7 +21,7 @@ function run(mode, keys, { dict = {}, opts = {}, lineBefore = '' } = {}) {
     if (r.wait) { const items = dict[s.buffer] || []; step({ type: 'cands', input: s.buffer, items }); step(k); }
     return r;
   };
-  for (const k of keys) step(typeof k === 'string' ? { key: k, lineBefore } : { lineBefore, ...k });
+  for (const k of keys) step(typeof k === 'string' ? { key: k } : k);
   return { ...out, state: s };
 }
 const keys = (str) => [...str];
@@ -35,25 +35,6 @@ const DICT = {
   hao: [it('好', 'hǎo', 3), it('号', 'hào', 3)],
   ma3: [it('马', 'mǎ', 3), it('码', 'mǎ', 3)],
 };
-
-test('pinyin mode: tone digits give marks as you type', () => {
-  assert.equal(run('pinyin', keys('ni3hao3')).text, 'nǐhǎo');
-  assert.equal(run('pinyin', keys('Zhong1guo2')).text, 'Zhōngguó');
-  assert.equal(run('pinyin', keys('lv4')).text, 'lǜ');
-  assert.equal(run('pinyin', keys('ni3 hao3')).text, 'nǐ hǎo');
-  // No tone: the letters as typed, and the space stays.
-  assert.equal(run('pinyin', keys('nihao ')).text, 'nihao ');
-  // Enter writes what is in the buffer without a new line.
-  const r = run('pinyin', [...keys('hao'), 'Enter']);
-  assert.equal(r.text, 'hao');
-  assert.ok(r.handled.includes('Enter'));
-});
-
-test('pinyin mode works with no dictionary at all', () => {
-  const r = run('pinyin', keys('ma1ma'));
-  assert.equal(r.state.buffer, 'ma');
-  assert.equal(r.text, 'mā');
-});
 
 test('hanzi mode: Space chooses the first candidate; numbers choose', () => {
   assert.equal(run('hanzi', keys('nihao ' ), { dict: DICT }).text, '你好');
@@ -103,17 +84,20 @@ test('Esc clears the buffer and never reaches the text box', () => {
   assert.ok(run('hanzi', ['Escape']).passed.includes('Escape'));
 });
 
-test('Enter: Auto follows the text before the caret; Shift+Enter writes the letters', () => {
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT }).text, 'nihao');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, lineBefore: 'Wǒ shì ' }).text, 'nǐhǎo');
-  assert.equal(run('hanzi', [...keys('nihao'), { key: 'Enter', shift: true }], { dict: DICT, lineBefore: 'Wǒ shì ' }).text, 'nihao');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'marks' } }).text, 'nǐhǎo');
-  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'letters' }, lineBefore: 'nǐ' }).text, 'nihao');
+test('Enter picks the highlighted Chinese character by default; Shift+Enter and enter=letters write raw letters', () => {
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT }).text, '你好');
+  assert.equal(run('hanzi', [...keys('ni'), 'ArrowRight', 'Enter'], { dict: DICT }).text, '呢');
+  assert.equal(run('hanzi', [...keys('nihao'), { key: 'Enter', shift: true }], { dict: DICT }).text, 'nihao');
+  assert.equal(run('hanzi', [...keys('nihao'), 'Enter'], { dict: DICT, opts: { enter: 'letters' } }).text, 'nihao');
 });
 
 test('full-width punctuation in Hanzi mode', () => {
-  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT }).text, '你好？');
-  assert.equal(run('hanzi', [...keys('nihao '), ',', '\\'], { dict: DICT }).text, '你好，、');
+  // Default: normal ASCII punctuation (e.g. . stays . instead of 。).
+  assert.equal(run('hanzi', keys('nihao.'), { dict: DICT }).text, '你好.');
+  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT }).text, '你好?');
+  // Opt-in full-width punctuation converts ? , \ to Chinese marks.
+  assert.equal(run('hanzi', keys('nihao?'), { dict: DICT, opts: { fullWidth: true } }).text, '你好？');
+  assert.equal(run('hanzi', [...keys('nihao '), ',', '\\'], { dict: DICT, opts: { fullWidth: true } }).text, '你好，、');
   assert.equal(run('hanzi', ['!'], { opts: { fullWidth: false } }).text, '!');
 });
 
@@ -144,14 +128,14 @@ test('shortcuts pass; composition and Latin stand down', () => {
   assert.equal(imeReduce(cap.state, { key: 'i' }).state.buffer, 'Ni');
 });
 
-test('the mode cycles Off → Hanzi → Pinyin → Off and writes what was typed', () => {
+test('the mode toggles Off ↔ Hanzi and writes what was typed', () => {
   assert.equal(nextMode('off'), 'hanzi');
-  assert.equal(nextMode('hanzi'), 'pinyin');
-  assert.equal(nextMode('pinyin'), 'off');
+  assert.equal(nextMode('hanzi'), 'off');
   let s = imeReduce(imeInitial('hanzi'), { key: 'n' }).state;
-  const r = imeReduce(s, { type: 'mode', mode: 'pinyin' });
+  const r = imeReduce(s, { type: 'mode', mode: 'off' });
   assert.equal(r.commit, 'n');
   assert.equal(r.state.buffer, '');
+  assert.equal(r.state.mode, 'off');
 });
 
 // Space held in Hanzi mode: it chooses on release; Space+digit picks candidate n.
@@ -206,10 +190,76 @@ test('a repeated Space keydown does not commit twice', () => {
   const r = chord([...seq('nihao'), 'v', { type: 'spaceDown', repeat: true }, 'v', '^', '^'], { dict: MANY });
   assert.equal(r.text, '你好');
   assert.equal(r.results.filter((x) => x.commit).length, 1);
-  // With nothing typed, Space is an ordinary space.
-  assert.equal(imeReduce(imeInitial('hanzi'), { type: 'spaceDown' }).handled, undefined);
-  // Pinyin mode keeps Space as it was.
-  assert.equal(imeReduce(imeInitial('pinyin'), { type: 'spaceDown' }).handled, undefined);
+  // With nothing typed in Hanzi mode, holding Space absorbs repeats and inserts one space only on release.
+  let s = imeInitial('hanzi');
+  const d1 = imeReduce(s, { type: 'spaceDown' });
+  assert.equal(d1.handled, true);
+  assert.equal(d1.commit, undefined);
+  const dRep = imeReduce(d1.state, { type: 'spaceDown', repeat: true });
+  assert.equal(dRep.handled, true);
+  assert.equal(dRep.commit, undefined);
+  const up = imeReduce(dRep.state, { type: 'spaceUp' });
+  assert.equal(up.handled, true);
+  assert.equal(up.commit, ' ');
+  // Holding Space with empty buffer + pressing a digit or letter inserts no space and fills buffer.
+  const hold = imeReduce(imeInitial('hanzi'), { type: 'spaceDown' }).state;
+  const digitHeld = imeReduce(hold, { key: '2' });
+  assert.equal(digitHeld.handled, true);
+  assert.equal(imeReduce(digitHeld.state, { type: 'spaceUp' }).commit, undefined);
+  const rolled = imeReduce(hold, { key: 'n' });
+  assert.equal(rolled.state.buffer, 'n');
+  assert.equal(imeReduce(rolled.state, { type: 'spaceUp' }).commit, undefined);
+});
+
+test('arrow keys navigate candidates with coherent wrap and vertical page stepping', () => {
+  const many = Array.from({ length: 12 }, (_, i) => ({ text: String.fromCharCode(0x4e00 + i), pinyin: 'a', consumed: 1, level: 1, gloss: '' }));
+  let s = imeInitial('hanzi', { perPage: 5 });
+  s = imeReduce(s, { key: 'a' }).state;
+  s = imeReduce(s, { type: 'cands', input: 'a', items: many }).state;
+  // ArrowLeft from 0 wraps cleanly to last candidate (11, page 2).
+  s = imeReduce(s, { key: 'ArrowLeft' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  // ArrowRight from last wraps back to 0 (page 0).
+  s = imeReduce(s, { key: 'ArrowRight' }).state;
+  assert.equal(s.sel, 0);
+  assert.equal(s.page, 0);
+  // ArrowRight once -> col 1 (sel=1), ArrowDown steps vertically to page 1 col 1 (sel=6), then page 2 col 1 (sel=11), then wraps to page 0 col 1 (sel=1).
+  s = imeReduce(s, { key: 'ArrowRight' }).state;
+  assert.equal(s.sel, 1);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 6);
+  assert.equal(s.page, 1);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  s = imeReduce(s, { key: 'ArrowDown' }).state;
+  assert.equal(s.sel, 1);
+  assert.equal(s.page, 0);
+  // ArrowUp wraps back to last page same column (sel=11).
+  s = imeReduce(s, { key: 'ArrowUp' }).state;
+  assert.equal(s.sel, 11);
+  assert.equal(s.page, 2);
+  // Shift+1..9 (pickSlot) picks candidate on current page when composing, and is ignored when empty.
+  const picked = imeReduce(s, { type: 'pickSlot', d: 2 });
+  assert.equal(picked.handled, true);
+  assert.equal(picked.commit, String.fromCharCode(0x4e00 + 11));
+  assert.equal(imeReduce(imeInitial('hanzi'), { type: 'pickSlot', d: 1 }).handled, undefined);
+});
+
+test('mid-syllable tone digits and accented vowels wait cleanly without spacing', () => {
+  // Dead key passes through so Spanish/European keyboards can compose accented vowels like é.
+  const mid = imeReduce(imeInitial('hanzi'), { key: 'z' }).state;
+  assert.equal(imeReduce(mid, { key: 'Dead' }).handled, undefined);
+  // Typing zho1ngwén keeps all characters in the buffer without prematurely committing.
+  let s = imeInitial('hanzi');
+  for (const ch of 'zho1ngwén') {
+    const out = imeReduce(s, { key: ch });
+    assert.equal(out.handled, true);
+    assert.equal(out.commit, undefined);
+    s = out.state;
+  }
+  assert.equal(s.buffer, 'zho1ngwén');
 });
 
 test('a letter rolled over a held Space takes Space\'s choice first', () => {
@@ -228,8 +278,8 @@ test('partial pick + Backspace emptying buffer never stalls Space or punctuation
   assert.equal(spaceOut.wait, undefined);
   assert.equal(spaceOut.commit, '你');
   // Comma and period must commit immediately instead of paging candidates.
-  assert.equal(run('hanzi', [...seq('ni'), ','], { dict: DICT }).text, '你，');
-  assert.equal(run('hanzi', [...seq('ni'), '.'], { dict: DICT }).text, '你。');
+  assert.equal(run('hanzi', [...seq('ni'), ','], { dict: DICT }).text, '你,');
+  assert.equal(run('hanzi', [...seq('ni'), '.'], { dict: DICT }).text, '你.');
   // spaceUp while waiting clears spaceHeld so a follow-up letter is not treated as a chord.
   let s = imeInitial('hanzi');
   for (const k of 'nihao') s = imeReduce(s, { key: k }).state;

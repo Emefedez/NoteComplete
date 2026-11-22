@@ -117,8 +117,8 @@ def main():
     for name in ['darkreader.js','LICENSE']: shutil.copy2(darkreader/name,dr/name)
     # Word and spreadsheet readers (office.js), fetched only when such a file is opened
     # (sw.js leaves them out of the offline install and keeps them once used).
-    # The mini SheetJS build reads XLSX and ODS, which is all the reader opens with it.
-    for folder,package,name in (('mammoth','mammoth','mammoth.browser.min.js'),('sheetjs','xlsx','dist/xlsx.mini.min.js')):
+    # The core SheetJS build reads XLSX, XLSM, XLSB, legacy XLS (BIFF8), ODS and FODS.
+    for folder,package,name in (('mammoth','mammoth','mammoth.browser.min.js'),('sheetjs','xlsx','dist/xlsx.core.min.js')):
         out=ROOT/'apps/reader/vendor'/folder
         if out.exists(): shutil.rmtree(out)
         out.mkdir(parents=True,exist_ok=True)
@@ -169,8 +169,9 @@ def write_manifest():
     names=sorted(p.name for p in reader.iterdir() if p.is_file() and p.suffix in ('.html','.js','.css','.svg','.png','.webmanifest'))
     names+=sorted(p.relative_to(reader).as_posix() for folder in ('pkg','vendor') for p in (reader/folder).rglob('*') if p.is_file() and p.suffix not in ('.map','.ts'))
     # The prefab modules (docs/PREFAB-MODULES.md): manifests, code, help and AI notes; not their tests.
-    # Chinese mode's modules (docs/CHINESE-INPUT.md); not their tests.
+    # Chinese mode's modules (docs/CHINESE-INPUT.md) and Math mode's modules; not their tests.
     names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'chinese').glob('*.js'))
+    names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'math').glob('*.js'))
     names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'prefabs').rglob('*') if p.is_file() and '/test/' not in p.as_posix() and not p.name.endswith('.test.mjs'))
     files={name:hashlib.sha256((reader/name).read_bytes()).hexdigest()[:16] for name in names}
     shell=[name for name in names if not name.startswith(LAZY) and 'LICENSE' not in name and name!='sw.js']

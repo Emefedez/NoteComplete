@@ -115,7 +115,10 @@
           <button id="penSetupOpen" data-icon="draw" title="Teach NoteComplete your pen's side button, or choose another way to open the quick menu">Pen button…</button>
           <button id="penTestOpen" data-icon="draw">Test pen and stylus…</button>
           <button id="hoverToolsOpen" data-icon="select" data-palette="Pen hover cursor: which tools show it…" title="Choose which tools show a pen hover cursor on the page (Pan, Select, Pen, Eraser, …)">Hover cursor tools…</button>
+          <button id="viewRubyToggle" data-icon="text" role="menuitemcheckbox" aria-checked="false" data-palette="Pinyin over Chinese characters (拼)" title="Show or hide Pinyin over Chinese characters across notes and Markdown">Pinyin over characters (拼)</button>
           <button id="zhSettingsOpen" data-icon="text" data-palette="Chinese input settings" title="Typing Chinese with pinyin: modes, keys, punctuation, and the HSK dictionaries to download or delete">Chinese input…</button>
+          <button id="viewMathMode" data-icon="math" role="menuitemcheckbox" aria-checked="false" data-palette="Math Mode (Ctrl+Shift+M)" title="Show the Math Mode formula bar (CAS, plotting, math text boxes and R statistics figures)">Math Mode<kbd>Ctrl Shift M</kbd></button>
+          <button id="mathSettingsOpen" data-icon="math" data-palette="Math Mode & R Bridge settings" title="Configure Math Mode angle unit, precision, auto-evaluation, and R Commander Studio connection">Math Mode &amp; R Bridge…</button>
           <hr />
           <button data-proxy="zoomIn" data-icon="plus">Zoom in<kbd>Ctrl +</kbd></button>
           <button data-proxy="zoomOut" data-icon="minus">Zoom out<kbd>Ctrl −</kbd></button>
@@ -131,7 +134,7 @@
           <button id="tapeCover" data-icon="tape" disabled title="Shift U lifts all tape, and again covers it">Cover with all tape</button>
           <button id="tapeNote" data-icon="tape" disabled>Tape as saved</button>
           <hr />
-          <button data-proxy="pagesDark" data-icon="invertPage">Dark pages<kbd>D</kbd></button>
+          <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
         </div>
       </details>
@@ -169,6 +172,7 @@
           <button id="studyRetake" data-icon="restart" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
           <hr />
           <button id="studyOpenDeck" data-icon="storage" data-palette="Study: Saved resources…" title="Saved quizzes, flashcard decks, exams, and AI scratchpad conversations for this note or across all notes">Saved resources…<kbd>Shift D</kbd></button>
+          <button id="keptRefsOpen" data-icon="star" data-palette="Study: Kept for exercises…" title="View and manage snippets kept from Grab for exercises alongside any page or figure editor">Kept for exercises…</button>
           <button data-proxy="importAny" data-icon="import" data-palette="Study: Import quiz or study material…" title="Same as File → Import…: a quiz from Quiz Toolkit (Markdown), a study pack from another NoteComplete, or a flashcard deck">Import quiz or study material…</button>
           <button id="studyExportQuiz" data-icon="export" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
           <input id="studyPackFile" type="file" accept=".ncstudy,.json,.md,.markdown,application/json,text/markdown" hidden />
@@ -195,6 +199,8 @@
             <button id="updateOnOpen" data-icon="clock" role="menuitemcheckbox" aria-checked="true" title="Look for a new version when NoteComplete opens (at most every 6 hours); it always asks before installing">Check for updates on open</button>
             <p id="updateVersion" class="menu-note muted"></p>
           </div>
+          <hr />
+          <button id="helpGithub" data-icon="link" data-palette="Help: My Github (Emefedez)" title="Open https://github.com/Emefedez"><span class="menu-inline-sub"><span>My Github</span><small class="menu-sub-tiny">Emefedez</small></span></button>
         </div>
       </details>
           <input id="importAnyFile" type="file" hidden />
@@ -305,6 +311,7 @@
                 <h3 id="newBlankHead">Blank &amp; Prefab</h3>
                 <button id="newDocument" type="button" class="export-item" data-icon="note"><b>Blank pages or canvas…</b><small>Choose page size, page count, or an infinite canvas (.nfedit or .noteful)</small></button>
                 <button id="newMarkdownDoc" type="button" class="export-item" data-icon="text" data-palette="New Markdown / Chinese note…"><b>Markdown note</b><small>Write Markdown or Chinese with live Pinyin &amp; math without needing a file first</small></button>
+                <button id="newRStudioDoc" type="button" class="export-item" data-icon="rstudio" data-palette="New R script or workspace (R Commander Studio)…"><b>R Script or Workspace…</b><small>Create a single .R / .Rmd file or an R workspace folder and open in R Commander Studio</small></button>
                 <button id="homeCreatePrefab" type="button" class="export-item" data-icon="graph" data-palette="Create prefab in a new note…"><b>Start with a prefab…</b><small>Create a graph, chart, truth table, Chinese stroke order or UML diagram in a new note</small></button>
               </section>
             </div>
@@ -329,18 +336,22 @@
     <div id="jobArea" class="job-area"></div>
     <div id="updateChip" class="job-chip update-chip" role="status" hidden><span id="updateText"></span><button id="updateGo" type="button">Update</button><button id="updateLater" type="button" title="Hide until NoteComplete opens again">Later</button><button id="updateSkip" type="button" title="Do not offer this version again">Skip</button></div>
     <div id="collabSlot" class="collab-slot"></div>
-    <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
-    <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
+    <button id="keptRefsPill" type="button" class="kept-refs-pill" data-icon="star" title="Kept for exercises: view saved snippets beside the page or editor" hidden><span id="keptRefsCount">Kept (0)</span></button>
+    <div id="globalAudioBar" class="global-audio-bar" role="region" aria-label="MP3 audio player" hidden></div>
+    <div id="barEndActions" class="bar-end-actions">
+      <button id="chatToggle" class="bar-ai" data-icon="spark" title="Ask AI about this page (Ctrl J)" disabled><span>Ask AI</span></button>
+      <button id="paletteOpen" class="palette-trigger" data-icon="search" aria-keyshortcuts="Control+K Meta+K"><span>Commands</span><kbd>Ctrl K</kbd></button>
+    </div>
     <div hidden>
       <input
         id="file"
         type="file"
-        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.csv,.tsv,.docx,.odt,.xlsx,.ods,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+        accept=".noteful,.nfedit,.goodnotes,.ntb,.notepart,.notecomplete,.notecomp,.tar,.zip,.tgz,.gz,.7z,.rar,application/zip,application/gzip,application/x-tar,.html,.htm,.txt,.md,.markdown,.rst,.adoc,.asciidoc,.org,.rmd,.qmd,.r,.rdata,.rda,.rds,.csv,.tsv,.docx,.docm,.dotx,.doc,.rtf,.odt,.fodt,.xlsx,.xlsm,.xlsb,.xls,.ods,.fods,.pptx,.pptm,.ppt,.odp,.epub,.ipynb,.log,.json,.yaml,.yml,.xml,.sh,.py,.c,.h,.cpp,.java,.js,.ts,.sql,.tex,.puml,.plantuml,.pu,.iuml,.wsd,text/*,.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif,.ico,.mp3,.m4a,.wav,.ogg,.oga,.opus,.flac,.aac,.weba,.mp4,.m4v,.webm,.mkv,.mov,.avi,.ogv,audio/*,video/*,application/pdf,text/html,text/plain,text/markdown,image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
         hidden
       /><input
         id="imageFile"
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/avif"
         multiple
         hidden
       /><input id="pdfPagesFile" type="file" accept=".pdf,application/pdf" hidden
@@ -348,6 +359,7 @@
       /><input id="deckFile" type="file" accept=".json,application/json" hidden />
     </div>
   </header>
+  <div id="mathModeBar" class="math-mode-bar" hidden></div>
   <main id="drop">
     <div id="status" role="status" aria-live="polite">Loading engine…</div>
     <section id="empty" class="home" aria-labelledby="homeTitle">
@@ -364,6 +376,7 @@
               <button id="homeMenuNewHub" type="button" class="filter-option" role="menuitem" data-icon="note"><span>New note…</span><kbd>Ctrl N</kbd></button>
               <button id="homeMenuBlank" type="button" class="filter-option" role="menuitem" data-icon="pages"><span>Blank pages or canvas…</span></button>
               <button id="homeNewMarkdown" type="button" class="filter-option" role="menuitem" data-icon="text"><span>Markdown note</span></button>
+              <button id="homeMenuRStudio" type="button" class="filter-option" role="menuitem" data-icon="rstudio"><span>R Script or Workspace…</span></button>
               <button id="homeMenuPrefab" type="button" class="filter-option" role="menuitem" data-icon="graph"><span>Start with a prefab…</span></button>
               <button id="homeMenuHandwritten" type="button" class="filter-option" role="menuitem" data-icon="draw"><span>Handwritten from Markdown…</span></button>
               <button id="homeMenuTakeNotesAi" type="button" class="filter-option" role="menuitem" data-icon="batchNotes"><span>Take notes with AI…</span></button>
@@ -375,7 +388,7 @@
         </div>
       </div>
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
-        <label class="filter-group sort-group" data-icon="sort" title="Sort notes"><select id="homeSort" data-native aria-label="Sort notes"></select><span class="filter-caret" aria-hidden="true"></span></label>
+        <button id="homeSortBtn" type="button" class="chip filter-drop sort-drop" data-icon="sort" aria-haspopup="listbox" aria-expanded="false" aria-label="Sort notes" title="Sort notes"><span id="homeSortLabel">A – Z</span><span class="filter-caret" aria-hidden="true"></span></button><select id="homeSort" data-native aria-label="Sort notes" hidden></select>
         <div class="home-view" role="radiogroup" aria-label="Show notes as"><button type="button" role="radio" data-home-view="cards" title="Cards with covers" aria-label="Cards with covers"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/></svg></button><button type="button" role="radio" data-home-view="list" title="Quick list: no covers, nothing read from the files" aria-label="Quick list without covers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
         <div id="filterBar" class="filter-bar" role="group" aria-label="Filters"></div>
         <button id="filtersClear" type="button" class="chip-clear" hidden>Clear filters</button>
@@ -523,8 +536,8 @@
                 <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
                 <div class="drive-signin-body">
                   <div class="cloud-connect-row">
-                    <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button></div>
-                    <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>Open guide</strong> / <strong>Share guide</strong> for guided setup.</span>
+                    <div class="drive-actions"><button id="dropboxConnect" type="button" class="primary">Connect Dropbox</button><button type="button" class="chip" data-cloud-guide="dropbox:creator" data-icon="help" title="Step-by-step setup guide and auto-install scripts for Windows, macOS, Linux, Android &amp; iOS">Setup guide (all devices)</button></div>
+                    <span class="muted cloud-connect-hint">OAuth PKCE read-only access, or use <strong>Setup guide</strong> for step-by-step device install.</span>
                   </div>
                   <details class="drive-setup">
                     <summary>Connection setup</summary>
@@ -683,8 +696,8 @@
       <div class="side-body"><div id="webGroupSlot" class="group-slot"></div><div id="webHost" class="web-host"></div><div id="webFallback" class="web-fallback" hidden><p>Web pages open inside the NoteComplete desktop app. Here, open it in your browser.</p><button id="webFallbackOpen" type="button" class="primary">Open in browser</button></div></div>
     </section>
     <section id="textView" hidden>
-      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textFindToggle" type="button" data-icon="search" aria-label="Find in document" title="Find in document (Ctrl F)" aria-expanded="false"></button><button id="textIntoNote" type="button" data-icon="import" title="Insert this diagram into a note (editable if class, package or use case)" hidden>Insert into note…</button><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textSplitToggle" type="button" aria-pressed="false" title="Show live formatted preview (with math &amp; pinyin) beside the editor" hidden>Split</button><span id="textZhOptions" class="zh-sub-options" hidden><button id="textRubyToggle" type="button" class="fmt-ruby" aria-pressed="false" title="Pinyin over Chinese characters (live in preview)">拼</button><button id="textTraceBtn" type="button" class="fmt-trace" title="Stroke order: insert it for the highlighted Chinese characters">笔 Trace</button></span><button id="textHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Markdown &amp; Chinese cheat sheet" title="What the keys and Markdown do (?)"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><div class="zoom-controls" role="group" aria-label="Text size"><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div></div>
-      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button><button id="textFindNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
+      <div class="html-bar chrome"><button id="textSide" type="button" class="side-toggle" aria-label="Documents" data-icon="pages" aria-expanded="false" aria-controls="groupPanel" disabled></button><button id="textDark" type="button" class="pages-dark-toggle" aria-label="Dark pages" title="Dark pages: dark colours for this document (D)" aria-pressed="false" data-icon="moon"></button><span id="textZhSlot" class="text-zh-slot"><span id="textZhOptions" class="zh-sub-options" hidden><button id="textRubyToggle" type="button" class="fmt-ruby" aria-pressed="false" title="Pinyin over Chinese characters (live in preview)">拼</button><button id="textTraceBtn" type="button" class="fmt-trace" title="Stroke order: open stroke order editor for highlighted Chinese characters">笔 Trace</button></span></span><strong id="textTitle"></strong><span class="muted spacer"></span><button id="textOpenRStudio" type="button" data-icon="rstudio" title="Open this R script or R Markdown file in R Commander Studio" hidden>R Studio</button><button id="textEdit" type="button" data-icon="draw" aria-label="Edit" aria-pressed="false" title="Edit the text; Save (Ctrl S) writes it back to the file"></button><button id="textSave" type="button" data-icon="save" aria-label="Save" title="Save the changes to the file (Ctrl S)" hidden></button><button id="textSplitToggle" type="button" aria-pressed="false" title="Show live formatted preview (with math &amp; pinyin) beside the editor" hidden>Split</button><button id="textMarkdown" type="button" aria-pressed="false" title="Markdown: formatted, with LaTeX formulas, and the Markdown editor with its toolbar. Off: the text as written">MD</button><button id="textIntoNote" type="button" data-icon="import" title="Insert this diagram into a note (editable if class, package or use case)" hidden>Insert into note…</button><button id="textFindToggle" type="button" data-icon="search" aria-label="Find in document" title="Find in document (Ctrl F)" aria-expanded="false"></button><button id="textNotes" type="button" data-icon="note" aria-label="Notes" aria-expanded="false" title="Notes: Markdown beside the document (N)"></button><div id="textLayout" class="text-layout-controls" role="group" aria-label="Content width and alignment"><select id="textWidth" class="text-width-select" data-native aria-label="Side spacing and content width" title="Side spacing / content width"><option value="480">Compact</option><option value="640">Narrow</option><option value="760" selected>Normal</option><option value="1000">Wide</option><option value="1280">Extra wide</option><option value="full">Full width</option></select><div id="textAlign" class="page-align" role="radiogroup" aria-label="Snap content left, center, or right"><button type="button" role="radio" data-align="left" aria-checked="false" title="Snap to the left" aria-label="Snap to the left"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16"/><rect x="7" y="7" width="9" height="10" rx="1"/></svg></button><button type="button" role="radio" data-align="center" aria-checked="true" title="Center" aria-label="Center"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3"/><rect x="7.5" y="7" width="9" height="10" rx="1"/></svg></button><button type="button" role="radio" data-align="right" aria-checked="false" title="Snap to the right" aria-label="Snap to the right"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4v16"/><rect x="8" y="7" width="9" height="10" rx="1"/></svg></button></div></div><div id="textEditorZoom" class="zoom-controls" role="group" aria-label="Editor text size" hidden><span class="zoom-tag" aria-hidden="true">Edit</span><button id="textEditorZoomOut" type="button" aria-label="Editor zoom out" title="Editor zoom out (Ctrl + wheel over editor)">−</button><button id="textEditorZoomValue" type="button" class="zoom-reset" title="Reset editor zoom to 100%">100%</button><button id="textEditorZoomIn" type="button" aria-label="Editor zoom in" title="Editor zoom in (Ctrl + wheel over editor)">+</button></div><div id="textZoomGroup" class="zoom-controls" role="group" aria-label="Preview text size"><span class="zoom-tag" aria-hidden="true">View</span><button id="textZoomOut" type="button" aria-label="Zoom out" title="Zoom out (Ctrl −)">−</button><button id="textZoomValue" type="button" class="zoom-reset" title="Back to 100% (Ctrl 0)">100%</button><button id="textZoomIn" type="button" aria-label="Zoom in" title="Zoom in (Ctrl +)">+</button></div><button id="textHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Markdown &amp; Chinese cheat sheet" title="What the keys and Markdown do (?)"></button></div>
+      <div class="side-body"><div id="textGroupSlot" class="group-slot"></div><div class="text-body-pane"><article id="textBody" class="notes-render text-doc" tabindex="0" aria-label="Document"></article></div><div id="textSplitResize" class="text-split-resize" role="separator" aria-orientation="vertical" aria-label="Resize editor and preview panels" title="Drag to resize panels · double-click to reset 50 / 50"></div><div id="textEditor" class="doc-editor" hidden></div><div id="textFindBar" class="find-bar" role="search" hidden><div class="find-row"><input id="textFindInput" type="search" aria-label="Find in document" placeholder="Find in document" autocomplete="off" /><span id="textFindCount" class="find-count" aria-live="polite"></span><button id="textFindPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button><button id="textFindNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button><button id="textFindClose" type="button" aria-label="Close find" title="Close (Esc)">×</button></div></div></div>
     </section>
     <section id="editor" hidden>
       <div id="toolbar" class="toolbar chrome" aria-label="Drawing tools">
@@ -717,6 +730,14 @@
             data-icon="image"
             disabled
           ><span class="tool-name">Image</span></button>
+          <button
+            id="mathModePill"
+            type="button"
+            aria-label="Math"
+            title="Math Mode: formula bar, CAS &amp; R plots (Ctrl+Shift+M)"
+            data-icon="math"
+            aria-pressed="false"
+          ><span class="tool-name">Math</span></button>
         </div>
         <div class="toolbar-actions">
           <button
@@ -974,7 +995,7 @@
           aria-label="Dark pages"
           title="Dark pages: invert the document's contrast (D)"
           aria-pressed="false"
-          data-icon="invertPage"
+          data-icon="moon"
         ></button
         ><button
           data-tool="pdfedit"
@@ -1214,12 +1235,13 @@
     </div>
     <label>PDF resolution <output data-value="scale"></output><input name="scale" aria-label="PDF resolution" type="range" min="1" max="3" step="0.25"></label>
     <label>Page pixel budget <output data-value="megapixels"></output><input name="megapixels" aria-label="Page pixel budget" type="range" min="4" max="24" step="1"></label>
+    <label>Preloaded PDF pages <output data-value="preloadPages"></output><input name="preloadPages" aria-label="Preloaded PDF pages" type="range" min="0" max="20" step="1"></label>
     <label>Page contrast <output data-value="contrast"></output><input name="contrast" aria-label="Page contrast" type="range" min="75" max="150" step="5"></label>
     <label>Page brightness <output data-value="brightness"></output><input name="brightness" aria-label="Page brightness" type="range" min="75" max="125" step="5"></label>
     <label class="quality-check"><input name="zoomDetail" type="checkbox"> <span><strong>Fast zoom sharpening</strong> <span class="muted">Zoomed PDF pages sharpen in a fraction of the time by drawing only what is on screen, and keep sharpening while you pan. Areas just scrolled into view stay soft for a moment.</span></span></label>
     <div class="quality-sample"><strong>Reading preview</strong><p>Clear text, <span>soft pencil</span> and <mark>highlighted notes</mark>.</p></div>
-    <p class="muted">Higher resolution uses more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
-    <div class="quality-actions"><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
+    <p class="muted">Higher resolution and more preloaded pages use more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
+    <div class="quality-actions"><button type="button" data-reset>Reset to default</button><span class="spacer"></span><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
 </dialog>
 
@@ -1677,6 +1699,7 @@
   <hr class="note-menu-sep" />
   <p id="forgetText" class="muted"></p>
   <button id="forgetLocal" type="button" role="menuitem" data-icon="trash" class="menu-remove">Remove from this device</button>
+  <button id="forgetTrashLocal" type="button" role="menuitem" data-icon="trash" class="menu-remove" hidden>Move file to Trash</button>
   <button id="forgetUpload" type="button" role="menuitem" data-icon="upload" class="menu-remove" hidden>Upload changes, then remove</button>
   <details id="forgetDanger" class="danger-zone" hidden>
     <summary>Also delete it in Google Drive…</summary>

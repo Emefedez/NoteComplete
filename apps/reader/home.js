@@ -7,7 +7,8 @@ import { isNotePackageTar } from './archive.js';
 import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from './note-facts.js';
 import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
-import { isTextName } from './text-types.js';
+import { isTextName, isOfficeName, isMediaName, isImageName } from './text-types.js';
+import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
 import { localMember, webMember, starButton } from './groups.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
@@ -58,9 +59,9 @@ export function textCoverSvg(text) {
 }
 
 export function shouldSkipCoverFile({ name = '', kind = '' } = {}) {
-  if (kind === 'text') return true;
+  if (kind === 'text' || kind === 'office') return true;
   if (kind && ['project', 'noteful', 'pdf', 'image', 'blank', 'handwritten', 'notecomplete'].includes(kind)) return false;
-  return Boolean(name && isTextName(name));
+  return Boolean(name && (isTextName(name) || isOfficeName(name) || isMediaName(name)));
 }
 /** Return true when a cover image is missing or a tiny placeholder (<= 24px, e.g. 16x16 BLANK_COVER_JPEG). */
 export function isTinyCoverSize(width, height) {
@@ -167,12 +168,29 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     status(`Folder ${name} made. Put notes in it with ⋯ → Move to folder.`);
     renderFolders();
   }
-  function placeMenu(menu, anchor) {
+  function placeMenu(menu, anchor, { align = 'right', minWidth = 0 } = {}) {
+    if (menu.parentElement !== document.body) document.body.append(menu);
     menu.hidden = false;
     anchor.setAttribute('aria-expanded', 'true');
-    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    const vw = innerWidth / z, vh = innerHeight / z;
+    const r = anchor.getBoundingClientRect();
+    const leftEdge = r.left / z, rightEdge = r.right / z, topEdge = r.top / z, bottomEdge = r.bottom / z;
+    if (minWidth) menu.style.minWidth = `${Math.min(Math.max(minWidth, Math.round(r.width / z)), Math.round(vw - 16))}px`;
+    menu.style.maxWidth = `${Math.max(160, Math.round(vw - 16))}px`;
+    const w = menu.offsetWidth || minWidth || 200;
+    const x = align === 'left' ? leftEdge : rightEdge - w;
+    menu.style.left = `${Math.round(Math.max(8, Math.min(vw - w - 8, x)))}px`;
+    const below = vh - bottomEdge - 10, above = topEdge - 10;
+    const h = menu.offsetHeight || 200;
+    if (below >= h || below >= above) {
+      menu.style.maxHeight = `${Math.max(120, Math.round(below))}px`;
+      menu.style.top = `${Math.round(bottomEdge + 6)}px`;
+    } else {
+      const mh = Math.max(120, Math.round(above));
+      menu.style.maxHeight = `${mh}px`;
+      menu.style.top = `${Math.round(Math.max(8, topEdge - Math.min(h, mh) - 6))}px`;
+    }
   }
   function folderMenu(group, anchor) {
     const menu = $('folderMenu');
@@ -232,7 +250,10 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       }
       const file = await library.open(entry);
       // A file listed in a folder but never opened joins Recent now.
-      if (file && entry.listed && entry.source === 'local') await library.rememberLocal(entry.path, entry.name, file.size);
+      if (file && entry.listed && entry.source === 'local') {
+        await library.rememberLocal(entry.path, entry.name, file.size || entry.size || 0);
+        delete entry.listed;
+      }
       if (!file) {
         status(`${entry.name} is no longer in the downloads folder. Open it again from ${entry.source === 'dropbox' ? 'Dropbox' : 'Drive'}.`, true);
         await library.forget(entry.key);
@@ -246,6 +267,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       }
       await library.touch(entry.key);
       await open(file, entry);
+      if (!$('empty')?.hidden) renderRecent();
     } catch (error) { status(error.message, true); }
   }
   async function renderRecent() {
@@ -308,24 +330,32 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
           cover.removeAttribute?.('src');
           cover.classList.add('missing');
         };
-        library.cover(coverKey(entry)).then(async url => {
-          // An old text cover (lines running off the card) is drawn again, wrapped.
-          if (url && isTextName(entry.name || '') && !String(url).includes(encodeURIComponent(TEXT_COVER))) url = null;
-          if (url) {
-            cover.classList.remove('missing');
-            cover.src = url;
-          } else {
-            try {
-              const file = await library.open(entry);
-              if (file) {
-                await rememberCover(coverKey(entry), file);
-                const next = await library.cover(coverKey(entry));
-                if (next) { cover.classList.remove('missing'); cover.src = next; return; }
-              }
-            } catch (e) {}
-            cover.classList.add('missing');
-          }
-        });
+        const staticCover = hasStaticFileCover(entry.name || '') ? fileCoverSvg(entry.name || '') : null;
+        if (staticCover) {
+          cover.classList.remove('missing');
+          cover.src = staticCover;
+        } else {
+          library.cover(coverKey(entry)).then(async url => {
+            // An old text cover (lines running off the card) is drawn again, wrapped.
+            if (url && isTextName(entry.name || '') && !String(url).includes(encodeURIComponent(TEXT_COVER))) url = null;
+            if (url) {
+              cover.classList.remove('missing');
+              cover.src = url;
+            } else {
+              try {
+                const file = await library.open(entry);
+                if (file) {
+                  await rememberCover(coverKey(entry), file);
+                  const next = await library.cover(coverKey(entry));
+                  if (next) { cover.classList.remove('missing'); cover.src = next; return; }
+                }
+              } catch (e) {}
+              const fallback = fileCoverSvg(entry.name || '');
+              if (fallback) { cover.classList.remove('missing'); cover.src = fallback; return; }
+              cover.classList.add('missing');
+            }
+          });
+        }
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
       button.onclick = () => {
@@ -338,7 +368,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       if (folder) item.append(starButton(!!entry.starred, entryTitle(entry), async on => { await groups.star(folder, entry.key, on); renderRecent(); }));
       else {
         const fav = starButton(favourites.has(entry.key), entryTitle(entry), on => { if (on) favourites.add(entry.key); else favourites.delete(entry.key); saveFavourites(); button.note.favourite = on; renderRecent(); });
-        fav.title = favourites.has(entry.key) ? 'Favourite (click to remove)' : 'Add to favourites';
+        fav.title = favourites.has(entry.key) ? 'Favorite (click to remove)' : 'Add to favorites';
         item.append(fav);
       }
       return [item];
@@ -350,6 +380,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isGithub = entry.source === 'github', isWebdav = entry.source === 'webdav';
     const isCloud = isDrive || isDropbox || isGithub || isWebdav, now = current();
+    const canTrashDisk = entry.source === 'local' && Boolean(entry.path && globalThis.notecompleteFiles?.trashOpened);
     const changed = isDrive && now.entryKey === entry.key && now.dirty;
     $('forgetTitle').textContent = entryTitle(entry);
     $('forgetTitle').title = entry.name;
@@ -362,7 +393,9 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
           ? 'Deletes the copy kept on this device and its cover. The repository on GitHub stays as it is.'
           : isWebdav
             ? 'Deletes the copy kept on this device and its cover. The file in Nextcloud / WebDAV stays as it is.'
-            : 'Removes it from Recent. The file on your computer is not deleted.';
+            : entry.listed
+              ? 'Moves the file on your computer to the system Trash.'
+              : 'Removes it from Recent (or move the file on your computer to the system Trash).';
     $('forgetUpload').hidden = !changed;
     $('forgetDanger').hidden = !isDrive;
     $('forgetDanger').open = false;
@@ -372,7 +405,24 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     const close = () => { $('forgetDialog').hidden = true; $('renameRow').hidden = true; anchor.setAttribute('aria-expanded', 'false'); document.removeEventListener('pointerdown', outside, true); };
     const outside = event => { if (!$('forgetDialog').contains(event.target) && event.target !== anchor) close(); };
     const done = async (text) => { await library.forget(entry.key, { deleteFile: isCloud }); close(); status(text); renderRecent(); };
+    $('forgetLocal').hidden = Boolean(entry.listed && canTrashDisk);
     $('forgetLocal').onclick = () => done(isDrive ? 'Removed from this device. Drive is unchanged.' : isDropbox ? 'Removed from this device. Dropbox is unchanged.' : 'Removed from Recent.');
+    const trashBtn = $('forgetTrashLocal');
+    if (trashBtn) {
+      trashBtn.hidden = !canTrashDisk;
+      trashBtn.onclick = async () => {
+        try {
+          await globalThis.notecompleteFiles.trashOpened(entry.path);
+          await library.forget(entry.key);
+          await groups?.forget?.(entry.key);
+          close();
+          status(`${entry.name} moved to the trash.`);
+          renderRecent();
+        } catch (error) {
+          $('forgetStatus').textContent = error.message;
+        }
+      };
+    }
     $('forgetUpload').onclick = async () => {
       try {
         $('forgetStatus').textContent = 'Exporting the note…';
@@ -415,13 +465,12 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('forgetMigrate').onclick = () => { close(); migration.open(entry).catch(error => status(error.message, true)); };
     // Drop down under the ⋯ button, or up when there is no room below.
     const menu = $('forgetDialog');
-    menu.hidden = false;
-    anchor.setAttribute('aria-expanded', 'true');
-    const r = anchor.getBoundingClientRect(), h = menu.offsetHeight, w = menu.offsetWidth;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.right - w))}px`;
-    menu.style.top = `${innerHeight - r.bottom > h + 12 ? r.bottom + 6 : Math.max(8, r.top - h - 6)}px`;
+    placeMenu(menu, anchor, { align: 'right' });
     setTimeout(() => document.addEventListener('pointerdown', outside, true));
-    $('forgetDanger').ontoggle = () => { if (menu.getBoundingClientRect().bottom > innerHeight - 8) menu.style.top = `${Math.max(8, innerHeight - menu.offsetHeight - 8)}px`; };
+    $('forgetDanger').ontoggle = () => {
+      const z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+      if (menu.getBoundingClientRect().bottom / z > innerHeight / z - 8) menu.style.top = `${Math.round(Math.max(8, innerHeight / z - menu.offsetHeight - 8))}px`;
+    };
   }
   // ⋯ → Rename…: only the title Recent shows changes; the file keeps its name.
   function rename(entry) {
@@ -501,10 +550,35 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     ];
   }
   const TOGGLES = [
-    { id: 'favourites', label: 'Favourites', icon: 'star', title: 'Only notes you starred' },
+    { id: 'favourites', label: 'Favorites', icon: 'star', title: 'Only notes you starred' },
     { id: 'audio', label: 'With audio', icon: 'headphones', title: 'Only notes with recordings' },
   ];
   const isActive = () => filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
+  function syncSortButton() {
+    const activeSort = SORTS[filters.sort] ? filters.sort : 'name';
+    if ($('homeSort') && $('homeSort').value !== activeSort) $('homeSort').value = activeSort;
+    if ($('homeSortLabel')) $('homeSortLabel').textContent = SORTS[activeSort];
+    if ($('homeSortBtn')) {
+      $('homeSortBtn').setAttribute('aria-expanded', String(openCategory === 'sort'));
+      $('homeSortBtn').setAttribute('aria-label', `Sort notes: ${SORTS[activeSort]}`);
+    }
+  }
+  function sortCategory() {
+    const activeSort = SORTS[filters.sort] ? filters.sort : 'name';
+    return {
+      id: 'sort',
+      label: 'Sort notes',
+      single: true,
+      options: Object.entries(SORTS).map(([k, name]) => ({ value: k, label: name })),
+      on: v => activeSort === v,
+      flip: v => {
+        filters.sort = v;
+        syncSortButton();
+        closeFilterMenu();
+        changed();
+      },
+    };
+  }
   function renderFilters() {
     const nodes = categories().map(c => {
       const picked = c.options.filter(o => c.on(o.value));
@@ -520,29 +594,33 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('filterBar').replaceChildren(...nodes);
     for (const [i, t] of TOGGLES.entries()) nodes[nodes.length - TOGGLES.length + i].title = t.title;
     $('filtersClear').hidden = !isActive();
+    syncSortButton();
     if (openCategory) showFilterMenu(openCategory);
   }
-  // The open dropdown: a checkbox per value, under its button.
+  // The open dropdown: a checkbox or radio option per value, under its button.
   function showFilterMenu(id) {
-    const category = categories().find(c => c.id === id), anchor = $('filterBar').querySelector(`[data-category="${id}"]`), menu = $('filterMenu');
+    const category = id === 'sort' ? sortCategory() : categories().find(c => c.id === id);
+    const anchor = id === 'sort' ? $('homeSortBtn') : $('filterBar').querySelector(`[data-category="${id}"]`);
+    const menu = $('filterMenu');
     if (!category || !anchor) return closeFilterMenu();
+    const prev = openCategory;
+    if (prev && prev !== id) {
+      const prevAnchor = prev === 'sort' ? $('homeSortBtn') : $('filterBar').querySelector(`[data-category="${prev}"]`);
+      prevAnchor?.setAttribute('aria-expanded', 'false');
+    }
     const keep = menu.hidden ? 0 : menu.scrollTop;
     openCategory = id;
+    anchor.setAttribute('aria-expanded', 'true');
     menu.setAttribute('aria-label', category.label);
     menu.replaceChildren(...category.options.map(o => {
       const on = category.on(o.value), b = document.createElement('button');
-      b.type = 'button'; b.setAttribute('role', 'menuitemcheckbox'); b.setAttribute('aria-checked', String(on));
+      b.type = 'button'; b.setAttribute('role', category.single ? 'menuitemradio' : 'menuitemcheckbox'); b.setAttribute('aria-checked', String(on));
       b.className = `filter-option${on ? ' on' : ''}${category.single ? ' radio' : ''}`;
       b.append(Object.assign(document.createElement('span'), { className: 'filter-check' }), o.label);
       b.onclick = () => category.flip(o.value);
       return b;
     }));
-    anchor.setAttribute('aria-expanded', 'true');
-    menu.hidden = false;
-    const r = anchor.getBoundingClientRect();
-    menu.style.minWidth = `${Math.max(160, Math.round(r.width))}px`;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.left))}px`;
-    menu.style.top = `${r.bottom + 6}px`;
+    placeMenu(menu, anchor, { align: 'left', minWidth: 168 });
     menu.scrollTop = keep;
     document.addEventListener('pointerdown', outsideFilter, true);
     document.addEventListener('keydown', escapeFilter, true);
@@ -553,10 +631,30 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('filterMenu').hidden = true;
     document.removeEventListener('pointerdown', outsideFilter, true);
     document.removeEventListener('keydown', escapeFilter, true);
-    if (was) $('filterBar').querySelector(`[data-category="${was}"]`)?.setAttribute('aria-expanded', 'false');
+    if (was === 'sort') $('homeSortBtn')?.setAttribute('aria-expanded', 'false');
+    else if (was) $('filterBar').querySelector(`[data-category="${was}"]`)?.setAttribute('aria-expanded', 'false');
   }
   const outsideFilter = event => { if (!$('filterMenu').contains(event.target) && !event.target.closest?.('.filter-drop')) closeFilterMenu(); };
-  const escapeFilter = event => { if (event.key === 'Escape') { event.stopPropagation(); closeFilterMenu(); } };
+  const escapeFilter = event => {
+    if (event.key === 'Escape') {
+      event.stopPropagation();
+      const was = openCategory;
+      closeFilterMenu();
+      if (was === 'sort') $('homeSortBtn')?.focus();
+      return;
+    }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+      const rows = [...$('filterMenu').querySelectorAll('.filter-option')];
+      if (!rows.length) return;
+      event.preventDefault();
+      const idx = rows.indexOf(document.activeElement);
+      const next = event.key === 'Home' ? 0
+        : event.key === 'End' ? rows.length - 1
+        : event.key === 'ArrowDown' ? (idx + 1 + rows.length) % rows.length
+        : (idx <= 0 ? rows.length - 1 : idx - 1);
+      rows[next]?.focus();
+    }
+  };
   // Reorder note cards in place; Drive folders keep their place at the top.
   function sortCards() {
     const compare = compareNotes(filters.sort);
@@ -715,11 +813,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     cloudMenuOpen = true;
     renderCloudProviderDrop();
     renderCloudProviderMenu();
-    menu.hidden = false;
-    const r = drop.getBoundingClientRect();
-    menu.style.minWidth = `${Math.max(210, Math.round(r.width))}px`;
-    menu.style.left = `${Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth))}px`;
-    menu.style.top = `${r.bottom + 6}px`;
+    placeMenu(menu, drop, { align: 'right', minWidth: 210 });
     document.addEventListener('pointerdown', outsideCloudMenu, true);
     document.addEventListener('keydown', escapeCloudMenu, true);
   }
@@ -994,7 +1088,18 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   $('filtersClear').onclick = () => { filters = { ...filters, since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [] }; changed(); };
   for (const [value, label] of Object.entries(SORTS)) $('homeSort').add(new Option(label, value));
   $('homeSort').value = SORTS[filters.sort] ? filters.sort : 'name';
-  $('homeSort').onchange = () => { filters.sort = $('homeSort').value; changed(); };
+  $('homeSort').onchange = () => { filters.sort = $('homeSort').value; syncSortButton(); changed(); };
+  if ($('homeSortBtn')) {
+    $('homeSortBtn').onclick = () => (openCategory === 'sort' ? closeFilterMenu() : showFilterMenu('sort'));
+    $('homeSortBtn').onkeydown = (event) => {
+      if (['ArrowDown', 'ArrowUp'].includes(event.key) && openCategory !== 'sort') {
+        event.preventDefault();
+        showFilterMenu('sort');
+        ($('filterMenu').querySelector('.filter-option.on') || $('filterMenu').querySelector('.filter-option'))?.focus();
+      }
+    };
+  }
+  syncSortButton();
   filters.since = filters.period ? Date.now() - (PERIODS[filters.period]?.[1] || 0) : 0;
   renderFilters();
   // Facts of a note that was just opened, for Recent filtering (local files and kept copies).
@@ -1011,7 +1116,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       // A text cover from before wrapping is drawn again; any other kept cover stays.
       if (kept && !(isTextName(name) && !String(kept).includes(encodeURIComponent(TEXT_COVER)))) return;
       if (/\.nfedit$/i.test(name)) return;
-      if (/\.(jpe?g|png|webp)$/i.test(name) || file.type?.startsWith('image/')) {
+      if (isImageName(name) || file.type?.startsWith('image/')) {
         const url = await shrink(file);
         if (url) await library.saveCover(key, url);
         return;
@@ -1037,10 +1142,10 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         }
         return;
       }
-      if (/\.html?$/i.test(name) || file.type === 'text/html') {
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="40" y="30" width="240" height="180" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2"/><text x="160" y="115" font-family="system-ui, sans-serif" font-size="32" font-weight="bold" fill="#0284c7" text-anchor="middle">&lt;HTML/&gt;</text><text x="160" y="150" font-family="system-ui, sans-serif" font-size="14" fill="#64748b" text-anchor="middle">Interactive Exercise</text></svg>`;
-        const url = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-        await library.saveCover(key, url);
+      // HTML, audio, video, Office documents, e-books and notebooks get crisp icon covers.
+      if (hasStaticFileCover(name) || file.type === 'text/html') {
+        const url = fileCoverSvg(name) || fileCoverSvg('page.html');
+        if (url) await library.saveCover(key, url);
         return;
       }
       // Goodnotes and Notability notebooks (also zipped): their own picture, right away; the
@@ -1054,9 +1159,8 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       // Archives: a box with the format (what they hold shows when they are opened).
       if (/\.(zip|tar|tgz|gz|7z|rar)$/i.test(name) && !/\.(goodnotes|ntb)\.zip$/i.test(name)
         && !(/\.tar$/i.test(name) && isNotePackageTar(new Uint8Array(await file.slice(0, 1024).arrayBuffer())))) {
-        const label = (/\.(tgz|tar\.gz)$/i.test(name) ? 'TAR.GZ' : name.split('.').pop()).toUpperCase();
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240" width="320" height="240"><rect width="320" height="240" fill="#f8fafc"/><rect x="100" y="52" width="120" height="30" rx="4" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><rect x="108" y="82" width="104" height="96" rx="4" fill="#ffffff" stroke="#94a3b8" stroke-width="2"/><rect x="144" y="100" width="32" height="8" rx="3" fill="#94a3b8"/><text x="160" y="160" font-family="system-ui, sans-serif" font-size="20" font-weight="bold" fill="#475569" text-anchor="middle">${label}</text></svg>`;
-        await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+        const url = fileCoverSvg(name);
+        if (url) await library.saveCover(key, url);
         return;
       }
       // Text and Markdown: the first lines, drawn like a page.

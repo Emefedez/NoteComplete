@@ -85,6 +85,11 @@ export const paths = {
  keyboard:'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
  // Math keypad: a curve on axes, delete back, and the next / previous empty place.
  graph:'M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6',
+ // Math Mode, R Commander Studio, R Plot, and Math Text Box.
+ math:'M18 6.5V4.5H6l6 7.5-6 7.5h12v-2',
+ rstudio:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.5 16.5v-9h3.2a2.4 2.4 0 0 1 0 4.8H9.5m3 0 2.7 4.2',
+ rplot:'M4 3v17h17M7.5 20v-6h3v6M11.5 20v-11h3v11M15.5 20v-8h3v8',
+ mathBox:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Zm8 4v6M9 12h6',
  // Audio segment (audio-trim.js): scissors, its start and end flags, play only the segment.
  scissors:'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12',
  flagStart:'M5 21V4M5 4h11l-2 4 2 4H5',
@@ -109,7 +114,6 @@ export const paths = {
  // UML diagrams (uml.js): a class box tied to an actor.
  uml:'M10 3h11v12H10zM10 7h11M10 11h11M5 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM5 13.5V18M2.5 15.5h5M3 21l2-3 2 3M7.5 15.5H10',
  sort:'M7 4v16M3.5 16.5 7 20l3.5-3.5M17 20V4m-3.5 3.5L17 4l3.5 3.5',
- loop:'M21 4v6h-6M3 20v-6h6M5.1 9a7.5 7.5 0 0 1 12.4-2.8L21 10M3 14l3.5 3.8A7.5 7.5 0 0 0 18.9 15',
  pin:'M12 16v5M8.5 3h7l-1 6.2 3 3V15h-11v-2.8l3-3L8.5 3Z',
  star:'M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9L12 3.5Z',
  storage:'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Zm0 0v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
@@ -122,6 +126,7 @@ export const paths = {
  invertPage:'M6 3h12v18H6zM12 3v18M12 6.5h6M12 10h6M12 13.5h6M12 17h6',
  spread:'M3 4h8v16H3zM13 4h8v16h-8zM5.5 8.5h3M5.5 12h3M15.5 8.5h3M15.5 12h3',
  speaker:'M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
+ video:'M3 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm14 4 4-2.5v9L17 14',
  translate:'M3 5h9M7.5 3v2M5 5c.9 3 3 5.4 6 7M10 5c-.9 3.3-3 6-6.5 8M12.5 21l4.25-10L21 21M14 17.5h5.5',
  language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.5 5.6-3.5 9s1.1 6.4 3.5 9c2.4-2.6 3.5-5.6 3.5-9S14.4 5.6 12 3Z'
 };

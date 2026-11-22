@@ -1,10 +1,8 @@
-// The user dictionary (docs/CHINESE-INPUT.md §4.6): candidates the person chose and their
-// favourites (the ☆ of the look-up panel and the stroke order window), in IndexedDB
-// "notecomplete-chinese" (db.js), stores "chosen" and "words". Rows keep their key inside: chosen
-// {key: "<s|t>:<toneless syllables joined by '>:<hanzi>", count, last, tones, word?} (word: the
-// numbered pinyin of a sequence the dictionary lacks, which becomes a word after two choices);
-// words {key: hanzi, hanzi, pinyin: "xiao3 ming2" or "", added}: one favourite each (rows from
-// before favourites, "My words", have the key hanzi + "\t" + pinyin and count as favourites too).
+// The user dictionary (docs/CHINESE-INPUT.md §4.6): candidates the person chose and words they
+// added, in IndexedDB "notecomplete-chinese" (db.js), stores "chosen" and "words". Rows keep their
+// key inside: chosen {key: "<s|t>:<toneless syllables joined by '>:<hanzi>", count, last, tones,
+// word?} (word: the numbered pinyin of a sequence the dictionary lacks, which becomes a word after
+// two choices); words {key: hanzi + "\t" + pinyin, hanzi, pinyin: "xiao3 ming2", added}.
 // The worker gets every row when it starts and each change after (client.js).
 import { withStore } from './db.js';
 import { marksToNumbers } from './pinyin.js';
@@ -44,18 +42,37 @@ export function userDict({ chosen = idbStore('chosen'), words = idbStore('words'
       if (map.size > MAX_ROWS) await prune(map, t);
       return row;
     },
-    async favourites() { return [...new Set((await words.all().catch(() => [])).map(w => w.hanzi))]; },
-    // `pinyin`: its reading, so a favourite the dictionary lacks is still offered.
-    async setFavourite(hanzi, on, pinyin = '') {
-      for (const r of await words.all()) if (r.hanzi === hanzi) await words.delete(r.key);
-      if (on) await words.put({ key: hanzi, hanzi, pinyin: pinyin ? numbered(pinyin) : '', added: now() });
+    async addWord(hanzi, pinyin = '', gloss = '') {
+      const py = numbered(pinyin);
+      const row = { key: `${hanzi}\t${py}`, hanzi, pinyin: py, ...(gloss ? { gloss: String(gloss).trim() } : {}), added: now() };
+      await words.put(row);
+      return row;
+    },
+    removeWord: key => words.delete(key),
+    async listWords() {
+      const list = await words.all().catch(() => []);
+      return list.sort((a, b) => (b.added || 0) - (a.added || 0));
+    },
+    async findWord(hanzi, pinyin = '') {
+      const list = await words.all().catch(() => []);
+      const py = pinyin ? numbered(pinyin) : '';
+      return (py && list.find(w => w.hanzi === hanzi && w.pinyin === py)) || list.find(w => w.hanzi === hanzi) || null;
+    },
+    async toggleWord(hanzi, pinyin = '', gloss = '') {
+      const existing = await this.findWord(hanzi, pinyin);
+      if (existing) {
+        await words.delete(existing.key);
+        return { starred: false, key: existing.key };
+      }
+      const row = await this.addWord(hanzi, pinyin, gloss);
+      return { starred: true, row };
     },
     // Settings → Chinese export / import (moving devices).
     async export() { return { chosen: [...(await load()).values()], words: await words.all() }; },
     async import(data) {
       const map = await load();
       for (const r of data?.chosen || []) if (r?.key && r.count > 0) { const old = map.get(r.key); const row = { ...r, count: Math.max(r.count, old?.count || 0), last: Math.max(r.last || 0, old?.last || 0) }; map.set(r.key, row); await chosen.put(row); }
-      for (const w of data?.words || []) if (w?.hanzi) await words.put({ ...w, key: w.hanzi });
+      for (const w of data?.words || []) if (w?.hanzi && w.pinyin) await words.put({ ...w, key: `${w.hanzi}\t${w.pinyin}` });
     },
   };
   async function prune(map, t) {

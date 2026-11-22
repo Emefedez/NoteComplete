@@ -91,19 +91,3 @@ export function editableCaretRect(root) {
 export function caretRect(el) {
   return el.isContentEditable ? editableCaretRect(el) : fieldCaretRect(el);
 }
-
-// The text before the caret on its line (for Enter = "Auto").
-export function lineBefore(el) {
-  if (!el.isContentEditable) { const v = el.value.slice(0, el.selectionStart ?? el.value.length); return v.slice(v.lastIndexOf('\n') + 1); }
-  const sel = el.ownerDocument.getSelection();
-  if (!sel?.rangeCount) return '';
-  const r = sel.getRangeAt(0);
-  const text = r.startContainer.nodeType === 3 ? r.startContainer.data.slice(0, r.startOffset) : '';
-  let line = r.startContainer.nodeType === 3 ? r.startContainer.parentElement : r.startContainer;
-  while (line && line.parentElement !== el) line = line.parentElement;
-  if (!line) return text;
-  const pre = el.ownerDocument.createRange();
-  pre.setStart(line, 0);
-  pre.setEnd(r.startContainer, r.startOffset);
-  return pre.toString();
-}

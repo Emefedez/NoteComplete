@@ -76,7 +76,7 @@ export function headingFor(headings, fragment) {
 // (a file next to this one).
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
-export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null }) {
+export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, editorZoom = null, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null, helpSheet = null;
   attachMarkdownPrefabContextMenu({
     editorContainer: editorHost,
@@ -96,6 +96,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
   });
   const rubyBtn = ruby || root?.querySelector?.('#textRubyToggle') || null;
   const splitBtn = split || root?.querySelector?.('#textSplitToggle') || null;
+  const zhSlotEl = root?.querySelector?.('#textZhSlot') || null;
   const zhOptionsEl = root?.querySelector?.('#textZhOptions') || null;
   const traceBtn = root?.querySelector?.('#textTraceBtn') || null;
   const helpBtn = root?.querySelector?.('#textHelpBtn') || null;
@@ -106,7 +107,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
   globalThis.addEventListener?.('zh-ruby-refresh', syncRubyBtn);
   const zhToggle = edit?.parentElement ? zhButton(() => mde?.editor ? editorHost?.querySelector('.TinyMDE') : editorHost?.querySelector('textarea.doc-editor-plain')) : null;
   if (zhToggle) {
-    if (zhOptionsEl && zhOptionsEl.parentElement === edit.parentElement) zhOptionsEl.before(zhToggle);
+    if (zhSlotEl) zhSlotEl.prepend(zhToggle);
+    else if (zhOptionsEl && zhOptionsEl.parentElement === edit.parentElement) zhOptionsEl.before(zhToggle);
     else edit.before(zhToggle);
   }
   const syncZhBar = () => {
@@ -114,7 +116,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     const isZh = mode !== 'off';
     if (zhToggle) {
       zhToggle.hidden = false;
-      zhToggle.textContent = mode === 'pinyin' ? 'ā' : '中';
+      zhToggle.textContent = '中';
       zhToggle.setAttribute('aria-pressed', String(isZh));
       zhToggle.dataset.zhMode = mode;
     }
@@ -126,8 +128,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
   if (zhToggle) {
     zhToggle.addEventListener('click', () => {
       if (!ime) {
-        const cur = currentZhMode();
-        const next = cur === 'off' ? 'hanzi' : cur === 'hanzi' ? 'pinyin' : 'off';
+        const next = currentZhMode() === 'hanzi' ? 'off' : 'hanzi';
         setFieldMode(zhKey(), next);
       }
       syncZhBar();
@@ -173,6 +174,11 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       han = allHan?.at(-1)?.slice(0, 6) || '';
     }
     if (!han) return;
+    if (editPrefab) {
+      const chosen = await editPrefab({ type: 'hanzi', text: han, show: 'steps', grid: 'mi', outline: true });
+      if (chosen) await insertTraceSpec(chosen);
+      return;
+    }
     const { markdownTraceBlockFor } = await import('./chinese/zh-menu.js');
     const block = await markdownTraceBlockFor(han);
     if (block) await insertMarkdownSnippet(block);
@@ -218,15 +224,64 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       helpSheet.toggle();
     };
   }
+  const editorZoomEl = root?.querySelector?.('#textEditorZoom') || null;
+  const previewZoomEl = root?.querySelector?.('#textZoomGroup') || null;
+  const splitHandle = root?.querySelector?.('#textSplitResize') || null;
+  const SPLIT_RATIO_KEY = 'notecomplete-text-split-ratio';
+  const setSplitRatio = (pct, persist = false) => {
+    const clamped = Math.max(15, Math.min(85, Math.round(Number(pct) * 10) / 10));
+    root?.style?.setProperty?.('--split-editor-basis', `${clamped}%`);
+    if (persist) { try { localStorage.setItem(SPLIT_RATIO_KEY, String(clamped)); } catch { /* Optional. */ } }
+  };
+  try { const savedRatio = Number(localStorage.getItem(SPLIT_RATIO_KEY)); if (savedRatio >= 15 && savedRatio <= 85) setSplitRatio(savedRatio); } catch { /* Optional. */ }
+  if (splitHandle) {
+    splitHandle.addEventListener('pointerdown', (down) => {
+      if (down.button !== 0 || !root?.classList?.contains('split-preview')) return;
+      down.preventDefault();
+      const sideBody = splitHandle.parentElement;
+      if (!sideBody) return;
+      splitHandle.setPointerCapture?.(down.pointerId);
+      splitHandle.classList.add('dragging');
+      const stacked = getComputedStyle(sideBody).flexDirection === 'column';
+      let lastPct = 50;
+      const move = (e) => {
+        if (e.pointerId !== down.pointerId) return;
+        const rect = sideBody.getBoundingClientRect();
+        const groupEl = sideBody.querySelector('.group-panel');
+        const groupW = !stacked && groupEl && !sideBody.classList.contains('group-off') ? groupEl.getBoundingClientRect().width : 0;
+        const avail = stacked ? rect.height : Math.max(1, rect.width - groupW);
+        const pos = stacked ? (e.clientY - rect.top) : (e.clientX - rect.left - groupW);
+        lastPct = Math.max(15, Math.min(85, (pos / avail) * 100));
+        setSplitRatio(lastPct);
+      };
+      const up = (e) => {
+        if (e?.pointerId !== undefined && e.pointerId !== down.pointerId) return;
+        splitHandle.removeEventListener('pointermove', move);
+        splitHandle.removeEventListener('pointerup', up);
+        splitHandle.removeEventListener('pointercancel', up);
+        splitHandle.classList.remove('dragging');
+        setSplitRatio(lastPct, true);
+      };
+      splitHandle.addEventListener('pointermove', move);
+      splitHandle.addEventListener('pointerup', up);
+      splitHandle.addEventListener('pointercancel', up);
+    });
+    splitHandle.addEventListener('dblclick', () => setSplitRatio(50, true));
+  }
   const syncSplitLayout = () => {
     const canSplit = Boolean(editing && markdown && !isDiagram());
+    const inSplit = Boolean(canSplit && splitPreview);
     if (splitBtn) {
       splitBtn.hidden = !canSplit;
-      splitBtn.setAttribute('aria-pressed', String(canSplit && splitPreview));
+      splitBtn.setAttribute('aria-pressed', String(inSplit));
     }
-    root?.classList?.toggle('split-preview', Boolean(canSplit && splitPreview));
-    if (canSplit && splitPreview) body.hidden = false;
+    root?.classList?.toggle('split-preview', inSplit);
+    root?.classList?.toggle('text-markdown-edit', canSplit);
+    if (inSplit) body.hidden = false;
     else if (editing) body.hidden = true;
+    // Show independent Edit & View zoom controls in Split mode, or just the active pane's zoom otherwise.
+    if (editorZoomEl) editorZoomEl.hidden = !editing;
+    if (previewZoomEl) previewZoomEl.hidden = editing && !inSplit;
   };
   if (splitBtn) {
     splitBtn.onclick = () => {
@@ -299,7 +354,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     }
     body.replaceChildren(...nodes);
   }
-  const zoomer = zoomControl({ ...zoom, apply: (z) => root.style.setProperty('--text-zoom', String(z)) });
+  const zoomer = zoomControl({ ...zoom, key: 'notecomplete-text-preview-zoom', apply: (z) => { root.style.setProperty('--text-preview-zoom', String(z)); root.style.setProperty('--text-zoom', String(z)); } });
+  const editorZoomer = editorZoom
+    ? zoomControl({ ...editorZoom, key: 'notecomplete-text-editor-zoom', apply: (z) => root.style.setProperty('--text-editor-zoom', String(z)) })
+    : zoomer;
   // Over the UML editor, the bar's − / + / 100% zoom its canvas (100%: the whole diagram).
   for (const [button, dir] of [[zoom.out, -1], [zoom.into, 1], [zoom.value, 0]]) {
     const own = button.onclick;
@@ -320,9 +378,14 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
   body.addEventListener('wheel', (event) => {
-    if (!event.ctrlKey || diagramDoc) return;
+    if ((!event.ctrlKey && !event.metaKey) || diagramDoc) return;
     event.preventDefault();
     zoomer.step(event.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
+  editorHost?.addEventListener?.('wheel', (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    editorZoomer.step(event.deltaY < 0 ? 1 : -1);
   }, { passive: false });
   async function render() {
     const token = ++renders;
@@ -397,7 +460,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       area.className = 'notes-editor';
       editorHost.append(commands, area);
       const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, $math$, - list)…' });
-      const bar = new TinyMDE.CommandBar({ element: commands, editor });
+      const { MARKDOWN_COMMANDS } = await import('./notes.js');
+      const bar = new TinyMDE.CommandBar({ element: commands, editor, commands: MARKDOWN_COMMANDS });
       const markEditorLines = () => decorateTinyMdeLines(area.querySelector('.TinyMDE'));
       editor.addEventListener('change', (event) => {
         changed(event.content);
@@ -480,7 +544,11 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     diagramModel: () => diagramDoc?.model?.() || null,
     diagramPlantuml: () => diagramDoc?.plantuml?.() || text,
     diagramSvg: () => lastDiagramSvg,
-    zoom: (dir) => (diagramDoc ? diagramDoc.zoom(dir) : zoomer.step(dir)),
+    zoom: (dir) => {
+      if (diagramDoc) return diagramDoc.zoom(dir);
+      const inEditor = editing && (!splitPreview || editorHost?.contains?.(document.activeElement));
+      return (inEditor ? editorZoomer : zoomer).step(dir);
+    },
     get visible() { return !root.hidden; },
     get hasDocument() { return Boolean(name); },
     get editing() { return editing; },

@@ -1,20 +1,21 @@
 // The hanzi module's editor, in the kit's movable window: a look-up of the characters with their
-// stroke order. In the middle the player (play/pause Space, ← →, Home/End, speed, timeline, repeat
-// L, and with several characters a loop button over each one picking which repeat), an optional
-// still copy beside it and the sheet as it goes on the page, then the header: characters, pinyin
-// whose syllables play their tone, 🔊, ☆ favourite, HSK level. On the right the characters (with
-// the built-in Chinese input), then collapsible Meanings (each one put on the page or taken off
-// with a click), Forms, Structure, Words with it and On the page. Practise traces each character
-// with the pen or a finger.
+// stroke order. In the middle the player (play/pause Space, ← →, Home/End, speed, timeline,
+// repeat), an optional still copy beside it, the sheet as it goes on the page, and the header:
+// characters, pinyin whose syllables play their tone, 🔊, ☆ favourite, HSK level, variants. On the
+// right the characters (with built-in Chinese input), then collapsible Meanings (each one put on
+// the page or taken off with a click), Structure, Words with it and On the page. Practise traces
+// each character with the pen or a finger.
 import { editorShell, make, button, field, textInput, selectInput, checkInput } from '../kit/index.js';
-import { normalize, dictionaryFor, pageGloss, PAGE_GLOSSES, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
-import { meaningsOf, formsOf, lowestLevel } from '../../chinese/lookup-panel.js';
-import { sayer, listenButton, syllables, favouriteButton, formRows, structureRows } from '../../chinese/char-info.js';
+import { normalize, dictionaryFor, pageGloss, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
+import { meaningsOf, lowestLevel } from '../../chinese/lookup-panel.js';
+import { sayer, listenButton, syllables, structureRows } from '../../chinese/char-info.js';
 import { levelLabel } from '../../chinese/vocab.js';
+import { icon } from '../../icons.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
 import { langToggle } from '../../chinese/zh-window.js';
+import { zhLang, setZhLang } from '../../chinese/translate.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
 const STILL_KEY = 'notecomplete-hanzi-still', SECTION_KEY = 'notecomplete-hanzi-section-';
@@ -25,7 +26,7 @@ const yellowBridgeUrl = (c) => `https://www.yellowbridge.com/chinese/character-s
 function getHanziImeMode() {
   try {
     const v = localStorage.getItem(HANZI_IME_KEY);
-    if (v === 'hanzi' || v === 'pinyin' || v === 'off') return v;
+    if (v === 'hanzi' || v === 'off') return v;
   } catch { /* Optional */ }
   return 'hanzi';
 }
@@ -59,10 +60,9 @@ export function open(root, { spec, editing, host }) {
       { keys: 'Space', does: 'Play · pause main trace animation' },
       { keys: '← →', does: 'Stroke back · forward' },
       { keys: 'Home / End', does: 'No strokes · all strokes' },
-      { keys: 'L', does: 'Repeat on or off; with several characters, the loop button over each one picks which repeat' },
       { does: 'Still copy: the finished characters beside the animated ones' },
-      { does: 'Click a syllable of the pinyin to hear its tone; ☆ makes it a favourite (Chinese input offers it first)' },
-      { does: '中 / ā / A icon next to Characters: switch Chinese Hanzi, Pinyin or Latin typing (remembered)' },
+      { does: 'Click a syllable of the pinyin to hear its tone; ☆ makes it a favourite' },
+      { does: '中 / A icon next to Characters: toggle Chinese Hanzi or Latin typing (remembered)' },
       { does: 'Practise: write each stroke over the grey character; after 2 misses the stroke is shown' },
       { keys: 'Ctrl Enter', does: `${host.applyLabel} on the page` },
       { keys: 'Esc', does: 'Close without changes' },
@@ -74,154 +74,92 @@ export function open(root, { spec, editing, host }) {
 
   // What goes on the page is chosen once, in the side panel (On the page → Show); Insert just inserts it.
 
-  // ── Middle: the player (or practice), the look-up's header, the actions ──
+  // ── Middle: the main trace animation player, English & variants summary bar, or practice ──
   const stage = make('div', { className: 'hz-stage-host' });
   const sheetPreview = make('div', { className: 'hz-sheet-preview' });
   let showSheet = model.show !== 'strokes';
+  const sheetToggleBtn = button('graph', 'Show sheet', { title: 'Visualize the pre-drawn black character alongside the colored-in stroke sequence' });
+  sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
+  sheetToggleBtn.onclick = () => {
+    showSheet = !showSheet;
+    sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
+    renderSheetPreview();
+  };
   let still = remembered(STILL_KEY) === '1';
-  const sheetToggleBtn = button('graph', 'Sheet', { title: 'The picture as it goes on the page (the stroke sequence when shown)' });
-  sheetToggleBtn.onclick = () => { showSheet = !showSheet; renderSheetPreview(); };
   const stillBtn = button('pin', 'Still copy', { title: 'A finished copy of the characters beside the animated ones' });
+  stillBtn.setAttribute('aria-pressed', String(still));
   stillBtn.onclick = () => {
     still = !still;
     keep(STILL_KEY, still ? '1' : '0');
     stillBtn.setAttribute('aria-pressed', String(still));
     player?.set({ still, size: size() });
   };
-  stillBtn.setAttribute('aria-pressed', String(still));
   const dictBar = make('div', { className: 'hz-dict-bar' });
   const pageBtn = button('check', 'Show this step on the page');
   pageBtn.onclick = () => finish(player.index >= player.steps ? null : player.index);
   const practiseBtn = button('draw', 'Practise');
+  const dictsBtn = button('import', 'Dictionaries', { title: 'Download more HSK dictionaries or import a local dictionary (CC-CEDICT, JSON, TSV/CSV)' });
+  dictsBtn.onclick = async () => {
+    try {
+      const [{ openZhSettings }, { chinese }] = await Promise.all([import('../../chinese/settings.js'), import('../../chinese/client.js')]);
+      openZhSettings({ client: () => Promise.resolve(chinese()), tab: 'packs', onClose: () => load(false) });
+    } catch (e) { shell.say(e.message, true); }
+  };
   const ybWrap = make('span', { className: 'hz-yb-wrap' });
-  const views = make('span', { className: 'hz-views', role: 'group', ariaLabel: 'View' }, sheetToggleBtn, stillBtn);
-  const actions = make('div', { className: 'hz-actions' }, practiseBtn, views, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
+  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, stillBtn, dictsBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
   shell.canvas.append(stage, sheetPreview, dictBar, actions);
-  let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '', compareForms = null;
-  const charCount = () => Math.max(1, [...model.text].length);
-  const size = () => Math.max(72, Math.min(240, Math.floor((shell.canvas.clientWidth || 520) / (charCount() * (still ? 2 : 1)) - 24)));
+  let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
+  const size = () => {
+    const cw = shell.canvas.clientWidth || 520;
+    const narrow = cw < 500;
+    const cap = narrow ? 136 : 240;
+    const floor = narrow ? 88 : 120;
+    return Math.max(floor, Math.min(cap, Math.floor(cw / (Math.max(1, [...model.text].length) * (still ? 2 : 1)) - 24)));
+  };
 
-  // The dictionary's look-up of the text (load()) and of each of its characters (Structure).
+  // The dictionary's look-up of the characters (load()), for the list of every meaning.
   let lookup = null, charLookups = [];
-  const script = () => model.script;
-  const say = sayer({ script, status: (msg, bad) => shell.say(msg, bad) });
-  // es | en: the meanings again in the other language (the page's caption too while it is automatic).
-  const langSwitch = langToggle({ onChange: () => load(false) });
-  const splitGloss = (g) => String(g || '').split(/\s*;\s*/).filter(Boolean);
-  const pageMeanings = () => splitGloss(model.gloss);
-  function setPageMeanings(list) {
-    glossAuto = false;
-    change({ gloss: list.join('; ') }, false);
-    renderLookup();
-  }
-  // Other characters in the window, with their own look-up (pinyin, meaning and forms anew).
+  const say = sayer({ script: () => model.script, status: (msg, bad) => shell.say(msg, bad) });
+  const defsBox = make('div', { className: 'hz-defs' });
+  const lookupBox = make('div', { className: 'hz-lookup' });
+  // A collapsible section of the side panel, its open state remembered.
+  const sectionBox = (key, title, { open = true } = {}) => {
+    const d = make('details', { className: 'hz-section' });
+    d.open = remembered(`${SECTION_KEY}${key}`, open ? '1' : '0') === '1';
+    d.addEventListener('toggle', () => keep(`${SECTION_KEY}${key}`, d.open ? '1' : '0'));
+    d.append(make('summary', { textContent: title }));
+    return d;
+  };
+  const meaningsSection = sectionBox('meanings', 'Meanings');
+  meaningsSection.append(defsBox);
+  // Another character in the window (a part, a word): traced with its own look-up.
   function trace(text) {
     compareBase = '';
     if (charInputEl) charInputEl.value = text;
     pinyinAuto = true; glossAuto = true; variantsAuto = true;
     change({ text, pinyin: '', gloss: '', variants: '' }, true);
   }
-  const link = (t, cls = 'zh-lk-link zh-cjk') => make('button', { type: 'button', className: cls, textContent: t, title: `Trace ${t}`, onclick: () => trace(t) });
-
-  // A collapsible section of the side panel, its open state remembered.
-  const sectionBox = (key, title, { open = true, note = '' } = {}) => {
-    const d = make('details', { className: 'hz-section' });
-    d.open = remembered(`${SECTION_KEY}${key}`, open ? '1' : '0') === '1';
-    d.addEventListener('toggle', () => keep(`${SECTION_KEY}${key}`, d.open ? '1' : '0'));
-    d.append(make('summary', {}, make('span', { textContent: title }), note ? make('small', { className: 'muted', textContent: note }) : null));
-    return d;
-  };
-  const lookupBox = make('div', { className: 'hz-lookup' });
-
-  function renderDictBar() {
-    const han = [...model.text].filter(isHan).join('');
-    const reading = model.pinyin;
-    const level = lowestLevel(lookup);
-    const strokes = Object.values(model.data).reduce((n, d) => n + d.strokes.length, 0);
-    const head = make('div', { className: 'hz-dict-head' },
-      make('strong', { className: 'hz-dict-chars zh-cjk', textContent: model.text || '—' }),
-      reading ? syllables(reading, model.text, say) : null,
-      han ? listenButton(han, say, { reading: [...han].length === 1 ? reading : '', script: model.script }) : null,
-      han ? favouriteButton(han, { reading, status: (msg, bad) => shell.say(msg, bad) }) : null,
-      make('span', { className: 'pk-spacer' }),
-      level ? make('span', { className: 'zh-lk-level', textContent: levelLabel(level) }) : null,
-      strokes ? make('span', { className: 'muted', textContent: `${strokes} strokes` }) : null,
-    );
-    const gloss = model.gloss
-      ? make('div', { className: 'hz-dict-gloss', textContent: model.gloss, title: `On the page: ${model.gloss}` })
-      : make('div', { className: 'hz-dict-gloss muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up the meaning…' });
-    dictBar.replaceChildren(head, gloss);
-  }
-
-  // The side panel's look-up: Meanings (each one put on the page or taken off with a click),
-  // Forms, Structure and Words with it, each collapsible.
-  function renderLookup() {
-    renderDictBar();
-    const parts = [];
-    // One toggle per meaning (a dictionary gloss can hold several: "hello; hi").
-    const meanings = meaningsOf(lookup, model.text).map((m) => ({ ...m, gloss: [...new Set(m.gloss.flatMap(splitGloss))] }));
-    const all = [...new Set(meanings.flatMap((m) => m.gloss))];
-    const onPage = pageMeanings();
-    // ── Meanings: a scrolling box of toggles, the quick choices as icons ──
-    const tool = (name, label, run, disabled = false) => {
-      const b = button(name, label, { iconOnly: true });
-      b.classList.add('hz-tool');
-      b.disabled = disabled;
-      b.onclick = run;
-      return b;
+  const traceLink = (t) => make('button', { type: 'button', className: 'zh-lk-link zh-cjk', textContent: t, title: `Trace ${t}`, onclick: () => trace(t) });
+  // The favourite star of the characters (the look-up panel's favourites).
+  function starButton(hanzi) {
+    const b = make('button', { type: 'button', className: 'star-toggle zh-lk-star' }, icon('star'));
+    const paint = (on) => { b.setAttribute('aria-pressed', String(on)); b.title = on ? `Remove ${hanzi} from favorites` : `Add ${hanzi} to favorites`; b.setAttribute('aria-label', b.title); };
+    paint(false);
+    const client = () => import('../../chinese/client.js').then(({ chinese }) => chinese());
+    client().then((zh) => zh.isFavorite(hanzi, model.pinyin)).then(paint, () => { b.hidden = true; });
+    b.onclick = async () => {
+      try {
+        const res = await (await client()).toggleFavorite(hanzi, model.pinyin, model.gloss);
+        paint(res.starred);
+        shell.say(res.starred ? `${hanzi} added to favorites.` : `${hanzi} removed from favorites.`);
+      } catch (e) { shell.say(e.message, true); }
     };
-    const tools = make('div', { className: 'hz-tools' },
-      all.length ? tool('restart', `The first ${Math.min(PAGE_GLOSSES, all.length)} on the page, as when it was inserted`, () => setPageMeanings(pageGloss(all).split('; '))) : null,
-      all.length ? tool('doubleCheck', 'Every meaning on the page (long ones wrap to three lines)', () => setPageMeanings(all), onPage.length === all.length) : null,
-      all.length ? tool('close', 'No meaning on the page', () => setPageMeanings([]), !onPage.length) : null,
-      make('span', { className: 'pk-spacer' }),
-      langSwitch,
-    );
-    const meaningsSec = sectionBox('meanings', 'Meanings', { note: all.length ? `${onPage.length} of ${all.length} on the page` : '' });
-    meaningsSec.append(tools);
-    if (all.length) {
-      const list = make('ol', { className: 'zh-lk-meanings hz-defs-list' });
-      for (const m of meanings) {
-        const li = make('li', {}, make('span', { className: 'hz-defs-reading', textContent: m.pinyin }));
-        for (const g of m.gloss) {
-          const on = onPage.includes(g);
-          const chip = make('button', { type: 'button', className: 'hz-def', textContent: g, title: on ? 'On the page: click to take it off' : 'Click to put it on the page' });
-          chip.setAttribute('aria-pressed', String(on));
-          chip.onclick = () => setPageMeanings(on ? pageMeanings().filter((x) => x !== g) : [...pageMeanings(), g]);
-          li.append(chip);
-        }
-        list.append(li);
-      }
-      meaningsSec.append(make('div', { className: 'hz-defs-box', tabIndex: 0, ariaLabel: 'Meanings: click one to put it on the page or take it off' }, list));
-    } else {
-      meaningsSec.append(make('small', { className: 'muted', textContent: lookup || !model.text ? 'Nothing in the dictionary.' : 'Looking up…' }));
-    }
-    parts.push(meaningsSec);
-    // ── Forms: trace the other forms, or compare one beside it ──
-    // While two forms are compared, the forms of the first one (the pair has none of its own).
-    const forms = compareBase && compareForms ? compareForms : lookup ? formsOf(lookup, model.text) : [];
-    if (forms.length) {
-      const sec = sectionBox('forms', 'Forms');
-      sec.append(...formRows(forms, link));
-      const baseFirst = compareBase || ([...model.text].find(isHan) || '');
-      const altFirst = forms.flatMap((f) => f.chars).find((c) => [...c].length === 1 && c !== baseFirst);
-      if (baseFirst && altFirst) {
-        const both = `${baseFirst}${altFirst}`, comparing = model.text === both;
-        const compareBtn = button('split', comparing ? `Stop comparing ${baseFirst}/${altFirst}` : `Compare ${baseFirst}/${altFirst}`, { title: comparing ? `Back to ${baseFirst}` : `Trace ${baseFirst} and ${altFirst} side by side` });
-        compareBtn.setAttribute('aria-pressed', String(comparing));
-        compareBtn.onclick = () => {
-          if (comparing) { const back = compareBase || baseFirst; trace(back); return; }
-          compareBase = baseFirst;
-          compareForms = forms;
-          if (charInputEl) charInputEl.value = both;
-          change({ text: both }, true);
-        };
-        sec.append(make('div', { className: 'zh-lk-row hz-compare' }, compareBtn));
-      }
-      parts.push(sec);
-    }
-    // ── Structure: each character's radical, parts and how it was made ──
-    const structure = charLookups.map(({ char, info }) => ({ char, rows: structureRows(info, link) })).filter((x) => x.rows.length);
+    return b;
+  }
+  // Structure (each character) and Words with it (one character), collapsible.
+  function renderLookup() {
+    const parts = [];
+    const structure = charLookups.map(({ char, info }) => ({ char, rows: structureRows(info, traceLink) })).filter((x) => x.rows.length);
     if (structure.length) {
       const sec = sectionBox('structure', 'Structure');
       for (const { char, rows } of structure) {
@@ -230,12 +168,11 @@ export function open(root, { spec, editing, host }) {
       }
       parts.push(sec);
     }
-    // ── Words with it (one character) ──
     if (lookup?.words?.length && [...model.text].length === 1) {
       const sec = sectionBox('words', `Words with ${model.text} (${lookup.words.length})`, { open: false });
       const ul = make('ul', { className: 'zh-lk-words hz-words' });
       for (const w of lookup.words) {
-        const li = make('li', {}, link(w.text), listenButton(w.text, say, { script: model.script, small: true }), syllables(w.pinyin, w.text, say), make('span', { className: 'zh-lk-gloss', textContent: w.gloss || '' }));
+        const li = make('li', {}, traceLink(w.text), listenButton(w.text, say, { script: model.script, small: true }), syllables(w.pinyin, w.text, say), make('span', { className: 'zh-lk-gloss', textContent: w.gloss || '' }));
         if (w.level) li.append(make('span', { className: 'zh-lk-level', textContent: levelLabel(w.level) }));
         ul.append(li);
       }
@@ -243,20 +180,136 @@ export function open(root, { spec, editing, host }) {
       parts.push(sec);
     }
     lookupBox.replaceChildren(...parts);
-    renderMissing();
   }
-  // No local stroke order: a link to look each one up elsewhere.
-  function renderMissing() {
+  if (editing && (model.lang === 'es' || model.lang === 'en') && model.lang !== zhLang()) setZhLang(model.lang);
+  // es | en: the meanings again in the other language (updating the caption & trace SVG preview too).
+  const langSwitch = langToggle({ onChange: (lang) => { glossAuto = true; model = normalize({ ...model, lang }); load(false); } });
+  const pageMeanings = () => (model.gloss || '').split(/\s*;\s*/).filter(Boolean);
+  function setPageMeanings(list) {
+    glossAuto = false;
+    change({ gloss: list.join('; ') }, false);
+    renderDictBar();
+  }
+  function renderDictBar() {
+    const variantChars = [...new Set((model.variants.match(/\p{Script=Han}/gu) || []))];
+    dictBar.replaceChildren();
+    const meanings = meaningsOf(lookup, model.text);
+    const all = [...new Set(meanings.flatMap((m) => m.gloss))];
+    const onPage = pageMeanings();
+    const han = [...model.text].filter(isHan).join('');
+    const level = lowestLevel(lookup);
+    const headRow = make('div', { className: 'hz-dict-head' },
+      make('strong', { className: 'hz-dict-chars', textContent: model.text || '—' }),
+      model.pinyin ? syllables(model.pinyin, model.text, say) : null,
+      han ? listenButton(han, say, { reading: [...han].length === 1 ? model.pinyin : '', script: model.script }) : null,
+      han ? starButton(han) : null,
+      level ? make('span', { className: 'zh-lk-level', textContent: levelLabel(level) }) : null,
+      model.gloss
+        ? make('span', { className: 'hz-dict-gloss', textContent: model.gloss, title: `On the page: ${model.gloss}` })
+        : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up the meaning…' }),
+    );
+    dictBar.append(headRow);
+    // In the side panel: non-editable, scrollable definitions box grouped by reading;
+    // clicking a meaning toggles whether it appears on the page.
+    const list = make('ol', { className: 'zh-lk-meanings hz-defs-list' });
+    for (const m of meanings) {
+      const li = make('li', {}, m.pinyin ? make('span', { className: 'hz-defs-reading', textContent: m.pinyin }) : null);
+      for (const g of m.gloss) {
+        const on = onPage.includes(g);
+        const chip = make('button', { type: 'button', className: 'hz-def', textContent: g, title: on ? 'On the page: click to take it off' : 'Click to put it on the page' });
+        chip.setAttribute('aria-pressed', String(on));
+        chip.onclick = () => setPageMeanings(on ? pageMeanings().filter((x) => x !== g) : [...pageMeanings(), g]);
+        li.append(chip);
+      }
+      list.append(li);
+    }
+    const defsScroll = make('div', { className: 'hz-defs-box', role: 'region', ariaLabel: 'Dictionary definitions' },
+      all.length ? list : make('small', { className: 'muted', textContent: lookup || !model.text ? 'No dictionary definitions found.' : 'Looking up…' }),
+    );
+    const quick = make('div', { className: 'pk-row hz-defs-tools' });
+    if (all.length) {
+      const few = button('restart', `The first ${Math.min(3, all.length)} on the page, as when it was inserted`, { iconOnly: true });
+      few.onclick = () => setPageMeanings(pageGloss(all).split('; '));
+      const every = button('doubleCheck', 'Every meaning on the page (long ones wrap to three lines)', { iconOnly: true });
+      every.disabled = onPage.length === all.length;
+      every.onclick = () => setPageMeanings(all);
+      const none = button('close', 'No meaning on the page', { iconOnly: true });
+      none.disabled = !onPage.length;
+      none.onclick = () => setPageMeanings([]);
+      quick.append(few, every, none);
+    }
+    // replaceChildren() would write a null child as the text "null": leave it out instead.
+    if (all.length) quick.append(make('span', { className: 'pk-spacer' }), make('small', { className: 'muted', textContent: `${onPage.length} of ${all.length} on the page` }));
+    defsBox.replaceChildren(...[
+      make('div', { className: 'hz-defs-head' }, all.length ? quick : make('span'), langSwitch),
+      defsScroll,
+    ]);
+    const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));
+    if (model.variants || cleanVariants.length) {
+      const varRow = make('div', { className: 'hz-variants' },
+        make('span', { className: 'muted', textContent: model.variants || 'Variants (click to trace):' }),
+      );
+      for (const vc of cleanVariants) {
+        if (!vc) continue;
+        const active = model.text === vc;
+        const chip = make('button', {
+          type: 'button',
+          className: `pk-button${active ? ' is-active' : ''}`,
+          textContent: `Trace ${vc}`,
+          title: `Show stroke trace for variant ${vc}`,
+          onclick: () => {
+            compareBase = '';
+            pinyinAuto = true; glossAuto = true; variantsAuto = true;
+            if (charInputEl) charInputEl.value = vc;
+            change({ text: vc, pinyin: '', gloss: '', variants: '' }, true);
+          },
+        });
+        chip.setAttribute('aria-pressed', String(active));
+        varRow.append(chip);
+      }
+      const baseFirst = compareBase || ([...model.text].find(isHan) || '');
+      const altFirst = cleanVariants.find((c) => c !== baseFirst);
+      if (baseFirst && altFirst && baseFirst !== altFirst) {
+        const both = `${baseFirst}${altFirst}`;
+        const comparing = model.text === both;
+        const compareBtn = make('button', {
+          type: 'button',
+          className: `pk-button${comparing ? ' is-active' : ''}`,
+          textContent: `Compare ${baseFirst}/${altFirst}`,
+          title: comparing ? `Stop comparing and return to ${baseFirst}` : `Compare stroke traces for ${baseFirst} and ${altFirst} side-by-side`,
+          onclick: () => {
+            if (comparing) {
+              const restore = compareBase || baseFirst;
+              compareBase = '';
+              pinyinAuto = true; glossAuto = true; variantsAuto = true;
+              if (charInputEl) charInputEl.value = restore;
+              change({ text: restore, pinyin: '', gloss: '', variants: '' }, true);
+            } else {
+              compareBase = baseFirst;
+              if (charInputEl) charInputEl.value = both;
+              change({ text: both }, true);
+            }
+          },
+        });
+        compareBtn.setAttribute('aria-pressed', String(comparing));
+        varRow.append(compareBtn);
+      }
+      dictBar.append(varRow);
+    }
     const missing = [...new Set(model.text)].filter((c) => isHan(c) && !model.data[c]);
-    ybWrap.replaceChildren(...missing.map((ch) => make('button', {
-      type: 'button',
-      className: 'pk-button hz-yb-btn',
-      textContent: `Look up ${ch} on YellowBridge ↗`,
-      title: `No local stroke order for ${ch}: look it up on YellowBridge`,
-      onclick: () => window.open(yellowBridgeUrl(ch), '_blank', 'noopener,noreferrer'),
-    })));
-    // Nothing animates without stroke data: no still copy beside it then.
-    stillBtn.hidden = !!drill || !Object.keys(model.data).length;
+    ybWrap.replaceChildren();
+    if (missing.length) {
+      for (const ch of missing) {
+        const ybBtn = make('button', {
+          type: 'button',
+          className: 'pk-button hz-yb-btn',
+          textContent: `Look up ${ch} on YellowBridge ↗`,
+          title: `No local stroke order for ${ch} — look up stroke order on YellowBridge`,
+          onclick: () => window.open(yellowBridgeUrl(ch), '_blank', 'noopener,noreferrer'),
+        });
+        ybWrap.append(ybBtn);
+      }
+    }
   }
 
   function renderSheetPreview() {
@@ -273,7 +326,7 @@ export function open(root, { spec, editing, host }) {
     practiseBtn.replaceChildren(...button('draw', 'Practise').childNodes);
     pageBtn.hidden = false;
     renderSheetPreview();
-    renderMissing();
+    stillBtn.hidden = !Object.keys(model.data).length;
     player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, still, colour: model.colour, start: model.step === null ? (autoplay ? 0 : 'all') : model.step, autoplay });
     player.ready.then(() => {
       sayMissing();
@@ -325,7 +378,7 @@ export function open(root, { spec, editing, host }) {
       const raw = charInput.value.trim();
       if (!raw) return;
       const hanOnly = [...raw].filter(isHan).join('');
-      const latinMatches = raw.match(/[a-zA-ZüÜvV]+[1-5]?/g);
+      const latinMatches = raw.match(/[a-zA-ZüÜvVāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ0-5']+/gu);
       if (hanOnly && !latinMatches) {
         charInput.value = hanOnly;
         pinyinAuto = true; glossAuto = true; variantsAuto = true;
@@ -336,8 +389,8 @@ export function open(root, { spec, editing, host }) {
         const key = latinMatches.join('').toLowerCase().replace(/v/g, 'ü');
         try {
           const { chinese } = await import('../../chinese/client.js');
-          const list = await chinese().candidates(key, { script: model.script, limit: 5 });
-          const top = list?.[0]?.text || '';
+          const res = await chinese().candidates(key, { script: model.script, limit: 5 });
+          const top = res?.items?.[0]?.text || '';
           const combined = (hanOnly + top).slice(0, MAX_CHARS);
           if (combined) {
             charInput.value = combined;
@@ -365,7 +418,8 @@ export function open(root, { spec, editing, host }) {
     charInput.style.flex = '1';
 
     shell.panel.replaceChildren(
-      field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/ā/A icon to switch input mode (remembered)`),
+      field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/A icon to toggle Chinese input (remembered)`),
+      meaningsSection,
       lookupBox,
       pageSection(),
     );
@@ -385,11 +439,14 @@ export function open(root, { spec, editing, host }) {
   let loading = 0;
   async function load(show = true, autoplay = false) {
     const ticket = ++loading;
+    const activeLang = zhLang();
     lookup = null;
     charLookups = [];
+    renderDictBar();
     renderLookup();
     const { spec: next, lookup: found } = await dictionaryFor({
       ...model,
+      lang: activeLang,
       pinyin: pinyinAuto ? '' : model.pinyin,
       gloss: glossAuto ? '' : model.gloss,
       variants: variantsAuto ? '' : model.variants,
@@ -400,12 +457,15 @@ export function open(root, { spec, editing, host }) {
     if (ticket !== loading) return;
     model = normalize({
       ...model,
+      lang: activeLang,
       data: next.data,
       pinyin: pinyinAuto && next.pinyin ? next.pinyin : model.pinyin,
       gloss: glossAuto && next.gloss ? next.gloss : model.gloss,
       variants: variantsAuto && next.variants ? next.variants : model.variants,
     });
+    renderDictBar();
     renderLookup();
+    renderSheetPreview();
     if (show) showPlayer(autoplay);
   }
   // Each character's own look-up, for Structure (one character: the text's).
@@ -429,7 +489,6 @@ export function open(root, { spec, editing, host }) {
     if (text) { clearTimeout(timer); timer = setTimeout(() => load(true, true), 250); }
     else {
       renderSheetPreview();
-      renderDictBar();
       if (player && ('grid' in next || 'outline' in next || 'colour' in next)) player.set({ grid: model.grid, outline: model.outline, colour: model.colour });
     }
   }
@@ -442,7 +501,7 @@ export function open(root, { spec, editing, host }) {
     panel();
     // Other characters: their own look-up (the list of meanings) and strokes.
     if (model.text !== before) { pinyinAuto = glossAuto = variantsAuto = false; load(true); return; }
-    renderLookup();
+    renderDictBar();
     showPlayer();
   }
   function finish(step) {

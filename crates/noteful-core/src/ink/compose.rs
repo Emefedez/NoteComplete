@@ -615,6 +615,7 @@ impl Composer {
             layer: 0,
             joined: false,
             part: None,
+            under: false,
             text: Some(crate::TextBox {
                 text: clean.to_owned(),
                 font_size,

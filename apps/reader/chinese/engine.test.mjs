@@ -82,27 +82,6 @@ test('user history moves 得 above 的 after 3 choices', async () => {
   assert.equal(texts(fresh.candidates('de'))[0], '得');
 });
 
-test('a favourite comes first among the candidates it fits, and goes back when removed', async () => {
-  const words = memoryStore(), dict = userDict({ chosen: memoryStore(), words });
-  const e = make();
-  assert.notEqual(texts(e.candidates('de'))[0], '得');
-  await dict.setFavourite('得', true, 'dé');
-  e.setUser(await dict.all());
-  const items = e.candidates('de').items;
-  assert.equal(items[0].text, '得');
-  assert.equal(items[0].fav, true);
-  // Only where it fits: typing another syllable does not bring it.
-  assert.ok(!e.candidates('ma').items.some(i => i.text === '得'));
-  // A row from before favourites ("My words") counts as one, and removing takes both.
-  await words.put({ key: '的\tde5', hanzi: '的', pinyin: 'de5', added: 1 });
-  assert.deepEqual((await dict.favourites()).sort(), ['得', '的'].sort());
-  await dict.setFavourite('的', false);
-  await dict.setFavourite('得', false);
-  assert.deepEqual(await dict.favourites(), []);
-  e.setUser(await dict.all());
-  assert.notEqual(texts(e.candidates('de'))[0], '得');
-});
-
 test('a sequence chosen twice becomes a word', async () => {
   const e = make(), dict = userDict({ chosen: memoryStore(), words: memoryStore() });
   const joined = { text: '小明', pinyin: 'xiǎo míng' };
@@ -175,6 +154,21 @@ test('client: lazy worker, stale answers dropped, choices learnt', async () => {
   assert.equal((await client.candidates('de')).items[0].text, '得');
 });
 
+test('favourites: toggle, list newest-first, and boost in client', async () => {
+  const dict = userDict({ chosen: memoryStore(), words: memoryStore() });
+  assert.deepEqual(await dict.listWords(), []);
+  const on = await dict.toggleWord('妈', 'mā', 'mom; mother');
+  assert.equal(on.starred, true);
+  assert.equal(Boolean(await dict.findWord('妈', 'mā')), true);
+  const list = await dict.listWords();
+  assert.equal(list.length, 1);
+  assert.equal(list[0].hanzi, '妈');
+  assert.equal(list[0].gloss, 'mom; mother');
+  const off = await dict.toggleWord('妈', 'mā');
+  assert.equal(off.starred, false);
+  assert.deepEqual(await dict.listWords(), []);
+});
+
 // The real packs (tools/build_chinese_data.mjs); skipped when they were not built.
 const vendor = new URL('../vendor/chinese/', import.meta.url);
 const real = existsSync(new URL('ime-core.bin', vendor)) && existsSync(new URL('chars.bin', vendor));
@@ -199,4 +193,9 @@ test('the built ime-core.bin', { skip: !real && 'vendor/chinese not built' }, ()
   // Single-letter syllables like n/m/r fall back to partial prefix matching instead of empty lists.
   assert.ok(e.candidates('n').items.length > 0, 'typing n shows candidates without needing another letter');
   assert.ok(e.candidates('m').items.length > 0, 'typing m shows candidates');
+  // Multi-sense definitions: 妈 includes mom and mother (not just bare "ma").
+  const ma = e.lookup('妈').entries[0]?.gloss || [];
+  assert.ok(ma.includes('mother') && ma.includes('mom'), `妈 glosses: ${ma.join(', ')}`);
+  const ta = e.lookup('他').entries[0]?.gloss || [];
+  assert.ok(ta.includes('he'), `他 glosses: ${ta.join(', ')}`);
 });

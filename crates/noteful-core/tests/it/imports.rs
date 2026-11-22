@@ -1,7 +1,7 @@
 use noteful_core::{Adjustment, Editor, Image, Package};
 
 fn image() -> Image {
-    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0, text: None, joined: false, part: None }
+    Image { base64:"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=".into(),mime:"image/png".into(),bounds:[20.,30.,120.,80.],layer:0, text: None, joined: false, part: None, under: false }
 }
 
 #[test]
@@ -119,6 +119,7 @@ fn text_boxes_render_edit_move_and_export_as_native_text() {
         text: Some(t),
         joined: false,
         part: None,
+        under: false,
     };
     assert!(editor.add_image(0, image(text("  "))).is_err());
     editor.add_image(0, image(text("Hola\nmundo"))).unwrap();
@@ -217,6 +218,7 @@ fn text_box_line_height_spaces_lines_and_survives_native_export() {
         text: Some(t),
         joined: false,
         part: None,
+        under: false,
     };
     // Out of range: under half the size.
     assert!(editor.add_image(0, image(text(Some(5.)))).is_err());
@@ -282,6 +284,7 @@ fn text_box_spans_keep_bold_words_and_their_fonts_through_native_export() {
         text: Some(t),
         joined: false,
         part: None,
+        under: false,
     };
     // The lengths must cover the text exactly.
     assert!(editor

@@ -208,6 +208,20 @@ export class SelectionController {
    }).catch(e=>{if(token===this.token){this.status(e.message,true);this.clear();}});
   }return true;
  }
+ // Direct move of a known item (e.g. holding or dragging a text box while in Text mode).
+ dragItem(event,p,item,{keepTool=false}={}){
+  if(!this.editable()||!p?.view||!item)return false;
+  this.clear();
+  this.item=item;
+  this.inspect();
+  this.render(p);
+  const at=this.coords(event,p);
+  const g={id:event.pointerId,p,start:at,current:at,startClient:[event.clientX,event.clientY],currentClient:[event.clientX,event.clientY],ended:false,mode:'move',item:clone(item),clearAfter:keepTool};
+  this.active=g;
+  try{p.el.setPointerCapture(event.pointerId);}catch{}
+  this.begin(g);
+  return true;
+ }
  begin(g){
   // A move may carry it over another page: it stays drawn above the pages until let go.
   if(g.mode==='move')g.p.el.classList.add('moving-items');
@@ -265,7 +279,9 @@ export class SelectionController {
    }else{
     g.element?.removeAttribute('transform');this.previewElement=null;
    }
-   g.p.el.classList.remove('moving-items');this.render(g.p);return;
+   g.p.el.classList.remove('moving-items');
+   if(g.clearAfter)this.clear();else this.render(g.p);
+   return;
   }
   // Let go over another page: the items move there (the host takes them across).
   if(g.mode==='move'&&this.dropTo){
@@ -283,7 +299,8 @@ export class SelectionController {
    }
   }
   g.p.el.classList.remove('moving-items');
-  this.commit(this.adjustment(g));
+  const done=this.commit(this.adjustment(g));
+  if(g.clearAfter)Promise.resolve(done).finally(()=>this.clear());
  }
  lostCapture(p){if(this.active?.p===p&&!this.active.ended)this.cancel();}
  cancel(){

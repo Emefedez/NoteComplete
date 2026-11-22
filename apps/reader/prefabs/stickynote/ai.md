@@ -1,0 +1,1 @@
+- Sticky note: {"type":"stickynote","module":"stickynote","color":"#fae778","title":"Reminder","text":"Key formula or note","author":"","fontSize":15,"fold":true,"lines":false,"width":256,"height":256} — coloured sticky note card drawn under handwriting (leave text empty for handwritten sticky notes).

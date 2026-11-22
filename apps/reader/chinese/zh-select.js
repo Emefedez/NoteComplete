@@ -8,8 +8,11 @@
 //                              openTracePrefab(text), status(msg, bad) }
 //   openTranslation(text, { near })
 import { icon } from '../icons.js';
-import { HAN, hasHan, lookUp, listen, lookupable } from './zh-menu.js';
-import { translate, translateMany, isPinyin, pinyinToHanzi, alignWords, zhLang, ALIGN_COLOURS } from './translate.js';
+import { HAN, hasHan, lookUp, listen, lookupable, editableReplacer } from './zh-menu.js';
+import {
+  translate, translateMany, isPinyin, pinyinToHanzi, alignWords, zhLang, ALIGN_COLOURS,
+  TRANSLATE_LANGUAGES, favoriteTranslateLangs, toggleFavoriteTranslateLang, translateLangInfo,
+} from './translate.js';
 
 let host = {};
 const MAX = 2000;
@@ -48,7 +51,7 @@ function iconButton(name, title, run) {
   return b;
 }
 // Also for text found another way (the grab tool's region): `rect` in client pixels.
-export function showBar(text, rect, near = null, selection = false) {
+export function showBar(text, rect, near = null, selection = false, replace = null) {
   fromSelection = selection;
   if (!bar) {
     bar = el('div', 'grab-menu grab-icons zh-select-bar');
@@ -58,25 +61,28 @@ export function showBar(text, rect, near = null, selection = false) {
   }
   const han = [...text].filter((c) => HAN.test(c)).join('');
   const shortText = [...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text;
-  bar.replaceChildren(
-    iconButton('translate', `Translate “${shortText}”`, (t) => openTranslation(t, { near })),
+  bar.replaceChildren(...[
+    iconButton('translate', `Translate “${shortText}”`, (t) => openTranslation(t, { near, replace })),
     lookupable(text) && iconButton('search', `Look up ${text.trim()}`, (t) => lookUp(t.trim(), {}, near)),
     han && [...han].length <= 12 && host.openTracePrefab && iconButton('draw', `Stroke order of ${[...han].slice(0, 12).join('')}`, () => host.openTracePrefab([...han].slice(0, 12).join(''))),
     han && iconButton('speaker', `Listen to ${shortText}`, (t) => listen(t.trim())),
-  );
-  for (const b of [...bar.children]) if (!(b instanceof Element)) b.remove();
+  ].filter(Boolean));
   barFor = text;
   // In the open modal dialog the selection is in, so it shows over it.
   const dialog = near?.closest?.('dialog[open]');
   if (dialog && bar.parentElement !== dialog) dialog.append(bar);
   else if (!dialog && bar.parentElement !== document.body) document.body.append(bar);
   bar.hidden = false;
+  const zRaw = parseFloat(document.documentElement.style.zoom);
+  const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+  const vw = innerWidth / z, vh = innerHeight / z;
   const w = bar.offsetWidth || 140, h = bar.offsetHeight || 36;
-  const below = rect.bottom + 8 + h < innerHeight;
+  const rTop = rect.top / z, rBot = rect.bottom / z, rRight = rect.right / z;
+  const below = rBot + 8 + h < vh;
   Object.assign(bar.style, {
     position: 'fixed',
-    left: `${Math.max(8, Math.min(innerWidth - w - 8, rect.right - w / 2))}px`,
-    top: `${below ? rect.bottom + 8 : Math.max(8, rect.top - h - 8)}px`,
+    left: `${Math.max(8, Math.min(vw - w - 8, rRight - w / 2))}px`,
+    top: `${below ? rBot + 8 : Math.max(8, rTop - h - 8)}px`,
   });
 }
 
@@ -88,7 +94,17 @@ function currentSelection(lastPointer) {
     if (a == null || a === b) return null;
     const r = active.getBoundingClientRect();
     const [x, y] = lastPointer || [r.right, r.top];
-    return { text: active.value.slice(a, b), rect: { left: x, right: x, top: Math.max(r.top, y - 10), bottom: Math.min(r.bottom, y + 10) }, near: active };
+    return {
+      text: active.value.slice(a, b),
+      rect: { left: x, right: x, top: Math.max(r.top, y - 10), bottom: Math.min(r.bottom, y + 10) },
+      near: active,
+      replace: async (to) => {
+        active.focus();
+        active.setSelectionRange(a, b);
+        if (!document.execCommand('insertText', false, to)) active.setRangeText(to, a, b, 'end');
+        active.dispatchEvent(new Event('input', { bubbles: true }));
+      },
+    };
   }
   const sel = getSelection();
   if (!sel?.rangeCount || sel.isCollapsed) return null;
@@ -98,7 +114,9 @@ function currentSelection(lastPointer) {
   const text = (near.closest('.sheet') && host.pageText?.(sel)) || selectionText(sel);
   const rects = [...range.getClientRects()].filter((r) => r.width || r.height);
   const rect = rects.at(-1) || range.getBoundingClientRect();
-  return { text, rect, near };
+  const editable = near.closest?.('[contenteditable="true"], [contenteditable=""]');
+  const replace = editable ? editableReplacer(editable, range, text) : null;
+  return { text, rect, near, replace };
 }
 
 export function installZhSelection(h = {}) {
@@ -111,7 +129,7 @@ export function installZhSelection(h = {}) {
       const text = String(s?.text || '').trim();
       if (!s || !text || text.length > MAX || !(hasHan(text) || isPinyin(text))) return fromSelection && hideBar();
       if (text === barFor && !bar?.hidden) return;
-      showBar(text, s.rect, s.near, true);
+      showBar(text, s.rect, s.near, true, s.replace);
     }, 30);
   };
   document.addEventListener('pointerup', (e) => { pointer = [e.clientX, e.clientY]; if (!e.target.closest?.('.zh-select-bar')) check(); }, true);
@@ -128,24 +146,94 @@ const COLOUR_KEY = 'notecomplete-zh-colours';
 const coloursWanted = () => { try { return localStorage.getItem(COLOUR_KEY) === '1'; } catch { return false; } };
 const wantColours = (on) => { try { localStorage.setItem(COLOUR_KEY, on ? '1' : '0'); } catch { /* Not kept. */ } };
 
-export async function openTranslation(text, { near = null } = {}) {
+export async function openTranslation(text, { near = null, to = null, openSearch = false, replace = null } = {}) {
   text = String(text || '').trim().slice(0, MAX);
   if (!text) return null;
-  const { zhWindow, langToggle } = await import('./zh-window.js');
+  const { zhWindow } = await import('./zh-window.js');
   win?.close();
-  const w = zhWindow({ key: 'zh-translate', title: 'Translate', width: 460, tall: 560, near, onClose: () => { if (win === w) win = null; } });
+  const w = zhWindow({ key: 'zh-translate', title: 'Translate', width: 480, tall: 580, near, onClose: () => { if (win === w) win = null; } });
   win = w;
   w.el.classList.add('zh-translate');
   let token = 0, source = text, words = null, result = null, colours = false;
+  let targetLang = to || zhLang() || favoriteTranslateLangs()[0] || 'es';
   const status = (msg, bad = false) => host.status?.(msg, bad);
   const head = el('div', 'zh-tr-head');
+  const langBar = el('div', 'zh-tr-langs');
+  langBar.setAttribute('role', 'group');
+  langBar.setAttribute('aria-label', 'Favorite translation languages');
+  const searchBtn = el('button', 'icon-button zh-tr-search-btn');
+  searchBtn.type = 'button';
+  searchBtn.title = 'Search other languages and add to favorites';
+  searchBtn.setAttribute('aria-label', searchBtn.title);
+  searchBtn.setAttribute('aria-expanded', String(openSearch));
+  searchBtn.append(icon('search'));
   const by = el('small', 'muted zh-tr-by');
-  head.append(langToggle({ onChange: () => run() }), by);
+  head.append(langBar, searchBtn, by);
+
+  const searchPanel = el('div', 'zh-tr-search-panel');
+  searchPanel.hidden = !openSearch;
+  const searchInput = document.createElement('input');
+  searchInput.type = 'search';
+  searchInput.className = 'zh-tr-search-input';
+  searchInput.placeholder = 'Search languages (French, Japanese, German…)';
+  searchInput.setAttribute('aria-label', 'Search translation languages');
+  const searchList = el('div', 'zh-tr-lang-list');
+  searchPanel.append(searchInput, searchList);
+
+  function renderLangBar() {
+    const favs = favoriteTranslateLangs();
+    const shown = favs.includes(targetLang) ? favs : [...favs, targetLang];
+    langBar.replaceChildren(...shown.map((code) => {
+      const info = translateLangInfo(code);
+      const b = el('button', 'zh-tr-lang-btn', info.native);
+      b.type = 'button';
+      b.title = `Translate to ${info.name} (${info.native})`;
+      b.setAttribute('aria-pressed', String(code === targetLang));
+      b.onclick = () => { targetLang = code; renderLangBar(); renderSearchList(); run(); };
+      return b;
+    }));
+  }
+  function renderSearchList() {
+    const q = searchInput.value.trim().toLowerCase();
+    const favs = new Set(favoriteTranslateLangs());
+    const matches = TRANSLATE_LANGUAGES.filter((l) => !q || l.name.toLowerCase().includes(q) || l.native.toLowerCase().includes(q) || l.code.toLowerCase().includes(q));
+    searchList.replaceChildren(...matches.map((l) => {
+      const row = el('div', 'zh-tr-lang-row');
+      const pick = el('button', 'zh-tr-lang-pick');
+      pick.type = 'button';
+      pick.setAttribute('aria-pressed', String(l.code === targetLang));
+      pick.append(el('strong', '', l.native), el('small', 'muted', l.name !== l.native ? l.name : ''));
+      pick.onclick = () => { targetLang = l.code; searchPanel.hidden = true; searchBtn.setAttribute('aria-expanded', 'false'); renderLangBar(); run(); };
+      const star = el('button', 'star-toggle zh-tr-lang-star');
+      star.type = 'button';
+      const isFav = favs.has(l.code);
+      star.setAttribute('aria-pressed', String(isFav));
+      star.title = isFav ? `Remove ${l.name} from favorites` : `Add ${l.name} to favorites`;
+      star.setAttribute('aria-label', star.title);
+      star.append(icon('star'));
+      star.onclick = (e) => {
+        e.stopPropagation();
+        toggleFavoriteTranslateLang(l.code);
+        renderLangBar();
+        renderSearchList();
+      };
+      row.append(pick, star);
+      return row;
+    }));
+  }
+  searchBtn.onclick = () => {
+    searchPanel.hidden = !searchPanel.hidden;
+    searchBtn.setAttribute('aria-expanded', String(!searchPanel.hidden));
+    if (!searchPanel.hidden) { renderSearchList(); searchInput.focus(); }
+  };
+  searchInput.oninput = renderSearchList;
+  renderLangBar();
+  if (openSearch) { renderSearchList(); requestAnimationFrame(() => searchInput.focus()); }
+
   const from = el('p', 'muted zh-tr-from');
   const src = el('p', 'zh-tr-source zh-cjk');
-  src.lang = 'zh';
   const out = el('p', 'zh-tr-target');
-  w.body.replaceChildren(head, from, src, out);
+  w.body.replaceChildren(head, searchPanel, from, src, out);
   const colourBtn = el('button', 'zh-tr-colours');
   colourBtn.type = 'button';
   colourBtn.title = 'Colour each word and the part of the translation that says it (the dictionary on this device and one more request)';
@@ -155,7 +243,22 @@ export async function openTranslation(text, { near = null } = {}) {
   copyBtn.type = 'button';
   copyBtn.append(icon('copy'), el('span', '', 'Copy'));
   copyBtn.onclick = () => navigator.clipboard?.writeText(result?.text || '').then(() => status('Translation copied.'), () => status('Could not copy.', true));
-  w.foot.replaceChildren(colourBtn, copyBtn);
+  const replaceBtn = replace ? el('button', 'primary zh-tr-replace') : null;
+  if (replaceBtn) {
+    replaceBtn.type = 'button';
+    replaceBtn.disabled = true;
+    replaceBtn.title = 'Replace the selected text with this translation';
+    replaceBtn.append(icon('swap'), el('span', '', 'Replace'));
+    replaceBtn.onclick = async () => {
+      if (!result?.text) return;
+      try {
+        await replace(result.text);
+        status(`Replaced with ${translateLangInfo(targetLang).native} translation.`);
+        w.close();
+      } catch (e) { status(e.message, true); }
+    };
+  }
+  w.foot.replaceChildren(...[colourBtn, copyBtn, replaceBtn].filter(Boolean));
   w.foot.classList.add('zh-lk-actions');
 
   // The sentence as words (the dictionary's own split), each a link to its look-up.
@@ -202,9 +305,11 @@ export async function openTranslation(text, { near = null } = {}) {
   }
   // Colours: each word's own translation (one request for all) and, in English, its meanings.
   async function paint() {
+    const canColour = hasHan(source) && (targetLang === 'es' || targetLang === 'en');
+    colourBtn.hidden = !canColour;
     colourBtn.setAttribute('aria-pressed', String(colours));
-    if (!colours || !result) { drawSource(); drawTarget(); return; }
-    const mine = token, lang = zhLang();
+    if (!canColour || !colours || !result) { drawSource(); drawTarget(); return; }
+    const mine = token, lang = targetLang;
     colourBtn.disabled = true;
     try {
       const han = words.filter((wd) => HAN.test(wd.text));
@@ -224,17 +329,21 @@ export async function openTranslation(text, { near = null } = {}) {
   }
   async function run() {
     const mine = ++token;
+    if (replaceBtn) replaceBtn.disabled = true;
     out.replaceChildren(el('span', 'muted', 'Translating…'));
     by.textContent = '';
     try {
-      result = await translate(source, { to: zhLang() });
+      const srcLang = hasHan(source) ? 'zh-CN' : 'auto';
+      result = await translate(source, { from: srcLang, to: targetLang });
       if (mine !== token) return;
       by.textContent = result.by === 'MyMemory' ? 'MyMemory' : 'Google Translate';
+      if (replaceBtn) replaceBtn.disabled = !result?.text;
       drawTarget();
-      if (colours) paint();
+      paint();
     } catch (e) {
       if (mine !== token) return;
       result = null;
+      if (replaceBtn) replaceBtn.disabled = true;
       out.replaceChildren(el('span', 'muted', e.message));
     }
   }

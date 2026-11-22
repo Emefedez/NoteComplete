@@ -9,6 +9,7 @@ import {
   decryptInvite,
 } from './chunked-note.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { fileCoverSvg } from './file-covers.js';
 
 // Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
 // Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.
@@ -63,6 +64,8 @@ export const CLOUD_PROVIDERS = [
 ];
 
 function cardCoverSvg(name, badgeLabel = 'NOTE') {
+  const iconCover = fileCoverSvg(name);
+  if (iconCover) return iconCover;
   const isPdf = /\.pdf$/i.test(name);
   const color = isPdf ? '#d9534f' : '#245dc4';
   const label = isPdf ? 'PDF' : badgeLabel;
@@ -843,18 +846,157 @@ export function setupCloudGuideDialog({
     }
 
     if (provider === 'dropbox') {
+      const detectOs = () => {
+        const ua = navigator.userAgent || '';
+        const plat = navigator.userAgentData?.platform || navigator.platform || '';
+        if (/android/i.test(ua)) return 'android';
+        if (/iphone|ipad|ipod/i.test(ua) || (/mac/i.test(plat) && navigator.maxTouchPoints > 1)) return 'ios';
+        if (/win/i.test(plat) || /windows/i.test(ua)) return 'windows';
+        if (/mac/i.test(plat) || /macintosh/i.test(ua)) return 'macos';
+        return 'linux';
+      };
+      const webRedirect = (() => {
+        try { const u = new URL('dropbox-callback.html', location.href); u.search = ''; u.hash = ''; return u.href; }
+        catch { return 'https://<your-site>/dropbox-callback.html'; }
+      })();
+      const desktopRedirect = 'http://127.0.0.1:53691/dropbox-callback';
+      const copyText = async (txt, label = 'Copied') => {
+        try { await navigator.clipboard.writeText(txt); status(`${label} copied to clipboard.`); }
+        catch { status('Copy manually from the box.', true); }
+      };
+      const downloadScript = (filename, content) => {
+        const a = Object.assign(document.createElement('a'), {
+          download: filename,
+          href: URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' })),
+        });
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+        status(`Downloaded ${filename}`);
+      };
+      const PLATFORMS = {
+        windows: {
+          label: 'Windows',
+          cmd: 'winget install --id Dropbox.Dropbox -e',
+          scriptName: 'setup-dropbox-windows.ps1',
+          scriptBody: `# NoteComplete — Dropbox Setup Helper (Windows PowerShell)\r\nWrite-Host "Installing Dropbox via winget..."\r\nwinget install --id Dropbox.Dropbox -e --accept-source-agreements --accept-package-agreements\r\n$dbx = Join-Path $env:USERPROFILE "Dropbox"\r\nWrite-Host "After signing in to Dropbox, right-click '$dbx\\Noteful' -> Make available offline."\r\nWrite-Host "Then open notes in NoteComplete via File -> Open or Home -> Cloud -> Dropbox."\r\n`,
+          steps: [
+            'Install Dropbox with the command above (PowerShell / Terminal) or download the installer from <a href="https://www.dropbox.com/install" target="_blank" rel="noopener">dropbox.com/install</a>.',
+            'Sign in and let Dropbox create <code>%USERPROFILE%\\Dropbox</code>.',
+            'Right-click your <code>Noteful</code> (or course) folder in Explorer → <b>Make available offline</b>.',
+            'Open notes directly in NoteComplete via <b>Open…</b> / <b>Open folder…</b>, or use in-app OAuth (Step 1).',
+          ],
+        },
+        macos: {
+          label: 'macOS',
+          cmd: 'brew install --cask dropbox',
+          scriptName: 'setup-dropbox-macos.command',
+          scriptBody: `#!/usr/bin/env bash\nset -e\necho "NoteComplete — Dropbox Setup Helper (macOS)"\nif command -v brew >/dev/null 2>&1; then\n  brew install --cask dropbox\nelse\n  echo "Homebrew not found; opening dropbox.com/install..."\n  open "https://www.dropbox.com/install"\nfi\nopen -a Dropbox || true\necho "Sign in, then right-click ~/Library/CloudStorage/Dropbox/Noteful -> Make available offline."\n`,
+          steps: [
+            'Install Dropbox with Homebrew (command above) or download the macOS installer from <a href="https://www.dropbox.com/install" target="_blank" rel="noopener">dropbox.com/install</a>.',
+            'Open <b>Dropbox</b>, sign in, and allow Finder / File Provider integration when prompted.',
+            'In Finder, open <code>~/Library/CloudStorage/Dropbox</code>, right-click your <code>Noteful</code> folder → <b>Make available offline</b>.',
+            'Open notes in NoteComplete via <b>Open…</b> / <b>Open folder…</b>, or connect via in-app OAuth (Step 1).',
+          ],
+        },
+        linux: {
+          label: 'Linux',
+          cmd: '# Ubuntu/Debian: sudo apt install -y nautilus-dropbox   |   Arch/Omarchy: yay -S dropbox   |   Fedora: sudo dnf install -y nautilus-dropbox',
+          scriptName: 'setup-dropbox-linux.sh',
+          scriptBody: `#!/usr/bin/env bash\nset -e\necho "NoteComplete — Dropbox Setup Helper (Linux)"\nif command -v apt-get >/dev/null 2>&1; then\n  sudo apt-get update && sudo apt-get install -y nautilus-dropbox || sudo apt-get install -y rclone\nelif command -v yay >/dev/null 2>&1; then\n  yay -S --needed dropbox\nelif command -v paru >/dev/null 2>&1; then\n  paru -S --needed dropbox\nelif command -v pacman >/dev/null 2>&1; then\n  sudo pacman -S --needed rclone\nelif command -v dnf >/dev/null 2>&1; then\n  sudo dnf install -y nautilus-dropbox || sudo dnf install -y rclone\nelse\n  echo "Downloading official Dropbox daemon..."\n  cd ~ && wget -O - "https://www.dropbox.com/download?plat=lnx.x86_64" | tar xzf -\n  ~/.dropbox-dist/dropboxd &\nfi\necho "Done! Sync folder: ~/Dropbox (or configure rclone with: rclone config)"\n`,
+          steps: [
+            '<b>Ubuntu / Debian</b>: <code>sudo apt install -y nautilus-dropbox</code> (or run the auto-setup script below).',
+            '<b>Arch / Omarchy / Manjaro</b>: <code>yay -S dropbox</code> (or headless/Wayland: <code>sudo pacman -S rclone &amp;&amp; rclone config</code>).',
+            '<b>Fedora</b>: <code>sudo dnf install -y nautilus-dropbox</code> (or <code>sudo dnf install -y rclone</code>).',
+            'Run <code>dropbox start -i</code> and sign in via browser. Your synced notes appear in <code>~/Dropbox/Noteful</code> — open them in NoteComplete via <b>Open…</b> or in-app OAuth.',
+          ],
+        },
+        android: {
+          label: 'Android',
+          cmd: '',
+          scriptName: '',
+          scriptBody: '',
+          steps: [
+            '<b>Direct in-app OAuth (Web)</b>: Open NoteComplete in Chrome/Brave → <b>Home → Cloud → Dropbox → Connect Dropbox</b> (PKCE sign-in works natively in mobile browsers).',
+            '<b>Dropbox app + NoteComplete APK</b>: Install <b>Dropbox</b> from Google Play and sign in, then use NoteComplete’s <b>Open…</b> picker → choose <b>Dropbox</b> from the left sidebar to open any <code>.noteful</code> / PDF file.',
+            '<b>Two-way offline folder (optional)</b>: Install <b>Dropsync</b> or <b>FolderSync</b> from Google Play to mirror <code>/Noteful</code> to <code>Internal Storage/Documents/Noteful</code> for full offline access in the APK.',
+          ],
+        },
+        ios: {
+          label: 'iOS / iPadOS',
+          cmd: '',
+          scriptName: '',
+          scriptBody: '',
+          steps: [
+            'Install the <b>Dropbox</b> app from the App Store and sign in.',
+            'Open the Apple <b>Files</b> app → tap <b>⋯</b> → <b>Edit</b> → switch <b>Dropbox</b> ON under Locations.',
+            '<b>Noteful auto-backup</b>: In Noteful → <b>Settings → Auto-Backup → Dropbox</b> (saves to <code>/Noteful</code>).',
+            'In NoteComplete (Safari / Home Screen PWA): tap <b>Open… → Browse → Dropbox → Noteful</b>, or use in-app OAuth in Step 1.',
+          ],
+        },
+      };
+      let selectedOs = detectOs();
+      const renderDeviceStep = (host) => {
+        const paint = () => {
+          const p = PLATFORMS[selectedOs] || PLATFORMS.windows;
+          host.innerHTML = `
+            <div class="cg-os-tabs" role="tablist" aria-label="Operating system">
+              ${Object.entries(PLATFORMS).map(([id, info]) => `<button type="button" class="cg-os-tab" data-dbx-os="${id}" aria-pressed="${id === selectedOs}">${info.label}</button>`).join('')}
+            </div>
+            ${p.cmd ? `<div class="cg-code-row"><code id="cgDbxCmd"></code><button type="button" id="cgDbxCopyCmd">Copy</button></div>` : ''}
+            <ol class="cg-checklist">${p.steps.map((s) => `<li>${s}</li>`).join('')}</ol>
+            <div class="cg-actions-inline">
+              ${p.scriptName ? `<button type="button" class="primary" id="cgDbxDlScript">Download ${p.label} auto-setup script</button>` : ''}
+              <a class="cg-link" href="https://www.dropbox.com/install" target="_blank" rel="noopener">Official Dropbox download ↗</a>
+            </div>
+          `;
+          if (p.cmd) {
+            host.querySelector('#cgDbxCmd').textContent = p.cmd;
+            host.querySelector('#cgDbxCopyCmd').onclick = () => copyText(p.cmd, `${p.label} install command`);
+          }
+          if (p.scriptName) {
+            host.querySelector('#cgDbxDlScript').onclick = () => downloadScript(p.scriptName, p.scriptBody);
+          }
+          for (const tab of host.querySelectorAll('[data-dbx-os]')) {
+            tab.onclick = () => { selectedOs = tab.dataset.dbxOs; paint(); };
+          }
+        };
+        paint();
+      };
+      const applySetupCode = (raw) => {
+        const s = String(raw || '').trim();
+        if (!s.startsWith('nc-dbx:')) return false;
+        try {
+          const obj = JSON.parse(atob(s.slice(7)));
+          if (obj.appKey && $('dropboxAppKey')) { $('dropboxAppKey').value = obj.appKey; $('dropboxAppKey').oninput?.(); }
+          if (obj.path && $('dropboxFolderPath')) { $('dropboxFolderPath').value = obj.path; $('dropboxFolderPath').oninput?.(); }
+          return true;
+        } catch { return false; }
+      };
+
       if (role === 'user') {
         return [
           {
-            title: '1. Connect Dropbox or jump to a folder',
-            desc: 'Sign in with OAuth 2 PKCE to browse your Noteful backups and shared folders in Dropbox.',
+            title: '1. Connect Dropbox (In-App OAuth)',
+            desc: 'Sign in with OAuth 2 PKCE to browse your Noteful backups and shared folders read-only, or paste a Device Setup Code from another device.',
             render(host) {
               host.innerHTML = `
+                <label class="cg-field"><span>Dropbox App Key or Device Setup Code (optional if site key is set)</span><input id="cgDbxUserKey" type="text" spellcheck="false" autocomplete="off" placeholder="App key or nc-dbx:… setup code" /></label>
                 <label class="cg-field"><span>Folder path (optional)</span><input id="cgDbxPath" type="text" spellcheck="false" autocomplete="off" placeholder="/Noteful" /></label>
-                <p class="cg-hint muted">NoteComplete only reads your Dropbox files; it never modifies or deletes them.</p>
+                <p class="cg-hint muted">NoteComplete only reads your Dropbox files; it never modifies or deletes them. Need an App Key? Switch to <b>Share / Setup</b> above.</p>
               `;
-              const p = host.querySelector('#cgDbxPath');
+              const k = host.querySelector('#cgDbxUserKey'), p = host.querySelector('#cgDbxPath');
+              k.value = $('dropboxAppKey')?.value || '';
               p.value = $('dropboxFolderPath')?.value || '';
+              k.oninput = () => {
+                if (applySetupCode(k.value)) {
+                  k.value = $('dropboxAppKey')?.value || '';
+                  p.value = $('dropboxFolderPath')?.value || '';
+                  status('Dropbox setup code applied!');
+                } else if ($('dropboxAppKey')) {
+                  $('dropboxAppKey').value = k.value.trim();
+                  $('dropboxAppKey').oninput?.();
+                }
+              };
               p.oninput = () => { if ($('dropboxFolderPath')) { $('dropboxFolderPath').value = p.value; $('dropboxFolderPath').oninput?.(); } };
             },
             actionLabel: 'Connect Dropbox',
@@ -868,21 +1010,74 @@ export function setupCloudGuideDialog({
               dialog.close();
             },
           },
+          {
+            title: '2. Install & Sync on Device (All OS)',
+            desc: 'Want offline local folder sync on Windows, macOS, Linux, Android, or iOS/iPadOS? Follow the step-by-step instructions or download the auto-setup script for your OS.',
+            render: renderDeviceStep,
+            actionLabel: 'Done',
+            async run() { dialog.close(); },
+          },
         ];
       }
       return [
         {
-          title: '1. Dropbox App Key Setup (Creator / Self-Host)',
-          desc: 'In the Dropbox App Console, create a Scoped App with files.metadata.read and files.content.read and register the redirect URI.',
+          title: '1. Create Dropbox App (App Console)',
+          desc: 'One-time setup (takes ~1 minute): create a free public PKCE App Key in the Dropbox App Console (never paste an App Secret).',
           render(host) {
-            const redir = $('dropboxRedirect')?.textContent || '';
             host.innerHTML = `
-              <label class="cg-field"><span>Dropbox App Key</span><input id="cgDbxKey" type="text" spellcheck="false" autocomplete="off" placeholder="Public App Key from Dropbox Console" /></label>
-              <p class="cg-hint muted">${redir || 'Register dropbox-callback.html (web) or http://127.0.0.1:53691/callback (desktop).'}</p>
+              <div class="cg-actions-inline">
+                <a class="cg-link" href="https://www.dropbox.com/developers/apps/create" target="_blank" rel="noopener">Open Dropbox App Console ↗</a>
+              </div>
+              <ol class="cg-checklist">
+                <li>Choose <b>Scoped access</b> → <b>Full Dropbox</b> (to browse your <code>/Noteful</code> folder) and give the app any name.</li>
+                <li>Open the <b>Permissions</b> tab, tick <code>account_info.read</code>, <code>files.metadata.read</code>, and <code>files.content.read</code>, then click <b>Submit</b>.</li>
+                <li>Open <b>Settings → OAuth 2 → Redirect URIs</b> and add both URIs below:</li>
+              </ol>
+              <div class="cg-code-row"><code id="cgDbxWebUri"></code><button type="button" id="cgDbxCopyWeb">Copy Web URI</button></div>
+              <div class="cg-code-row"><code id="cgDbxDeskUri"></code><button type="button" id="cgDbxCopyDesk">Copy Desktop URI</button></div>
+            `;
+            host.querySelector('#cgDbxWebUri').textContent = webRedirect;
+            host.querySelector('#cgDbxDeskUri').textContent = desktopRedirect;
+            host.querySelector('#cgDbxCopyWeb').onclick = () => copyText(webRedirect, 'Web redirect URI');
+            host.querySelector('#cgDbxCopyDesk').onclick = () => copyText(desktopRedirect, 'Desktop redirect URI');
+          },
+          actionLabel: 'Next: Enter App Key',
+          async run() { currentStep = 1; renderDialog(); },
+        },
+        {
+          title: '2. Save App Key & Sync to Other Devices',
+          desc: 'Paste your public App Key from Settings → App key, then optionally copy a 1-click Device Setup Code for your other devices.',
+          render(host) {
+            host.innerHTML = `
+              <label class="cg-field"><span>Dropbox App Key (public, 15 characters)</span><input id="cgDbxKey" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. a1b2c3d4e5f6g7h" /></label>
+              <label class="cg-field"><span>Default folder path (optional)</span><input id="cgDbxCreatorPath" type="text" spellcheck="false" autocomplete="off" placeholder="/Noteful" /></label>
+              <div class="cg-actions-inline">
+                <button type="button" id="cgDbxCopyCode">Copy Device Setup Code</button>
+                <span class="muted" id="cgDbxKeyCheck"></span>
+              </div>
+              <p class="cg-hint muted">Paste the Device Setup Code into Step 1 on any other computer, tablet, or phone to configure it automatically.</p>
             `;
             const k = host.querySelector('#cgDbxKey');
+            const p = host.querySelector('#cgDbxCreatorPath');
+            const chk = host.querySelector('#cgDbxKeyCheck');
             k.value = $('dropboxAppKey')?.value || '';
-            k.oninput = () => { if ($('dropboxAppKey')) { $('dropboxAppKey').value = k.value; $('dropboxAppKey').oninput?.(); } };
+            p.value = $('dropboxFolderPath')?.value || '/Noteful';
+            const validate = () => {
+              const v = k.value.trim();
+              chk.textContent = !v ? '' : /^[a-z0-9]{8,32}$/i.test(v) ? '✓ Valid key format' : 'Check key (8–32 letters/digits)';
+            };
+            validate();
+            k.oninput = () => {
+              if ($('dropboxAppKey')) { $('dropboxAppKey').value = k.value.trim(); $('dropboxAppKey').oninput?.(); }
+              validate();
+            };
+            p.oninput = () => { if ($('dropboxFolderPath')) { $('dropboxFolderPath').value = p.value.trim(); $('dropboxFolderPath').oninput?.(); } };
+            host.querySelector('#cgDbxCopyCode').onclick = () => {
+              const appKey = k.value.trim();
+              if (!appKey) { status('Enter your Dropbox App Key first.', true); return; }
+              const code = 'nc-dbx:' + btoa(JSON.stringify({ appKey, path: p.value.trim() || '/Noteful' }));
+              copyText(code, 'Device setup code');
+            };
           },
           actionLabel: 'Save & Connect Dropbox',
           async run() {
@@ -890,6 +1085,13 @@ export function setupCloudGuideDialog({
             $('dropboxConnect')?.click();
             dialog.close();
           },
+        },
+        {
+          title: '3. Install Dropbox on Device (All OS)',
+          desc: 'Step-by-step installation and local folder sync for Windows, macOS, Linux, Android, and iOS/iPadOS, with downloadable setup scripts.',
+          render: renderDeviceStep,
+          actionLabel: 'Done',
+          async run() { dialog.close(); },
         },
       ];
     }

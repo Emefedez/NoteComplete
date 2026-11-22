@@ -8,6 +8,7 @@
 // to the menu once found (zh-picture.js). app.js: configureZh(host), pageZhEntries(…) and
 // pageZhPicture(…) in its page menu, pageZhLongPress(…) in its long press, installZhContext() once.
 import { openContextMenu } from '../context-menu.js';
+import { favoriteTranslateLangs, translateLangInfo } from './translate.js';
 
 export const HAN = /\p{Script=Han}/u;
 export const hasHan = (s) => HAN.test(String(s ?? ''));
@@ -130,6 +131,27 @@ export async function listen(text, reading = '') {
   if (!ok) host.status?.(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true);
 }
 const listenEntry = (text, reading = '') => ({ label: `Listen to ${[...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text}`, icon: 'speaker', run: () => listen(text, reading) });
+const translateEntry = (text, near = null, replace = null) => {
+  const short = [...String(text ?? '').trim()].length > 14 ? `${[...String(text ?? '').trim()].slice(0, 14).join('')}…` : String(text ?? '').trim();
+  const open = async (opts = {}) => {
+    const { openTranslation } = await import('./zh-select.js');
+    return openTranslation(text, { near, replace, ...opts });
+  };
+  return {
+    label: short ? `Translate “${short}”` : 'Translate',
+    icon: 'translate',
+    subtitle: 'Favorites',
+    run: () => open(),
+    submenu: () => [
+      ...favoriteTranslateLangs().map((code) => {
+        const info = translateLangInfo(code);
+        return { label: info.native, icon: 'translate', run: () => open({ to: code }) };
+      }),
+      '-',
+      { label: 'More languages…', icon: 'search', run: () => open({ openSearch: true }) },
+    ],
+  };
+};
 async function annotateQuick(text, ms = 700) {
   try {
     const { chinese } = await import('./client.js');
@@ -262,6 +284,8 @@ async function hitEntries(hit, ctx = () => ({}), near = null) {
   }
   out.push({ label: richLookupLabel(c.char, charInfo), icon: 'search', run: () => lookUp(c.char, ctx(c.start, c.end, w?.pinyin?.[k] || ''), near) });
   const target = (w && [...w.text].length > 1 ? w.text : c.char);
+  const targetCtx = target === c.char ? ctx(c.start, c.end, w?.pinyin?.[k] || '') : ctx(w.start, w.end, w.pinyin.join(' '));
+  out.push(translateEntry(target, near, targetCtx?.replace || null));
   out.push(listenEntry(target, target === c.char ? (w?.pinyin?.[k] || '') : ''));
   if (host.openTracePrefab) {
     out.push({ label: `Stroke order of ${target}…`, icon: 'draw', run: () => host.openTracePrefab(target) });
@@ -275,17 +299,9 @@ const selectionEntries = (text, near, replace = null, info = null) => {
   const hanOnly = ([...clean].filter((c) => HAN.test(c))).slice(0, 12).join('');
   return [
     lookupable(text) && { label: richLookupLabel(clean, info), icon: 'search', run: () => lookUp(clean, replace ? { replace } : {}, near) },
+    clean && translateEntry(clean, near, replace),
     hanOnly && listenEntry(clean),
     hanOnly && host.openTracePrefab && { label: `Stroke order of ${hanOnly}…`, icon: 'draw', run: () => host.openTracePrefab(hanOnly) },
-    // Only in a Markdown editor (notes, documents): a plain field would get the picture's raw data.
-    hanOnly && replace && near?.closest?.('.notes-editor, #textEditor') && {
-      label: `Insert the stroke order of “${hanOnly}” here`,
-      icon: 'graph',
-      run: async () => {
-        const block = await markdownTraceBlockFor(hanOnly);
-        if (block) await replace(`${text}${block}`);
-      },
-    },
     replace && { label: 'Convert simplified ↔ traditional…', icon: 'swap', run: async () => { const out = await convertFrom(text, near); if (out != null && out !== text) await replace(out); } },
     host.addCards && { label: 'Make vocabulary cards…', icon: 'cards', run: () => vocabFrom(text, near) },
   ].filter(Boolean);
@@ -347,10 +363,16 @@ export async function pageZhPicture(p, x, y) {
   const hit = await readPictureAt(root, x, y, { script: await scriptNow() }).catch(() => null);
   return hit ? hitEntries(hit, (start, end, reading) => ({ reading }), root) : [];
 }
-// A selection of Chinese on a page (the PDF/OCR text layer): its menu.
+// A selection of text on a page (the PDF/OCR text layer): Chinese tools or universal Translate + Copy.
 export async function pageZhSelection(text, x, y) {
-  const info = lookupable(text) ? await lookupQuick(text.trim()) : null;
-  openContextMenu(x, y, [...selectionEntries(text, null, null, info), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Chinese' });
+  const clean = String(text ?? '').trim();
+  if (!clean) return;
+  if (hasHan(clean)) {
+    const info = lookupable(clean) ? await lookupQuick(clean) : null;
+    openContextMenu(x, y, [...selectionEntries(clean, null, null, info), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Chinese' });
+    return;
+  }
+  openContextMenu(x, y, [translateEntry(clean, null), '-', { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(text) }], { title: 'Selection' });
 }
 // A finger held on a character of a page: the panel at once. True when it opened.
 export async function pageZhLongPress(p, x, y) {
@@ -378,6 +400,64 @@ export async function lookUpTyped(text, index, replace = null, near = null) {
 
 // ---- Everywhere else: Markdown, HTML and text views, cards, chat, text fields ----
 const typing = (t) => t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && /^(text|search|)$/.test(t.type));
+// Resilient replacer for contenteditable (including TinyMDE, which may re-render line nodes on blur/focus).
+export function editableReplacer(editable, range, originalText = '') {
+  if (!editable || !range || !editable.contains(range.commonAncestorContainer)) return null;
+  const doc = editable.ownerDocument || document;
+  const saved = range.cloneRange();
+  // Snapshot absolute character offsets within `editable` in case nodes detach before Replace is clicked.
+  let absStart = -1, absEnd = -1, pos = 0;
+  const walk = doc.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const len = n.data.length;
+    if (n === saved.startContainer) absStart = pos + saved.startOffset;
+    if (n === saved.endContainer) absEnd = pos + saved.endOffset;
+    pos += len;
+  }
+  const rangeAt = (a, b) => {
+    const r = doc.createRange();
+    const w = doc.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let cur = 0, gotA = false;
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const next = cur + n.data.length;
+      if (!gotA && a <= next) { r.setStart(n, Math.max(0, a - cur)); gotA = true; }
+      if (gotA && b <= next) { r.setEnd(n, Math.max(0, b - cur)); return r; }
+      cur = next;
+    }
+    return null;
+  };
+  return async (to) => {
+    editable.focus({ preventScroll: true });
+    let r = null;
+    if (saved.startContainer.isConnected && saved.endContainer.isConnected && editable.contains(saved.startContainer) && editable.contains(saved.endContainer)) {
+      r = saved.cloneRange();
+    } else if (absStart >= 0 && absEnd >= absStart) {
+      const full = editable.textContent || '';
+      if (!originalText || full.slice(absStart, absEnd) === originalText) {
+        r = rangeAt(absStart, absEnd);
+      } else {
+        const idx = full.indexOf(originalText);
+        if (idx >= 0) r = rangeAt(idx, idx + originalText.length);
+      }
+    }
+    if (!r) throw new Error('The selected text changed; select it again to replace.');
+    const s = doc.getSelection?.() || getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+    const before = editable.textContent;
+    const ok = doc.execCommand?.('insertText', false, to);
+    if (!ok || (to !== originalText && editable.textContent === before)) {
+      r.deleteContents();
+      const tn = doc.createTextNode(to);
+      r.insertNode(tn);
+      r.setStartAfter(tn);
+      r.collapse(true);
+      s.removeAllRanges();
+      s.addRange(r);
+      editable.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: to }));
+    }
+  };
+}
 // A text field's or editable element's selection, with how to replace it.
 function fieldSelection(target) {
   if (typing(target)) {
@@ -392,7 +472,7 @@ function fieldSelection(target) {
   const range = sel.getRangeAt(0).cloneRange();
   const text = sel.toString();
   if (!editable || !editable.contains(range.commonAncestorContainer)) return { text, replace: null };
-  return { text, replace: async (to) => { editable.focus(); const s = getSelection(); s.removeAllRanges(); s.addRange(range); document.execCommand('insertText', false, to); } };
+  return { text, replace: editableReplacer(editable, range, text) };
 }
 const SKIP = '.sheet, .context-menu, .zh-ime, .pk-window-head, .hz-player, .hz-practice, svg';
 export function installZhContext(doc = document) {
@@ -401,19 +481,51 @@ export function installZhContext(doc = document) {
     if (e.defaultPrevented || e.shiftKey || !(t instanceof Element) || t.closest(SKIP)) return;
     const near = t;
     const sel = fieldSelection(t);
-    if (sel && hasHan(sel.text)) {
-      e.preventDefault();
+    if (sel && sel.text.trim()) {
       const { clientX: cx, clientY: cy } = e;
       const field = typing(t) || t.closest('[contenteditable="true"], [contenteditable=""]');
-      const info = lookupable(sel.text) ? await lookupQuick(sel.text.trim()) : null;
+      if (hasHan(sel.text)) {
+        e.preventDefault();
+        const info = lookupable(sel.text) ? await lookupQuick(sel.text.trim()) : null;
+        openContextMenu(cx, cy, [
+          ...selectionEntries(sel.text, near, sel.replace, info), '-',
+          field && sel.replace && { label: 'Cut', icon: 'scissors', key: 'Ctrl X', run: () => { navigator.clipboard?.writeText(sel.text); sel.replace(''); } },
+          { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(sel.text) },
+        ].filter(Boolean), { title: 'Chinese', host: near.closest('dialog[open]') });
+        return;
+      }
+      // Universal translation right-click menu for ANY selected text (favorites + language search + replace).
+      e.preventDefault();
       openContextMenu(cx, cy, [
-        ...selectionEntries(sel.text, near, sel.replace, info), '-',
+        translateEntry(sel.text.trim(), near, sel.replace),
+        '-',
         field && sel.replace && { label: 'Cut', icon: 'scissors', key: 'Ctrl X', run: () => { navigator.clipboard?.writeText(sel.text); sel.replace(''); } },
         { label: 'Copy', icon: 'copy', key: 'Ctrl C', run: () => navigator.clipboard?.writeText(sel.text) },
-      ].filter(Boolean), { title: 'Chinese', host: near.closest('dialog[open]') });
+      ].filter(Boolean), { title: 'Selection', host: near.closest('dialog[open]') });
       return;
     }
-    if (typing(t)) return;
+    if (typing(t)) {
+      const pos = t.selectionStart;
+      if (pos == null || !hasHan(t.value)) return;
+      const c = charAround(t.value, pos) || charAround(t.value, pos - 1);
+      if (!c || !HAN.test(c.char)) return;
+      e.preventDefault();
+      const { clientX: x, clientY: y } = e;
+      const hit = { text: t.value, index: c.start };
+      const ctx = (start, end, reading) => ({
+        reading,
+        replace: async (to) => {
+          t.focus();
+          t.setSelectionRange(start, end);
+          if (!document.execCommand('insertText', false, to)) t.setRangeText(to, start, end, 'end');
+          t.dispatchEvent(new Event('input', { bubbles: true }));
+        },
+      });
+      const entries = await hitEntries(hit, ctx, near);
+      if (!entries.length) return;
+      openContextMenu(x, y, entries, { title: 'Chinese', host: near.closest('dialog[open]') });
+      return;
+    }
     const hit = htmlHit(e.clientX, e.clientY, doc);
     if (!hit) return;
     e.preventDefault();

@@ -26,24 +26,54 @@ impl Editor {
                 "<g data-layer=\"{}\" opacity=\"{}\">",
                 layer.id, layer.opacity
             ));
-            // Under-ink additions (highlighter fills) go below the layer's ink.
+            // Under-ink additions (highlighter fills, sticky note cards) go below the layer's ink.
+            enum Next<'a> {
+                Image(String, &'a crate::Image),
+                Line(String, &'a crate::Line),
+            }
             let added_in_layer = |under: bool| {
                 additions
                     .iter()
                     .filter(move |(_, l)| l.layer == layer.id && l.under == under)
             };
-            for (id, line) in added_in_layer(true) {
-                if !deleted.contains(id.as_str()) {
-                    content.push_str(&format!(
-                        "<g data-item=\"{id}\">{}</g>",
-                        added_svg(
-                            &adjustments
-                                .get(id.as_str())
-                                .map(|a| crate::manipulation::adjusted_line(line, a))
-                                .unwrap_or_else(|| (*line).clone())
-                        )
-                    ));
-                    added += 1;
+            let mut under_items: Vec<(usize, Next)> = self
+                .images(page)
+                .filter(|(_, image)| image.layer == layer.id && image.under)
+                .map(|(id, image)| (crate::editor::edit_index(&id), Next::Image(id, image)))
+                .chain(added_in_layer(true).map(|(id, line)| {
+                    (crate::editor::edit_index(id), Next::Line(id.clone(), line))
+                }))
+                .collect();
+            under_items.sort_by_key(|(at, _)| *at);
+            for (_, entry) in under_items {
+                match entry {
+                    Next::Image(id, image) => {
+                        if !deleted.contains(id.as_str()) {
+                            let item = image.item(id.clone());
+                            content.push_str(&format!(
+                                "<g data-item=\"{id}\">{}</g>",
+                                crate::manipulation::item_svg(
+                                    &item,
+                                    adjustments.get(id.as_str()).copied()
+                                )?
+                            ));
+                            added += 1;
+                        }
+                    }
+                    Next::Line(id, line) => {
+                        if !deleted.contains(id.as_str()) {
+                            content.push_str(&format!(
+                                "<g data-item=\"{id}\">{}</g>",
+                                added_svg(
+                                    &adjustments
+                                        .get(id.as_str())
+                                        .map(|a| crate::manipulation::adjusted_line(line, a))
+                                        .unwrap_or_else(|| (*line).clone())
+                                )
+                            ));
+                            added += 1;
+                        }
+                    }
                 }
             }
             for item in p.items.iter().filter(|i| i.layer == layer.id) {
@@ -65,13 +95,9 @@ impl Editor {
                 }
             }
             // Pictures, text boxes and lines over the ink in the order they were made.
-            enum Next<'a> {
-                Image(String, &'a crate::Image),
-                Line(String, &'a crate::Line),
-            }
             let mut next: Vec<(usize, Next)> = self
                 .images(page)
-                .filter(|(_, image)| image.layer == layer.id)
+                .filter(|(_, image)| image.layer == layer.id && !image.under)
                 .map(|(id, image)| (crate::editor::edit_index(&id), Next::Image(id, image)))
                 .chain(added_in_layer(false).map(|(id, line)| {
                     (crate::editor::edit_index(id), Next::Line(id.clone(), line))

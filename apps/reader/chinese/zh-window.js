@@ -18,8 +18,11 @@ export function modalHost(near = null) {
 export function zhWindow({ key, title, width = 380, tall = 0, near = null, onClose = null, className = '' }) {
   let win = null;
   const close = () => { win?.destroy(); onClose?.(); };
-  const top = document.getElementById('viewport')?.getBoundingClientRect().top || 60;
-  const height = tall ? Math.max(260, Math.min(tall, innerHeight - top - 24)) : null;
+  const zRaw = parseFloat(document.documentElement.style.zoom);
+  const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
+  const vpTop = document.getElementById('viewport')?.getBoundingClientRect().top;
+  const top = vpTop ? vpTop / z : 60;
+  const height = tall ? Math.max(260, Math.min(tall, innerHeight / z - top - 24)) : null;
   win = movableWindow({ key, title, width, minWidth: 280, minHeight: 160, className: `zh-window ${isPhone() ? 'zh-sheet' : ''} ${className}`.trim(), onClose: close, phone: 'sheet' });
   if (height) win.el.style.setProperty('--zh-max', `${height}px`);
   const host = modalHost(near);

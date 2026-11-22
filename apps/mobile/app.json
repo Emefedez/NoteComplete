@@ -2,7 +2,7 @@
   "expo": {
     "name": "NoteComplete - a RE noteful viewer",
     "slug": "notecomplete",
-    "version": "1.2.56",
+    "version": "1.2.71",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
     "android": {
@@ -60,6 +60,15 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "image/gif"
+            },
+            {
+              "mimeType": "image/bmp"
+            },
+            {
+              "mimeType": "image/avif"
+            },
+            {
               "mimeType": "application/x-tar"
             },
             {
@@ -78,13 +87,40 @@
               "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             },
             {
+              "mimeType": "application/msword"
+            },
+            {
+              "mimeType": "application/rtf"
+            },
+            {
+              "mimeType": "text/rtf"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.text"
             },
             {
               "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             },
             {
+              "mimeType": "application/vnd.ms-excel"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            },
+            {
+              "mimeType": "application/vnd.ms-powerpoint"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.presentation"
+            },
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/x-ipynb+json"
             },
             {
               "mimeType": "text/csv"
@@ -94,6 +130,24 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "audio/mpeg"
+            },
+            {
+              "mimeType": "audio/mp4"
+            },
+            {
+              "mimeType": "audio/wav"
+            },
+            {
+              "mimeType": "audio/ogg"
+            },
+            {
+              "mimeType": "audio/flac"
+            },
+            {
+              "mimeType": "video/mp4"
             },
             {
               "mimeType": "application/octet-stream"
@@ -149,6 +203,15 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "image/gif"
+            },
+            {
+              "mimeType": "image/bmp"
+            },
+            {
+              "mimeType": "image/avif"
+            },
+            {
               "mimeType": "application/x-tar"
             },
             {
@@ -167,13 +230,40 @@
               "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             },
             {
+              "mimeType": "application/msword"
+            },
+            {
+              "mimeType": "application/rtf"
+            },
+            {
+              "mimeType": "text/rtf"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.text"
             },
             {
               "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             },
             {
+              "mimeType": "application/vnd.ms-excel"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            },
+            {
+              "mimeType": "application/vnd.ms-powerpoint"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.presentation"
+            },
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/x-ipynb+json"
             },
             {
               "mimeType": "text/csv"
@@ -183,6 +273,24 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "audio/mpeg"
+            },
+            {
+              "mimeType": "audio/mp4"
+            },
+            {
+              "mimeType": "audio/wav"
+            },
+            {
+              "mimeType": "audio/ogg"
+            },
+            {
+              "mimeType": "audio/flac"
+            },
+            {
+              "mimeType": "video/mp4"
             },
             {
               "mimeType": "application/octet-stream"
@@ -238,6 +346,15 @@
               "mimeType": "image/webp"
             },
             {
+              "mimeType": "image/gif"
+            },
+            {
+              "mimeType": "image/bmp"
+            },
+            {
+              "mimeType": "image/avif"
+            },
+            {
               "mimeType": "application/x-tar"
             },
             {
@@ -256,13 +373,40 @@
               "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             },
             {
+              "mimeType": "application/msword"
+            },
+            {
+              "mimeType": "application/rtf"
+            },
+            {
+              "mimeType": "text/rtf"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.text"
             },
             {
               "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             },
             {
+              "mimeType": "application/vnd.ms-excel"
+            },
+            {
               "mimeType": "application/vnd.oasis.opendocument.spreadsheet"
+            },
+            {
+              "mimeType": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            },
+            {
+              "mimeType": "application/vnd.ms-powerpoint"
+            },
+            {
+              "mimeType": "application/vnd.oasis.opendocument.presentation"
+            },
+            {
+              "mimeType": "application/epub+zip"
+            },
+            {
+              "mimeType": "application/x-ipynb+json"
             },
             {
               "mimeType": "text/csv"
@@ -272,6 +416,24 @@
             },
             {
               "mimeType": "text/tab-separated-values"
+            },
+            {
+              "mimeType": "audio/mpeg"
+            },
+            {
+              "mimeType": "audio/mp4"
+            },
+            {
+              "mimeType": "audio/wav"
+            },
+            {
+              "mimeType": "audio/ogg"
+            },
+            {
+              "mimeType": "audio/flac"
+            },
+            {
+              "mimeType": "video/mp4"
             },
             {
               "mimeType": "application/octet-stream"

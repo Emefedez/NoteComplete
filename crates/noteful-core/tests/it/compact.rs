@@ -271,6 +271,7 @@ fn compacting_keeps_pictures_text_boxes_tape_and_prefabs() {
         text: None,
         joined: false,
         part,
+        under: false,
     };
     e.add_image(0, image([100., 100., 50., 50.], None)).unwrap();
     let part = noteful_core::Part {

@@ -177,15 +177,19 @@ const overridesFor = (item) => {
   const list = (note.readings || []).filter((r) => r.item && r.item === item);
   return list.length ? new Map(list.map((r) => [r.index, r.pinyin])) : null;
 };
+const svgTokens = new WeakMap();
 // Draws pinyin over the Chinese in `svg`'s text boxes (an on-screen page, or a detached copy
 // for an export, measured in a hidden place in the document). Returns how many it placed.
 export async function rubySvg(svg, { force = false } = {}) {
+  const myToken = (svgTokens.get(svg) || 0) + 1;
+  svgTokens.set(svg, myToken);
   for (const g of svg.querySelectorAll(".zh-ruby")) g.remove();
   const texts = [...svg.querySelectorAll("[data-item] text")].filter((t) => HAN.test(t.textContent));
   if (!texts.length) return 0;
   sawHan = true;
   exportRow();
   await chineseFontReady(texts.map((t) => t.textContent).join(""));
+  if (svgTokens.get(svg) !== myToken) return 0;
   if (!force && !rubyOn()) return 0;
   const doc = svg.ownerDocument, opts = options();
   let placed = 0, parked = null, home = null;
@@ -211,6 +215,7 @@ export async function rubySvg(svg, { force = false } = {}) {
       const box = overridesFor(id);
       const overrides = box && new Map([...box].filter(([i]) => i >= offset).map(([i, p]) => [i - offset, p]));
       const chars = rubyChars(content, await annotate(content), { ...opts, overrides });
+      if (svgTokens.get(svg) !== myToken) return placed;
       if (!chars.length || (!force && !rubyOn())) continue;
       const g = doc.createElementNS(SVG, "g");
       g.setAttribute("class", "zh-ruby");
@@ -254,6 +259,8 @@ export function refreshRuby() {
   const doc = globalThis.document;
   const toggle = doc?.getElementById?.("zhRubyToggle");
   if (toggle) toggle.setAttribute("aria-pressed", String(on));
+  const viewToggle = doc?.getElementById?.("viewRubyToggle");
+  if (viewToggle) viewToggle.setAttribute("aria-checked", String(on));
   exportChoice = null;
   exportRow();
   globalThis.dispatchEvent?.(new CustomEvent("zh-ruby-refresh", { detail: { on } }));
@@ -271,8 +278,9 @@ function exportRow() {
 }
 // The View menu item and the Export dialog's checkbox (index.html).
 export function wireRubyControls(doc = globalThis.document) {
-  const toggle = doc.getElementById("zhRubyToggle"), box = doc.getElementById("exportRuby");
+  const toggle = doc.getElementById("zhRubyToggle"), viewToggle = doc.getElementById("viewRubyToggle"), box = doc.getElementById("exportRuby");
   if (toggle) toggle.onclick = () => setRuby(!rubyOn());
+  if (viewToggle) viewToggle.onclick = () => setRuby(!rubyOn());
   if (box) box.onchange = () => chooseExportRuby(box.checked);
   globalThis.addEventListener?.("zh-settings", () => refreshRuby());
   refreshRuby();

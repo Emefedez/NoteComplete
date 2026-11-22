@@ -96,12 +96,20 @@ function panel(list, title, root, depth) {
 }
 
 // Inside the window: flipped to the left or up when it would run past an edge.
+function uiZoom() {
+  const z = parseFloat(document.documentElement.style.zoom);
+  return Number.isFinite(z) && z > 0 ? z : 1;
+}
 function place(el, x, y, flipX = null) {
-  const r = el.getBoundingClientRect(), vw = innerWidth, vh = innerHeight, m = 8;
-  const rawLeft = x + r.width + m > vw ? (flipX ?? x) - r.width : x;
-  const rawTop = y + r.height + m > vh ? vh - r.height - m : y;
-  const left = Math.max(m, Math.min(vw - r.width - m, rawLeft));
-  const top = Math.max(m, Math.min(vh - r.height - m, rawTop));
+  const z = uiZoom();
+  const r = el.getBoundingClientRect();
+  const rw = r.width / z, rh = r.height / z;
+  const px = x / z, py = y / z, fx = flipX == null ? null : flipX / z;
+  const vw = innerWidth / z, vh = innerHeight / z, m = 8;
+  const rawLeft = px + rw + m > vw ? (fx ?? px) - rw : px;
+  const rawTop = py + rh + m > vh ? vh - rh - m : py;
+  const left = Math.max(m, Math.min(vw - rw - m, rawLeft));
+  const top = Math.max(m, Math.min(vh - rh - m, rawTop));
   el.style.left = `${left}px`;
   el.style.top = `${top}px`;
 }

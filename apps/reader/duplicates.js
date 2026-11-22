@@ -7,7 +7,7 @@ const ALL_STUDY_KINDS = [...STUDY.map(([k]) => k), 'scratch'];
 const MAX_FULL_HASH_BYTES = 64 * 1024 * 1024;
 const MAX_NFEDIT_PARSE_BYTES = 48 * 1024 * 1024;
 
-const STRIP_EXT_RE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|pdf|markdown|md|html?|txt|docx|odt|xlsx|ods|png|jpe?g|webp)$/i;
+const STRIP_EXT_RE = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|pdf|markdown|md|html?|txt|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|png|jpe?g|webp|gif|bmp|avif)$/i;
 // Copy markers: "(2)", "(copy)", and the id/hash tags older versions added: "(a1b2c3)", "(12oD0v)".
 const COPY_SUFFIX_RE = /(?:\s*(?:\((?:\d+|[a-f0-9]{5,8}(?:-\d+)?|copy|copia)\)|[-_ ]+(?:copy|copia)(?:\s*\d+)?))+$/gi;
 

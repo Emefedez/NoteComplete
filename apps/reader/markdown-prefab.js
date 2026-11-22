@@ -43,11 +43,22 @@ export function attachMarkdownPrefabContextMenu({
     }
     return out;
   };
+  const openEditorFor = async ({ alt, uri, replaceLine }) => {
+    if (!editPrefab) return false;
+    const { extractPrefabSpecFromDataUri, markdownPrefabBlockForSpec } = await import('./chinese/zh-menu.js');
+    const spec = extractPrefabSpecFromDataUri(uri, alt);
+    if (!spec) return false;
+    const updated = await editPrefab(spec);
+    if (!updated) return true;
+    const nextBlock = await markdownPrefabBlockForSpec(updated);
+    if (nextBlock) replaceLine(nextBlock);
+    return true;
+  };
   const openMenuFor = async (event, { alt, uri, replaceLine, removeLine }) => {
     event.preventDefault();
     event.stopPropagation();
     const { openContextMenu } = await import('./context-menu.js');
-    const { extractPrefabSpecFromDataUri, markdownPrefabBlockForSpec } = await import('./chinese/zh-menu.js');
+    const { extractPrefabSpecFromDataUri } = await import('./chinese/zh-menu.js');
     const spec = extractPrefabSpecFromDataUri(uri, alt);
     const label = (alt || 'Prefab').trim() || 'Prefab';
     const fullLine = `![${alt}](${uri})`;
@@ -55,12 +66,7 @@ export function attachMarkdownPrefabContextMenu({
       spec && editPrefab && {
         label: `Edit ${label.length > 32 ? `${label.slice(0, 32)}…` : label}…`,
         icon: 'draw',
-        run: async () => {
-          const updated = await editPrefab(spec);
-          if (!updated) return;
-          const nextBlock = await markdownPrefabBlockForSpec(updated);
-          if (nextBlock) replaceLine(nextBlock);
-        },
+        run: () => openEditorFor({ alt, uri, replaceLine }),
       },
       {
         label: 'Copy Markdown',
@@ -133,8 +139,26 @@ export function attachMarkdownPrefabContextMenu({
     editorContainer.addEventListener('dblclick', (event) => {
       const chip = event.target.closest?.('[data-prefab]');
       if (!chip || !editPrefab) return;
+      const root = editorContainer.querySelector('.TinyMDE');
+      if (!root) return;
+      const idx = [...root.children].indexOf(chip);
+      if (idx < 0) return;
+      const lines = String(getText() || '').split('\n');
+      const m = (lines[idx] || '').match(PREFAB_LINE);
+      if (!m) return;
       event.preventDefault();
-      chip.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: event.clientX, clientY: event.clientY }));
+      event.stopPropagation();
+      openEditorFor({
+        alt: m[1],
+        uri: m[2],
+        replaceLine: (nextLine) => {
+          const cur = String(getText() || '').split('\n');
+          if (idx < cur.length) {
+            cur[idx] = nextLine;
+            setText(cur.join('\n'));
+          }
+        },
+      });
     });
     editorContainer.addEventListener('contextmenu', (event) => {
       const chip = event.target.closest?.('[data-prefab]');
@@ -167,9 +191,9 @@ export function attachMarkdownPrefabContextMenu({
     });
   }
   if (previewContainer) {
-    previewContainer.addEventListener('contextmenu', (event) => {
+    const previewTarget = (event) => {
       const img = event.target.closest?.('img[src^="data:image/svg+xml"]');
-      if (!img) return;
+      if (!img) return null;
       const src = img.getAttribute('src') || '';
       const alt = img.getAttribute('alt') || 'Prefab';
       const allImgs = [...previewContainer.querySelectorAll('img[src^="data:image/svg+xml"]')];
@@ -186,12 +210,20 @@ export function attachMarkdownPrefabContextMenu({
           : `${before}${replacement}${after}`;
         setText(nextMd);
       };
-      openMenuFor(event, {
-        alt,
-        uri: src,
-        replaceLine: (nextLine) => replaceOccurrence(nextLine),
-        removeLine: () => replaceOccurrence(null),
-      });
+      return { alt, uri: src, replaceLine: (nextLine) => replaceOccurrence(nextLine), removeLine: () => replaceOccurrence(null) };
+    };
+    previewContainer.addEventListener('dblclick', (event) => {
+      if (!editPrefab) return;
+      const target = previewTarget(event);
+      if (!target) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openEditorFor(target);
+    });
+    previewContainer.addEventListener('contextmenu', (event) => {
+      const target = previewTarget(event);
+      if (!target) return;
+      openMenuFor(event, target);
     });
   }
 }

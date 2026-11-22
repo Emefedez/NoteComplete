@@ -30,6 +30,7 @@ export function normalize(spec) {
     gloss: String(s.gloss ?? '').slice(0, 1200).trim(),
     variants: String(s.variants ?? '').slice(0, 160).trim(),
     script: s.script === 'traditional' ? 'traditional' : 'simplified',
+    lang: s.lang === 'es' || s.lang === 'en' ? s.lang : '',
     show: SHOWS.includes(s.show) ? s.show : 'strokes',
     step,
     grid: GRIDS.includes(s.grid) ? s.grid : 'mi',
@@ -77,9 +78,10 @@ export async function dictionaryFor(spec) {
       !m.pinyin ? client.annotate(m.text, { script: m.script }).catch(() => []) : Promise.resolve([]),
       client.lookup(m.text, { script: m.script }).catch(() => null),
     ]);
-    // Meanings in the language of the es | en toggle (chinese/translate.js).
+    // Meanings in the language of the es | en toggle (chinese/translate.js), or spec.lang when set.
     const { localizeLookup, zhLang } = await import('../../chinese/translate.js');
-    lk = await localizeLookup(found, zhLang()).catch(() => found);
+    const lang = m.lang || zhLang();
+    lk = await localizeLookup(found, lang).catch(() => found);
     let pinyin = m.pinyin;
     if (!pinyin && runs?.length) {
       pinyin = runs.flatMap((r) => r.pinyin || []).join(' ');
@@ -90,7 +92,10 @@ export async function dictionaryFor(spec) {
     let gloss = m.gloss;
     let variants = m.variants;
     if (lk?.entries?.length) {
-      if (!gloss) gloss = pageGloss(lk.entries.flatMap((e) => e.gloss || []));
+      if (!gloss) {
+        const entryGlosses = lk.entries.flatMap((e) => (e.gloss || []).flatMap((g) => String(g).split(/\s*;\s*/))).filter(Boolean);
+        gloss = pageGloss(entryGlosses.length ? entryGlosses : String(lk.char?.definition || '').split(/\s*[;,]\s*/).filter(Boolean));
+      }
       if (!variants) {
         const simp = new Set(), trad = new Set(), other = new Set();
         for (const e of lk.entries) {
@@ -107,11 +112,13 @@ export async function dictionaryFor(spec) {
         if (other.size) parts.push(`異體: ${[...other].join(' ')}`);
         variants = parts.join(' · ');
       }
+    } else if (!gloss && lk?.char?.definition) {
+      gloss = pageGloss(String(lk.char.definition).split(/\s*[;,]\s*/).filter(Boolean));
     } else if (!gloss && runs?.length) {
       const glosses = runs.map((r) => r.gloss?.[0]).filter(Boolean);
       if (glosses.length) gloss = glosses.join(' · ');
     }
-    m = normalize({ ...m, pinyin, gloss, variants });
+    m = normalize({ ...m, pinyin, gloss, variants, lang: m.lang || lang });
   } catch { /* Dictionary worker unavailable in headless/offline fallback */ }
   return { spec: m, lookup: lk };
 }

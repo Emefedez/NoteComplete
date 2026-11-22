@@ -15,7 +15,7 @@ function build(doc) {
   m.setAttribute('role', 'listbox');
   m.setAttribute('aria-label', 'Chinese candidates');
   m.innerHTML = '<div class="zh-ime-reading" aria-live="polite"></div><ol class="zh-ime-list"></ol>'
-    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Hold Space and press a number to choose that candidate; Space alone writes the highlighted one">Space+1–9 picks</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
+    + '<div class="zh-ime-foot"><span class="zh-ime-keys" title="Space or Enter picks the highlighted character; Shift+Enter writes raw letters; Space/Shift+1–9 picks that candidate">Space / Enter / Shift+1–9</span><button type="button" class="zh-ime-page" data-page="-1" aria-label="Previous candidates">‹</button><span class="zh-ime-pages"></span>'
     + '<button type="button" class="zh-ime-page" data-page="1" aria-label="More candidates">›</button>'
     + '<button type="button" class="zh-ime-expand" aria-label="Show more candidates" title="More candidates">▾</button>'
     + '<button type="button" class="zh-ime-script" title="Simplified / traditional"></button></div>';
@@ -64,6 +64,41 @@ export function hideImeMenu(field) {
   listen(false);
 }
 
+// 2D vertical navigation across wrapped candidate rows: returns { index } for the closest visual
+// column in the next/previous row (with coherent top↔bottom wrap on a single page), or null when
+// the page is a single row or moving past the page boundary so the caller can step pages.
+export function verticalStep(dir) {
+  if (!el || el.hidden || !view) return null;
+  const nodes = [...el.querySelectorAll('.zh-ime-list li[data-i]')];
+  if (nodes.length < 2) return null;
+  const boxes = nodes.map((n) => {
+    const r = n.getBoundingClientRect();
+    return { i: Number(n.dataset.i), top: r.top, cx: r.left + r.width / 2, sel: n.getAttribute('aria-selected') === 'true' };
+  });
+  const rows = [];
+  for (const b of boxes) {
+    const row = rows.find((r) => Math.abs(r.top - b.top) <= 8);
+    if (row) row.items.push(b);
+    else rows.push({ top: b.top, items: [b] });
+  }
+  rows.sort((a, b) => a.top - b.top);
+  if (rows.length <= 1) return null;
+  let rIdx = rows.findIndex((r) => r.items.some((it) => it.sel));
+  if (rIdx < 0) rIdx = dir > 0 ? 0 : rows.length - 1;
+  const cur = rows[rIdx].items.find((it) => it.sel) || rows[rIdx].items[0];
+  let nextRow = rIdx + dir;
+  if (nextRow < 0 || nextRow >= rows.length) {
+    if ((view.pages || 1) > 1) return null;
+    nextRow = (nextRow + rows.length) % rows.length;
+  }
+  let best = rows[nextRow].items[0], bestDist = Math.abs(best.cx - cur.cx);
+  for (const cand of rows[nextRow].items) {
+    const d = Math.abs(cand.cx - cur.cx);
+    if (d < bestDist) { best = cand; bestDist = d; }
+  }
+  return { index: best.i };
+}
+
 const TONE = (syl) => { const m = /([1-4])$/.exec(marksToNumbers(syl)); return m ? m[1] : '5'; };
 
 function rubyText(pinyin, colours) {
@@ -97,34 +132,29 @@ function render() {
     li.setAttribute('aria-selected', String(i === v.sel));
     const n = Object.assign(document.createElement('span'), { className: 'n', textContent: String(k + 1) });
     li.append(n);
-    if (v.mode === 'pinyin') {
-      li.append(Object.assign(document.createElement('span'), { className: 'zh-ime-py', textContent: item.text }));
-      if (item.hanzi) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: item.hanzi }));
-    } else {
-      const ruby = document.createElement('ruby');
-      ruby.className = 'zh-ime-han';
-      ruby.append(item.text);
-      if (item.pinyin) ruby.append(rubyText(item.pinyin, v.toneColours));
-      li.append(ruby);
-      const other = v.script === 'traditional' ? item.simp : item.trad;
-      if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
-    }
+    const ruby = document.createElement('ruby');
+    ruby.className = 'zh-ime-han';
+    ruby.append(item.text);
+    if (item.pinyin) ruby.append(rubyText(item.pinyin, v.toneColours));
+    li.append(ruby);
+    const other = v.script === 'traditional' ? item.simp : item.trad;
+    if (v.bothScripts && other && other !== item.text) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-alt', textContent: other }));
     if (item.level > 0) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: item.level >= 7 ? 'HSK 7–9' : `HSK ${item.level}`, title: `HSK level ${item.level >= 7 ? '7–9' : item.level}` }));
-    if (item.fav) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-fav', textContent: '★', title: 'A favourite' }));
+    if (item.fuzzy) li.append(Object.assign(document.createElement('small'), { className: 'zh-ime-level', textContent: '≈', title: 'Similar word suggestion' }));
     if (item.sentence) li.classList.add('zh-ime-sentence');
     if (item.gloss) li.title = item.gloss;
     list.append(li);
   });
-  if (!v.items.length && !v.loading && v.mode === 'hanzi') list.append(Object.assign(document.createElement('li'), { className: 'zh-ime-none', textContent: 'No characters for this; Space or Enter writes the letters' }));
+  if (!v.items.length && !v.loading) list.append(Object.assign(document.createElement('li'), { className: 'zh-ime-none', textContent: 'No characters for this; Space or Enter writes the letters' }));
   const prev = el.querySelector('[data-page="-1"]'), next = el.querySelector('[data-page="1"]');
   prev.disabled = v.page <= 0;
   next.disabled = v.page >= v.pages - 1;
   el.querySelector('.zh-ime-pages').textContent = v.pages > 1 ? `${v.page + 1}/${v.pages}` : '';
-  el.querySelector('.zh-ime-foot').hidden = v.pages <= 1 && v.mode !== 'hanzi';
-  el.querySelector('.zh-ime-keys').hidden = v.mode !== 'hanzi' || !v.items.length;
+  el.querySelector('.zh-ime-foot').hidden = false;
+  el.querySelector('.zh-ime-keys').hidden = !v.items.length;
   const script = el.querySelector('.zh-ime-script');
   script.textContent = v.script === 'traditional' ? '繁' : '简';
-  script.hidden = v.mode !== 'hanzi';
+  script.hidden = false;
   el.classList.toggle('zh-ime-expanded', expanded);
   const k = v.sel - v.offset;
   if (k >= 0 && k < v.items.length) owner?.setAttribute('aria-activedescendant', `zh-c-${k}`);
@@ -141,22 +171,47 @@ function docked(win) {
 
 function position() {
   if (!el || el.hidden || !owner) return;
-  const win = el.ownerDocument.defaultView;
+  const doc = el.ownerDocument;
+  const win = doc.defaultView;
+  const zRaw = parseFloat(doc.documentElement.style.zoom);
+  const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
   const dock = docked(win);
   el.classList.toggle('zh-ime-docked', dock);
-  const vp = viewportBox(win);
+  const vpRaw = viewportBox(win);
+  const vp = { left: vpRaw.left / z, top: vpRaw.top / z, width: vpRaw.width / z, height: vpRaw.height / z };
   if (dock) {
-    Object.assign(el.style, { left: '0px', top: '', bottom: `${dockOffset(win.innerHeight, vp)}px` });
+    Object.assign(el.style, { left: '0px', top: '', bottom: `${dockOffset(win.innerHeight / z, vp)}px` });
     return;
   }
-  const caret = caretRect(owner);
-  const keypad = el.ownerDocument.querySelector('.math-keypad:not([hidden])');
-  const kTop = keypad ? keypad.getBoundingClientRect().top : null;
+  const cRaw = caretRect(owner);
+  const caret = { left: cRaw.left / z, right: cRaw.right / z, top: cRaw.top / z, bottom: cRaw.bottom / z };
+  const keypad = doc.querySelector('.math-keypad:not([hidden])');
+  const kTop = keypad ? keypad.getBoundingClientRect().top / z : null;
   el.style.bottom = '';
-  const r = placeMenu(caret, { width: el.offsetWidth, height: el.offsetHeight }, vp, kTop);
+  const size = { width: el.offsetWidth, height: el.offsetHeight };
+  const r = placeMenu(caret, size, vp, kTop);
+  let top = r.top;
+  // Avoid overlapping the floating text-format bar (font/size/colour controls) when space permits.
+  const fmt = doc.querySelector('.text-format:not([hidden])');
+  if (fmt) {
+    const fr = fmt.getBoundingClientRect();
+    if (fr.width > 0 && fr.height > 0) {
+      const fTop = fr.top / z, fBot = fr.bottom / z, fLeft = fr.left / z, fRight = fr.right / z;
+      const horizOverlap = r.left < fRight && (r.left + size.width) > fLeft;
+      const vertOverlap = top < fBot && (top + size.height) > fTop;
+      if (horizOverlap && vertOverlap) {
+        const bottomLimit = Math.min(vp.top + vp.height, kTop ?? Infinity) - 8;
+        const belowFmt = fBot + 6;
+        const aboveFmt = fTop - size.height - 6;
+        if (belowFmt + size.height <= bottomLimit && belowFmt >= caret.bottom) top = belowFmt;
+        else if (aboveFmt >= vp.top + 8) top = aboveFmt;
+        else if (belowFmt + size.height <= bottomLimit) top = belowFmt;
+      }
+    }
+  }
   el.style.left = `${r.left}px`;
-  el.style.top = `${r.top}px`;
-  el.classList.toggle('zh-ime-above', r.above);
+  el.style.top = `${top}px`;
+  el.classList.toggle('zh-ime-above', top < caret.top);
 }
 const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(position); };
 let listening = false;

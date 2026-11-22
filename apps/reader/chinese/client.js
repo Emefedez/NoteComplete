@@ -5,8 +5,7 @@
 //   choose(input, item, script)            learn a chosen candidate (user dictionary)
 //   chooseSequence(parts, script)          several candidates chosen for one input (小 + 明): learnt
 //                                          as a word; offered as one after the second time
-//   favourites() → [hanzi…]; isFavourite(hanzi); setFavourite(hanzi, on, pinyin): the ☆ of the
-//                                          panels; a favourite comes first among the candidates
+//   addWord(hanzi, pinyin)                 "Add to my words"
 //   annotate(text, {script})               → [{start, end, text, pinyin: ["nǐ"…], level}] per word of the Han runs
 //   lookup(text, {script})                 → {entries: [{simp, trad, pinyin, gloss: [], level}], words: [{text,
 //     pinyin, gloss, level}], char?: {char, readings: [{pinyin, count}], strokes, radical: {number, char,
@@ -80,19 +79,18 @@ export function createClient({
       const row = await dict.choose(joined, script, { word: true });
       if (worker) await post('learn', [row]);
     },
-    favourites: () => dict.favourites(),
-    isFavourite: async (hanzi) => (await dict.favourites()).includes(hanzi),
-    async setFavourite(hanzi, on, pinyin = '') {
-      await dict.setFavourite(hanzi, on, pinyin);
-      await refreshUser();
-      globalThis.dispatchEvent?.(new CustomEvent('zh-favourites'));
-    },
+    async addWord(hanzi, pinyin, gloss = '') { const row = await dict.addWord(hanzi, pinyin, gloss); await refreshUser(); return row; },
+    favorites: () => dict.listWords(),
+    isFavorite: (hanzi, pinyin = '') => dict.findWord(hanzi, pinyin).then(Boolean),
+    async toggleFavorite(hanzi, pinyin = '', gloss = '') { const res = await dict.toggleWord(hanzi, pinyin, gloss); await refreshUser(); return res; },
+    async removeFavorite(key) { await dict.removeWord(key); await refreshUser(); },
     annotate: (text, opts = {}) => call('annotate', text, opts),
     lookup: (text, opts = {}) => call('lookup', text, opts),
     convert: (text, direction) => call('convert', text, direction),
     convertParts: (text, direction) => call('convertParts', text, direction),
     packs: () => pm.packs(),
     async installPack(id, onProgress) { await pm.installPack(id, onProgress); await refreshExpansions(); },
+    async installLocalPack(name, text) { const row = await pm.installLocalPack(name, text); await refreshExpansions(); return row; },
     async removePack(id) { await pm.removePack(id); await refreshExpansions(); },
     // The user dictionary for Settings → Chinese export / import.
     exportUser: () => dict.export(),
