@@ -271,3 +271,15 @@ test('app.js blocks Linux middle-click primary-selection paste and zh-select.js 
   assert.match(zhSelectJs, /bar\.replaceChildren\(\.\.\.\[[\s\S]*?\]\.filter\(Boolean\)\)/);
   assert.doesNotMatch(zhSelectJs, /for \(const b of \[\.\.\.bar\.children\]\) if \(!\(b instanceof Element\)\)/);
 });
+
+test('narrow screens: the global bar end keeps its icon-only buttons inside the screen', () => {
+  // `.bar-end-actions .palette-trigger kbd { display: inline-block }` outranks the plain
+  // narrow-screen rules, so the hiding rules must name `.bar-end-actions` too, after it.
+  const show = styleCss.indexOf('.bar-end-actions .palette-trigger kbd {');
+  assert.ok(show > 0);
+  const after = styleCss.slice(show);
+  assert.match(after, /@media \(max-width: 960px\) \{ \.bar-end-actions \.palette-trigger :is\(span, kbd\) \{ display: none; \} \}/);
+  assert.match(after, /@media \(max-width: 920px\) \{ \.bar-end-actions \.bar-ai span \{ display: none; \} \}/);
+  // The app never pans as a page.
+  assert.match(styleCss, /html \{\s*overflow: hidden;\s*\}/);
+});
