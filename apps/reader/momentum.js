@@ -35,10 +35,11 @@ export class VelocityTracker {
 }
 
 // Glides by (vx, vy) px/s: `apply(dx, dy)` scrolls and returns false once nothing moved
-// (an edge). Any touch, wheel or key stops it (stop()).
-export function momentum({ apply, rate = DECELERATION, frame = (f) => requestAnimationFrame(f), cancel = (id) => cancelAnimationFrame(id), now = () => performance.now() }) {
+// (an edge). Any touch, wheel or key stops it (stop()). `whole: false` passes fractions of a
+// pixel (for a scroller that shows them, smooth-scroll.js); `onEnd` runs when a glide ends.
+export function momentum({ apply, rate = DECELERATION, whole = true, onEnd = () => {}, frame = (f) => requestAnimationFrame(f), cancel = (id) => cancelAnimationFrame(id), now = () => performance.now() }) {
   let id = 0;
-  const stop = () => { if (id) cancel(id); id = 0; };
+  const stop = () => { if (id) { cancel(id); id = 0; onEnd(); } };
   function fling(vx, vy) {
     stop();
     if (Math.hypot(vx, vy) < MIN_SPEED) return false;
@@ -46,11 +47,13 @@ export function momentum({ apply, rate = DECELERATION, frame = (f) => requestAni
     let doneX = 0, doneY = 0;
     const step = () => {
       const t = now() - start;
-      // Whole pixels at a time (a scroll position rounds a fraction away); the rest waits.
-      const dx = Math.trunc(travelled(vx, t, rate) - doneX), dy = Math.trunc(travelled(vy, t, rate) - doneY);
+      // Whole pixels at a time unless the scroller shows fractions (a scroll position rounds them
+      // away); the rest waits.
+      const cut = whole ? Math.trunc : (n) => n;
+      const dx = cut(travelled(vx, t, rate) - doneX), dy = cut(travelled(vy, t, rate) - doneY);
       let moved = true;
       if (dx || dy) { moved = apply(dx, dy); doneX += dx; doneY += dy; }
-      if (moved === false || Math.hypot(vx, vy) * rate ** t < STOP_SPEED) { id = 0; return; }
+      if (moved === false || Math.hypot(vx, vy) * rate ** t < STOP_SPEED) { id = 0; onEnd(); return; }
       id = frame(step);
     };
     id = frame(step);

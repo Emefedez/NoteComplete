@@ -3,6 +3,7 @@ import { followPoint, smoothStroke, pressureRadii } from "./stroke-smoothing.js"
 import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
+import { fractionalScroller } from "./smooth-scroll.js";
 import {
   prepareDocument,
   readImage,
@@ -2261,6 +2262,7 @@ function cancelGesture() {
   const g = gesture;
   gesture = null;
   if (!g) return;
+  if (g.tool === "pan") pagesScroll.end();
   clearTimeout(g.holdTimer);
   collab?.drawn(g, true);
   // A cancelled grab takes only its own box away: a region grabbed before keeps its menu.
@@ -2408,6 +2410,7 @@ function pointerDown(e, p) {
       top: $("viewport").scrollTop,
       text: textTap ? point(e, p) : null,
     };
+    pagesScroll.begin();
     p.el.setPointerCapture(e.pointerId);
     return;
   }
@@ -2796,7 +2799,7 @@ for (const type of ["pointerdown", "pointerup", "mousedown", "mouseup", "auxclic
     }
   }, true);
 }
-function middlePan(el) {
+function middlePan(el, fraction = null) {
   let drag = null;
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 1 || e.pointerType !== "mouse") return;
@@ -2806,6 +2809,7 @@ function middlePan(el) {
     e.preventDefault();
     e.stopPropagation();
     drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    fraction?.begin();
     el.setPointerCapture(e.pointerId);
     el.classList.add("middle-panning");
   }, true);
@@ -2814,6 +2818,7 @@ function middlePan(el) {
   const apply = () => {
     frame = 0;
     if (!drag || !latest) return;
+    if (fraction) return fraction.to(drag.left + drag.x - latest[0], drag.top + drag.y - latest[1]);
     el.scrollLeft = drag.left + drag.x - latest[0];
     el.scrollTop = drag.top + drag.y - latest[1];
   };
@@ -2828,6 +2833,7 @@ function middlePan(el) {
     if (!drag || e.pointerId !== drag.id) return;
     middleMouseAt = performance.now();
     if (latest) { cancelAnimationFrame(frame); apply(); }
+    fraction?.end();
     latest = null;
     drag = null;
     el.classList.remove("middle-panning");
@@ -2837,7 +2843,9 @@ function middlePan(el) {
   for (const type of ["mousedown", "mouseup", "auxclick"]) el.addEventListener(type, (e) => { if (e.button === 1) { middleMouseAt = performance.now(); e.preventDefault(); } }, true);
   el.addEventListener("paste", (e) => { if (performance.now() - middleMouseAt < 400) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
 }
-middlePan($("viewport"));
+// The pages scroll by fractions of a pixel while dragged or gliding (smooth-scroll.js).
+const pagesScroll = fractionalScroller($("viewport"), $("pages"));
+middlePan($("viewport"), pagesScroll);
 // Rows that scroll sideways when the window is narrow (the menubar, the tools): a mouse
 // wheel scrolls them too, and a faded edge shows there is more on that side.
 function sideScroll(el) {
@@ -2880,8 +2888,7 @@ function pointerMove(e) {
       const g = gesture;
       if (!g || g.tool !== "pan" || !g.at) return;
       g.frame = 0;
-      $("viewport").scrollLeft = g.left + g.x - g.at[0];
-      $("viewport").scrollTop = g.top + g.y - g.at[1];
+      pagesScroll.to(g.left + g.x - g.at[0], g.top + g.y - g.at[1]);
     });
   } else appendPoint(e);
 }
@@ -2890,10 +2897,13 @@ function pointerUp(e) {
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.tool === "pan") {
     const g = gesture, v = g.speed?.velocity(e.timeStamp);
-    if (g.at) { cancelAnimationFrame(g.frame); $("viewport").scrollLeft = g.left + g.x - e.clientX; $("viewport").scrollTop = g.top + g.y - e.clientY; }
+    if (g.at) { cancelAnimationFrame(g.frame); pagesScroll.to(g.left + g.x - e.clientX, g.top + g.y - e.clientY); }
+    const exact = pagesScroll.exact;
     cancelGesture();
-    if (g.text && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 10) return textBox.typeAt(g.panel, g.text);
-    if (v) glide.fling(-v.vx, -v.vy);
+    if (exact && v) pagesScroll.to(...exact);
+    if (g.text && Math.hypot(e.clientX - g.x, e.clientY - g.y) < 10) { pagesScroll.end(); return textBox.typeAt(g.panel, g.text); }
+    // A fling glides on from the exact place the drag left (fractions included).
+    if (!(v && glide.fling(-v.vx, -v.vy))) pagesScroll.end();
     return;
   }
   appendPoint(e);
@@ -3329,12 +3339,9 @@ function pinchBy(clientX, clientY, step) {
 // Fingers on the pages: two move and pinch-zoom, a two-finger tap undoes, three redo.
 // Scrolls that keep going after the fingers lift (momentum.js); a touch, wheel or key stops them.
 const glide = momentum({
-  apply(dx, dy) {
-    const v = $("viewport"), left = v.scrollLeft, top = v.scrollTop;
-    v.scrollLeft += dx;
-    v.scrollTop += dy;
-    return v.scrollLeft !== left || v.scrollTop !== top;
-  },
+  whole: false,
+  apply: (dx, dy) => pagesScroll.by(dx, dy),
+  onEnd: () => pagesScroll.end(),
 });
 for (const type of ["wheel", "pointerdown"]) $("viewport").addEventListener(type, () => glide.stop(), { passive: true, capture: true });
 addEventListener("keydown", () => glide.stop(), true);
