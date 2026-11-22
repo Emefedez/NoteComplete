@@ -85,6 +85,11 @@ export const paths = {
  keyboard:'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
  // Math keypad: a curve on axes, delete back, and the next / previous empty place.
  graph:'M4 3v17h17M7 16c2-7 4-9 6-5s3 4 7-6',
+ // Math Mode, R Commander Studio, R Plot, and Math Text Box.
+ math:'M18 6.5V4.5H6l6 7.5-6 7.5h12v-2',
+ rstudio:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.5 16.5v-9h3.2a2.4 2.4 0 0 1 0 4.8H9.5m3 0 2.7 4.2',
+ rplot:'M4 3v17h17M7.5 20v-6h3v6M11.5 20v-11h3v11M15.5 20v-8h3v8',
+ mathBox:'M4 5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5Zm8 4v6M9 12h6',
  // Audio segment (audio-trim.js): scissors, its start and end flags, play only the segment.
  scissors:'M6 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0 12a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12',
  flagStart:'M5 21V4M5 4h11l-2 4 2 4H5',

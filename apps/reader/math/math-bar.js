@@ -30,12 +30,12 @@ export function createMathBar({
         <button type="button" data-ma="solve" title="Solve equation (= 0)">Solve</button>
         <span class="math-bar-sep"></span>
         <button type="button" data-ma="plot" title="Plot as Function Graph prefab">Plot</button>
-        <button type="button" data-ma="insert" class="primary" title="Insert formula (or result) as a Math Text Box on the page">+ Box</button>
+        <button type="button" data-ma="insert" class="primary math-icon-btn" aria-label="Insert Math Text Box" title="Insert formula (or result) as a Math Text Box on the page"></button>
         <span class="math-bar-sep"></span>
-        <button type="button" data-ma="r-prefab" title="Insert R Math &amp; Statistics figure (Normal, t, Chi-squared, Histogram, Boxplot, Scatter, Custom R)">R Plot</button>
-        <button type="button" data-ma="r-studio" title="Open R Commander Studio">R Studio</button>
-        <button type="button" data-ma="settings" title="Math Mode &amp; R Bridge settings"></button>
-        <button type="button" data-ma="close" title="Hide Math Mode bar (Ctrl+Shift+M)"></button>
+        <button type="button" data-ma="r-prefab" class="math-icon-btn" aria-label="Insert R Plot" title="Insert R Math &amp; Statistics figure (Normal, t, Chi-squared, Histogram, Boxplot, Scatter, Custom R)"></button>
+        <button type="button" data-ma="r-studio" class="math-icon-btn" aria-label="Open R Commander Studio" title="Open R Commander Studio"></button>
+        <button type="button" data-ma="settings" aria-label="Math Mode &amp; R Bridge settings" title="Math Mode &amp; R Bridge settings"></button>
+        <button type="button" data-ma="close" aria-label="Hide Math Mode bar" title="Hide Math Mode bar (Ctrl+Shift+M)"></button>
       </div>
     </div>
     <div class="math-bar-int" hidden>
@@ -53,6 +53,9 @@ export function createMathBar({
   const intRow = container.querySelector('.math-bar-int');
   const intA = container.querySelector('.math-int-a');
   const intB = container.querySelector('.math-int-b');
+  container.querySelector('[data-ma="insert"]').append(icon('mathBox'));
+  container.querySelector('[data-ma="r-prefab"]').append(icon('rplot'));
+  container.querySelector('[data-ma="r-studio"]').append(icon('rstudio'));
   container.querySelector('[data-ma="settings"]').append(icon('settings'));
   container.querySelector('[data-ma="close"]').append(icon('close'));
 

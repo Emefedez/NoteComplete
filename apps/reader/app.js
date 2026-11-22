@@ -4661,7 +4661,7 @@ const SHORTCUTS = [
 // The tool row can be put in any order by dragging its buttons; remembered here.
 const toolGroup = document.querySelector("#toolbar .segmented");
 const toolKey = (el) => el.dataset.tool || el.id;
-const toolItems = 'button[data-tool], #importImage';
+const toolItems = 'button[data-tool], #importImage, #mathModePill';
 const defaultToolOrder = [...toolGroup.querySelectorAll(toolItems)].map(toolKey);
 function arrangeTools(order) {
   const rank = (key) => { const i = order.indexOf(key); return i < 0 ? order.length + defaultToolOrder.indexOf(key) : i; };

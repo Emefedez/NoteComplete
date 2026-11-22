@@ -1503,8 +1503,8 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 @media (max-width: 700px) { #status { padding: 5px 12px; font-size: 11px; max-width: calc(100vw - 48px); } }
 
 /* Home: recent notes and the Google Drive library. */
-#empty.home { margin: 0; padding: 22px clamp(16px, 4vw, 40px) 30px; text-align: left; overflow: auto; flex: 1; min-height: 0; width: 100%; }
-.home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto 8px; }
+#empty.home { margin: 0; padding: 0 clamp(16px, 4vw, 40px) 30px; text-align: left; overflow: auto; flex: 1; min-height: 0; width: 100%; }
+.home-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto 4px; padding-top: 18px; }
 #empty .home-head h2 { font-size: 24px; margin: 0 0 4px; }
 #empty .home-head p { margin: 0; line-height: 1.5; }
 .home-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1799,7 +1799,7 @@ button.danger { background: var(--danger-soft); color: var(--danger); font-weigh
 .transcript-word-edit { font: inherit; font-size: 14px; padding: 0 3px; border: 1px solid var(--accent); border-radius: 3px; }
 #transcriptEdit[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 /* Home filters: stackable chips */
-.home-filters { position: sticky; top: -10px; z-index: 5; padding: 16px 0 8px; background: var(--chrome); box-shadow: 0 1px 0 var(--line); max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.home-filters { position: sticky; top: 0; z-index: 5; padding: 8px 0; background: var(--chrome); box-shadow: 0 1px 0 var(--line); max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .filter-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .filter-label { font-size: 12px; color: var(--muted); margin-right: 2px; }
 /* Sort: styled custom dropdown chip matching the filter pills (icon, value, animated caret). */
@@ -5465,10 +5465,26 @@ header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-read
   flex-wrap: wrap;
 }
 .math-bar-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 26px;
   padding: 2px 8px;
   font-size: 12.5px;
   border: 1px solid var(--line);
   background: var(--surface);
+}
+.math-bar-actions button.math-icon-btn,
+.math-bar-actions button[data-ma="settings"],
+.math-bar-actions button[data-ma="close"] {
+  padding: 2px 6px;
+  min-width: 28px;
+}
+.math-bar-actions button svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
 }
 .math-bar-actions button.primary {
   background: var(--accent);
