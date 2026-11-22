@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-expo",
-  "version": "1.2.69",
+  "version": "1.2.70",
   "main": "index.js",
   "scripts": {
     "start": "node ../../tools/start_expo.mjs",
