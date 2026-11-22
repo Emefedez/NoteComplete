@@ -160,9 +160,7 @@ fn normalize_k21_shape_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
         let Some(one) = bytes_of(&f30, 1).and_then(|b| parse(b).ok()) else {
             continue;
         };
-        let color = bytes_of(&one, 1)
-            .and_then(|b| parse(b).ok())
-            .unwrap_or(one);
+        let color = bytes_of(&one, 1).and_then(|b| parse(b).ok()).unwrap_or(one);
         let alpha_bits = fixed32_of(&color, 4).or_else(|| varint_of(&color, 4).map(|v| v as u32));
         let omitted = alpha_bits.is_none_or(|bits| {
             let a = f32::from_bits(bits);
@@ -177,11 +175,7 @@ fn normalize_k21_shape_fills(src: &oblyx::doc::PageSource, page: &mut Page) {
     }
     for item in &mut page.items {
         if let Item::Shape(sh) = item {
-            if sh
-                .uuid
-                .as_deref()
-                .is_some_and(|u| translucent.contains(u))
-            {
+            if sh.uuid.as_deref().is_some_and(|u| translucent.contains(u)) {
                 sh.fill[3] = GOODNOTES_SHAPE_FILL_ALPHA;
             }
         }
@@ -341,6 +335,7 @@ impl Element {
 /// An editable NoteComplete overlay kept above the base `.noteful` (locked under the undo floor)
 /// so native shapes stay real resizable shapes and sticky notes stay editable prefabs with their
 /// own strokes and text sitting cleanly on top of the card.
+#[allow(clippy::large_enum_variant)]
 enum Overlay {
     Shape {
         line: Line,
@@ -380,7 +375,7 @@ fn over_white(c: [f32; 4]) -> [f32; 3] {
 /// while preserving sharp corners and keeping total point counts well below Noteful's 8192 limit.
 fn smooth_stroke_points(pts: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     let n = pts.len();
-    if n < 3 || n > 2000 {
+    if !(3..=2000).contains(&n) {
         return pts;
     }
     let mut out = Vec::with_capacity(n * 3);
@@ -404,9 +399,7 @@ fn smooth_stroke_points(pts: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
         let l1 = v1[0].hypot(v1[1]);
         let l2 = v2[0].hypot(v2[1]);
         // Keep genuine sharp corners crisp (e.g. acute cusps) and avoid subdividing tiny micro-steps.
-        let sharp = l1 > 1e-4
-            && l2 > 1e-4
-            && ((v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)) < -0.2;
+        let sharp = l1 > 1e-4 && l2 > 1e-4 && ((v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2)) < -0.2;
         let span = (m1[0] - m0[0]).hypot(m1[1] - m0[1]);
         if sharp || span < 0.6 {
             out.push(p1);
@@ -768,6 +761,7 @@ fn polygon_as_rect(
     ))
 }
 
+#[allow(clippy::type_complexity)]
 fn native_shape(
     sh: &ShapeEl,
     s: impl Fn(f32) -> f64 + Copy,
@@ -919,7 +913,11 @@ fn sticky_note_png(width: f64, height: f64, rgb: [f32; 3], fold: bool) -> Vec<u8
             }
             let out_a = (a * 0.25).clamp(0.0, 1.0);
             let (or, og, ob) = if a > 1e-6 {
-                ((r / a).clamp(0., 255.), (g / a).clamp(0., 255.), (b / a).clamp(0., 255.))
+                (
+                    (r / a).clamp(0., 255.),
+                    (g / a).clamp(0., 255.),
+                    (b / a).clamp(0., 255.),
+                )
             } else {
                 (0.0, 0.0, 0.0)
             };
@@ -1262,8 +1260,9 @@ fn convert_page(
                 }
                 if has_stroke || !has_fill {
                     let c = if has_stroke { sh.stroke } else { sh.fill };
-                    out.elements
-                        .extend(make_line(&outline, sh.width.max(0.5), c, false).map(Element::Line));
+                    out.elements.extend(
+                        make_line(&outline, sh.width.max(0.5), c, false).map(Element::Line),
+                    );
                 }
             }
             Item::FillPath(fp) => {
@@ -1536,11 +1535,12 @@ mod tests {
         let editor = Editor::open_project_bytes(&bytes).unwrap();
         let view = editor.view(0).unwrap();
         let parts = view["parts"].as_array().unwrap();
-        assert_eq!(parts.len(), 4, "frame + picture + owned stroke + author text");
-        let sticky_parts: Vec<_> = parts
-            .iter()
-            .filter(|p| p["id"] == "sticky-0-0")
-            .collect();
+        assert_eq!(
+            parts.len(),
+            4,
+            "frame + picture + owned stroke + author text"
+        );
+        let sticky_parts: Vec<_> = parts.iter().filter(|p| p["id"] == "sticky-0-0").collect();
         let owned_parts: Vec<_> = parts
             .iter()
             .filter(|p| p["id"] == "sticky-0-0:ink")
@@ -1593,10 +1593,18 @@ mod tests {
         .unwrap();
         let editor = Editor::open(&bytes).unwrap();
         let svg = editor.view(0).unwrap()["svg"].as_str().unwrap().to_owned();
-        let hl_at = svg.find("mix-blend-mode:multiply").expect("highlighter multiply");
+        let hl_at = svg
+            .find("mix-blend-mode:multiply")
+            .expect("highlighter multiply");
         let pen_at = svg.rfind("data-item=\"stroke:").unwrap();
-        assert!(hl_at < pen_at, "highlighter must sit underneath opaque pen ink");
+        assert!(
+            hl_at < pen_at,
+            "highlighter must sit underneath opaque pen ink"
+        );
         let smoothed = smooth_stroke_points(vec![[0., 0.], [10., 10.], [20., 0.]]);
-        assert!(smoothed.len() > 3, "curved strokes should be subdivided smoothly");
+        assert!(
+            smoothed.len() > 3,
+            "curved strokes should be subdivided smoothly"
+        );
     }
 }

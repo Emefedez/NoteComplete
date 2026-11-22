@@ -335,7 +335,10 @@ fn goodnotes_filled_shapes_stay_real_editable_shapes_without_flattening() {
     assert_eq!(shapes[0]["line"]["shape"]["kind"], "rectangle");
     assert!(shapes[0]["line"]["shape"]["fill"].is_array());
     // Must not have been flattened into highlighter bands (tool == 1).
-    assert!(!view["svg"].as_str().unwrap().contains("mix-blend-mode:multiply"));
+    assert!(!view["svg"]
+        .as_str()
+        .unwrap()
+        .contains("mix-blend-mode:multiply"));
 }
 
 #[test]
