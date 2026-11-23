@@ -1,11 +1,16 @@
-// The hanzi module's editor, in the kit's movable window: the stroke-order player in the middle
-// (play/pause Space, ← →, Home/End, speed, timeline), live English equivalents & Simplified/
-// Traditional variants card (every meaning, grouped by reading, each one put on the page or
-// taken off with a click), the characters (with built-in Chinese IME mode remembered via icon),
-// pinyin and look on the right; Practise traces each character with the pen or a finger.
+// The hanzi module's editor, in the kit's movable window: a look-up of the characters with their
+// stroke order. In the middle the player (play/pause Space, ← →, Home/End, speed, timeline,
+// repeat), an optional still copy beside it, the sheet as it goes on the page, and the header:
+// characters, pinyin whose syllables play their tone, 🔊, ☆ favourite, HSK level, variants. On the
+// right the characters (with built-in Chinese input), then collapsible Meanings (each one put on
+// the page or taken off with a click), Structure, Words with it and On the page. Practise traces
+// each character with the pen or a finger.
 import { editorShell, make, button, field, textInput, selectInput, checkInput } from '../kit/index.js';
 import { normalize, dictionaryFor, pageGloss, render as renderHanziSheet, name, MAX_CHARS } from './render.js';
-import { meaningsOf } from '../../chinese/lookup-panel.js';
+import { meaningsOf, lowestLevel } from '../../chinese/lookup-panel.js';
+import { sayer, listenButton, syllables, structureRows } from '../../chinese/char-info.js';
+import { levelLabel } from '../../chinese/vocab.js';
+import { icon } from '../../icons.js';
 import { strokePlayer, isHan } from '../../chinese/stroke-player.js';
 import { practise } from '../../chinese/practice.js';
 import { attachIme, zhButton } from '../../chinese/ime.js';
@@ -13,6 +18,9 @@ import { langToggle } from '../../chinese/zh-window.js';
 import { zhLang, setZhLang } from '../../chinese/translate.js';
 
 const HANZI_IME_KEY = 'notecomplete-hanzi-prefab-ime';
+const STILL_KEY = 'notecomplete-hanzi-still', SECTION_KEY = 'notecomplete-hanzi-section-';
+const remembered = (key, fallback = null) => { try { return localStorage.getItem(key) ?? fallback; } catch { return fallback; } };
+const keep = (key, value) => { try { localStorage.setItem(key, value); } catch { /* Optional. */ } };
 const hasLatin = (s) => /[a-zA-Z]/.test(String(s || ''));
 const yellowBridgeUrl = (c) => `https://www.yellowbridge.com/chinese/character-stroke-order.php?word=${encodeURIComponent(c)}`;
 function getHanziImeMode() {
@@ -52,6 +60,8 @@ export function open(root, { spec, editing, host }) {
       { keys: 'Space', does: 'Play · pause main trace animation' },
       { keys: '← →', does: 'Stroke back · forward' },
       { keys: 'Home / End', does: 'No strokes · all strokes' },
+      { does: 'Still copy: the finished characters beside the animated ones' },
+      { does: 'Click a syllable of the pinyin to hear its tone; ☆ makes it a favourite' },
       { does: '中 / A icon next to Characters: toggle Chinese Hanzi or Latin typing (remembered)' },
       { does: 'Practise: write each stroke over the grey character; after 2 misses the stroke is shown' },
       { keys: 'Ctrl Enter', does: `${host.applyLabel} on the page` },
@@ -75,6 +85,15 @@ export function open(root, { spec, editing, host }) {
     sheetToggleBtn.setAttribute('aria-pressed', String(showSheet));
     renderSheetPreview();
   };
+  let still = remembered(STILL_KEY) === '1';
+  const stillBtn = button('pin', 'Still copy', { title: 'A finished copy of the characters beside the animated ones' });
+  stillBtn.setAttribute('aria-pressed', String(still));
+  stillBtn.onclick = () => {
+    still = !still;
+    keep(STILL_KEY, still ? '1' : '0');
+    stillBtn.setAttribute('aria-pressed', String(still));
+    player?.set({ still, size: size() });
+  };
   const dictBar = make('div', { className: 'hz-dict-bar' });
   const pageBtn = button('check', 'Show this step on the page');
   pageBtn.onclick = () => finish(player.index >= player.steps ? null : player.index);
@@ -87,7 +106,7 @@ export function open(root, { spec, editing, host }) {
     } catch (e) { shell.say(e.message, true); }
   };
   const ybWrap = make('span', { className: 'hz-yb-wrap' });
-  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, dictsBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
+  const actions = make('div', { className: 'hz-actions' }, practiseBtn, sheetToggleBtn, stillBtn, dictsBtn, ybWrap, make('span', { className: 'pk-spacer' }), pageBtn);
   shell.canvas.append(stage, sheetPreview, dictBar, actions);
   let player = null, drill = null, charIme = null, charInputEl = null, compareBase = '';
   const size = () => {
@@ -95,12 +114,73 @@ export function open(root, { spec, editing, host }) {
     const narrow = cw < 500;
     const cap = narrow ? 136 : 240;
     const floor = narrow ? 88 : 120;
-    return Math.max(floor, Math.min(cap, Math.floor(cw / Math.max(1, [...model.text].length) - 24)));
+    return Math.max(floor, Math.min(cap, Math.floor(cw / (Math.max(1, [...model.text].length) * (still ? 2 : 1)) - 24)));
   };
 
   // The dictionary's look-up of the characters (load()), for the list of every meaning.
-  let lookup = null;
+  let lookup = null, charLookups = [];
+  const say = sayer({ script: () => model.script, status: (msg, bad) => shell.say(msg, bad) });
   const defsBox = make('div', { className: 'hz-defs' });
+  const lookupBox = make('div', { className: 'hz-lookup' });
+  // A collapsible section of the side panel, its open state remembered.
+  const sectionBox = (key, title, { open = true } = {}) => {
+    const d = make('details', { className: 'hz-section' });
+    d.open = remembered(`${SECTION_KEY}${key}`, open ? '1' : '0') === '1';
+    d.addEventListener('toggle', () => keep(`${SECTION_KEY}${key}`, d.open ? '1' : '0'));
+    d.append(make('summary', { textContent: title }));
+    return d;
+  };
+  const meaningsSection = sectionBox('meanings', 'Meanings');
+  meaningsSection.append(defsBox);
+  // Another character in the window (a part, a word): traced with its own look-up.
+  function trace(text) {
+    compareBase = '';
+    if (charInputEl) charInputEl.value = text;
+    pinyinAuto = true; glossAuto = true; variantsAuto = true;
+    change({ text, pinyin: '', gloss: '', variants: '' }, true);
+  }
+  const traceLink = (t) => make('button', { type: 'button', className: 'zh-lk-link zh-cjk', textContent: t, title: `Trace ${t}`, onclick: () => trace(t) });
+  // The favourite star of the characters (the look-up panel's favourites).
+  function starButton(hanzi) {
+    const b = make('button', { type: 'button', className: 'star-toggle zh-lk-star' }, icon('star'));
+    const paint = (on) => { b.setAttribute('aria-pressed', String(on)); b.title = on ? `Remove ${hanzi} from favorites` : `Add ${hanzi} to favorites`; b.setAttribute('aria-label', b.title); };
+    paint(false);
+    const client = () => import('../../chinese/client.js').then(({ chinese }) => chinese());
+    client().then((zh) => zh.isFavorite(hanzi, model.pinyin)).then(paint, () => { b.hidden = true; });
+    b.onclick = async () => {
+      try {
+        const res = await (await client()).toggleFavorite(hanzi, model.pinyin, model.gloss);
+        paint(res.starred);
+        shell.say(res.starred ? `${hanzi} added to favorites.` : `${hanzi} removed from favorites.`);
+      } catch (e) { shell.say(e.message, true); }
+    };
+    return b;
+  }
+  // Structure (each character) and Words with it (one character), collapsible.
+  function renderLookup() {
+    const parts = [];
+    const structure = charLookups.map(({ char, info }) => ({ char, rows: structureRows(info, traceLink) })).filter((x) => x.rows.length);
+    if (structure.length) {
+      const sec = sectionBox('structure', 'Structure');
+      for (const { char, rows } of structure) {
+        if (structure.length > 1) sec.append(make('div', { className: 'hz-struct-char zh-cjk', textContent: char }));
+        sec.append(...rows);
+      }
+      parts.push(sec);
+    }
+    if (lookup?.words?.length && [...model.text].length === 1) {
+      const sec = sectionBox('words', `Words with ${model.text} (${lookup.words.length})`, { open: false });
+      const ul = make('ul', { className: 'zh-lk-words hz-words' });
+      for (const w of lookup.words) {
+        const li = make('li', {}, traceLink(w.text), listenButton(w.text, say, { script: model.script, small: true }), syllables(w.pinyin, w.text, say), make('span', { className: 'zh-lk-gloss', textContent: w.gloss || '' }));
+        if (w.level) li.append(make('span', { className: 'zh-lk-level', textContent: levelLabel(w.level) }));
+        ul.append(li);
+      }
+      sec.append(ul);
+      parts.push(sec);
+    }
+    lookupBox.replaceChildren(...parts);
+  }
   if (editing && (model.lang === 'es' || model.lang === 'en') && model.lang !== zhLang()) setZhLang(model.lang);
   // es | en: the meanings again in the other language (updating the caption & trace SVG preview too).
   const langSwitch = langToggle({ onChange: (lang) => { glossAuto = true; model = normalize({ ...model, lang }); load(false); } });
@@ -116,9 +196,14 @@ export function open(root, { spec, editing, host }) {
     const meanings = meaningsOf(lookup, model.text);
     const all = [...new Set(meanings.flatMap((m) => m.gloss))];
     const onPage = pageMeanings();
+    const han = [...model.text].filter(isHan).join('');
+    const level = lowestLevel(lookup);
     const headRow = make('div', { className: 'hz-dict-head' },
       make('strong', { className: 'hz-dict-chars', textContent: model.text || '—' }),
-      model.pinyin ? make('span', { className: 'hz-dict-pinyin', textContent: model.pinyin }) : null,
+      model.pinyin ? syllables(model.pinyin, model.text, say) : null,
+      han ? listenButton(han, say, { reading: [...han].length === 1 ? model.pinyin : '', script: model.script }) : null,
+      han ? starButton(han) : null,
+      level ? make('span', { className: 'zh-lk-level', textContent: levelLabel(level) }) : null,
       model.gloss
         ? make('span', { className: 'hz-dict-gloss', textContent: model.gloss, title: `On the page: ${model.gloss}` })
         : make('span', { className: 'muted', textContent: lookup || !model.text ? 'No meaning on the page' : 'Looking up the meaning…' }),
@@ -143,21 +228,22 @@ export function open(root, { spec, editing, host }) {
     );
     const quick = make('div', { className: 'pk-row hz-defs-tools' });
     if (all.length) {
-      const few = button(null, `First ${Math.min(3, all.length)}`, { title: 'Put the first meanings on the page, as when it was inserted' });
+      const few = button('restart', `The first ${Math.min(3, all.length)} on the page, as when it was inserted`, { iconOnly: true });
       few.onclick = () => setPageMeanings(pageGloss(all).split('; '));
-      const every = button(null, 'All', { title: 'Put every meaning on the page (long ones wrap to three lines)' });
+      const every = button('doubleCheck', 'Every meaning on the page (long ones wrap to three lines)', { iconOnly: true });
+      every.disabled = onPage.length === all.length;
       every.onclick = () => setPageMeanings(all);
-      const none = button(null, 'None', { title: 'No meaning under the characters' });
+      const none = button('close', 'No meaning on the page', { iconOnly: true });
+      none.disabled = !onPage.length;
       none.onclick = () => setPageMeanings([]);
       quick.append(few, every, none);
     }
     // replaceChildren() would write a null child as the text "null": leave it out instead.
+    if (all.length) quick.append(make('span', { className: 'pk-spacer' }), make('small', { className: 'muted', textContent: `${onPage.length} of ${all.length} on the page` }));
     defsBox.replaceChildren(...[
-      make('div', { className: 'hz-defs-head' }, make('h4', { textContent: all.length ? `Meanings (${onPage.length} of ${all.length} on the page)` : 'Meanings' }), langSwitch),
+      make('div', { className: 'hz-defs-head' }, all.length ? quick : make('span'), langSwitch),
       defsScroll,
-      all.length ? make('small', { className: 'muted', textContent: 'Click a meaning above to show or hide it on the page' }) : null,
-      all.length ? quick : null,
-    ].filter(Boolean));
+    ]);
     const cleanVariants = variantChars.filter((c) => isHan(c) && !['简', '体', '繁', '體', '異'].includes(c));
     if (model.variants || cleanVariants.length) {
       const varRow = make('div', { className: 'hz-variants' },
@@ -240,9 +326,10 @@ export function open(root, { spec, editing, host }) {
     practiseBtn.replaceChildren(...button('draw', 'Practise').childNodes);
     pageBtn.hidden = false;
     renderSheetPreview();
-    player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, colour: model.colour, start: model.step === null ? (autoplay ? 0 : 'all') : model.step, autoplay });
+    stillBtn.hidden = !Object.keys(model.data).length;
+    player = strokePlayer(stage, { text: model.text, data: model.data, size: size(), grid: model.grid, outline: model.outline, still, colour: model.colour, start: model.step === null ? (autoplay ? 0 : 'all') : model.step, autoplay });
     player.ready.then(() => {
-      say();
+      sayMissing();
       const active = document.activeElement;
       const typingInField = active && root.contains(active) && active.matches('input, textarea, select');
       if (!typingInField) requestAnimationFrame(() => player?.focus());
@@ -255,6 +342,7 @@ export function open(root, { spec, editing, host }) {
     drill?.destroy();
     practiseBtn.replaceChildren(...button('play', 'Back to the player').childNodes);
     pageBtn.hidden = true;
+    stillBtn.hidden = true;
     const c = han[k % han.length];
     drill = practise(stage, { char: c, data: model.data[c], size: Math.min(280, size() + 40), grid: model.grid, outline: model.outline, onDone: (r) => {
       shell.say(`${c}: ${r.mistakes ? `${r.mistakes} mistake${r.mistakes === 1 ? '' : 's'}` : 'no mistakes'}${han.length > 1 ? ' · next character…' : ''}`);
@@ -263,7 +351,7 @@ export function open(root, { spec, editing, host }) {
     shell.say(`Write ${c} (${k % han.length + 1} of ${han.length})`);
   }
   practiseBtn.onclick = () => (drill ? showPlayer() : showPractice());
-  const say = () => {
+  const sayMissing = () => {
     const missing = [...new Set(model.text)].filter((c) => isHan(c) && !model.data[c]);
     shell.say(missing.length ? `No stroke order for ${missing.join(' ')}` : '', !!missing.length);
   };
@@ -331,13 +419,21 @@ export function open(root, { spec, editing, host }) {
 
     shell.panel.replaceChildren(
       field('Characters (Chinese input)', charRow, `Up to ${MAX_CHARS} · click 中/A icon to toggle Chinese input (remembered)`),
-      defsBox,
-      make('h4', { textContent: 'On the page' }),
+      meaningsSection,
+      lookupBox,
+      pageSection(),
+    );
+  }
+  // How it looks on the page.
+  function pageSection() {
+    const sec = sectionBox('page', 'On the page');
+    sec.append(
       field('Show', selectInput([['strokes', 'The characters'], ['numbers', 'With stroke numbers'], ['steps', 'With the stroke sequence (traces)']], model.show, (show) => { if (show !== 'strokes') showSheet = true; change({ show }, false); renderSheetPreview(); })),
       field('Grid', selectInput([['mi', '米字格 (cross and diagonals)'], ['tian', '田字格 (cross)'], ['none', 'None']], model.grid, (grid) => change({ grid }, false))),
       checkInput('Grey outline of the strokes still to come', model.outline, (outline) => change({ outline }, false)),
       field('Colour', selectInput([['#1f2328', 'Black'], ['#245dc4', 'Blue'], ['#7a3db8', 'Purple'], ['#1c7c54', 'Green']], model.colour, (colour) => change({ colour }, false))),
     );
+    return sec;
   }
 
   let loading = 0;
@@ -345,7 +441,9 @@ export function open(root, { spec, editing, host }) {
     const ticket = ++loading;
     const activeLang = zhLang();
     lookup = null;
+    charLookups = [];
     renderDictBar();
+    renderLookup();
     const { spec: next, lookup: found } = await dictionaryFor({
       ...model,
       lang: activeLang,
@@ -355,6 +453,8 @@ export function open(root, { spec, editing, host }) {
     });
     if (ticket !== loading) return;
     lookup = found;
+    charLookups = await charsLookedUp(found);
+    if (ticket !== loading) return;
     model = normalize({
       ...model,
       lang: activeLang,
@@ -364,8 +464,19 @@ export function open(root, { spec, editing, host }) {
       variants: variantsAuto && next.variants ? next.variants : model.variants,
     });
     renderDictBar();
+    renderLookup();
     renderSheetPreview();
     if (show) showPlayer(autoplay);
+  }
+  // Each character's own look-up, for Structure (one character: the text's).
+  async function charsLookedUp(found) {
+    const han = [...new Set([...model.text].filter(isHan))];
+    if (han.length === 1) return found?.char ? [{ char: han[0], info: found.char }] : [];
+    try {
+      const { chinese } = await import('../../chinese/client.js');
+      const list = await Promise.all(han.map((c) => chinese().lookup(c, { script: model.script }).catch(() => null)));
+      return han.map((char, i) => ({ char, info: list[i]?.char })).filter((x) => x.info);
+    } catch { return []; }
   }
 
   let timer = 0;

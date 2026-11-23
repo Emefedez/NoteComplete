@@ -7,10 +7,10 @@ import { rgbaOf } from "./text-box.js";
 import { imageReady } from "./image-ready.js";
 import { download } from "./download.js";
 import { canBeExercise, editorKind } from "./chart-model.js";
-import { openContextMenu } from "./context-menu.js";
+import { openContextMenu, openMenu, extendContextMenu } from "./context-menu.js";
 import { moduleOf } from "./prefab-registry.js";
 import { PREFABS, recentPrefabs } from "./prefabs.js";
-import { pageZhEntries, pageZhLongPress } from "./chinese/zh-menu.js";
+import { pageZhEntries, pageZhPicture, pageZhLongPress } from "./chinese/zh-menu.js";
 import { getSharedUmlClip } from "./uml-clipboard.js";
 
 export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, action, blankPageEntries, busy, call, cancelGesture, compoundLabel, copyItem, currentClip, editCompound, editTextItem, insertCompound, insertPrefab, insertShapeAt, insertUml, pageCanvas, palettes, pasteClip, pasteUmlIntoPage, patchItem, pickColor, pickWhole, point, quick, removeItem, selection, setTapeMode, status, tapeOpen, textBox, toggleTape, app }) {
@@ -251,11 +251,14 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
     const args = { page: p.index, x: at[0], y: at[1], tolerance: 8 * p.size[0] / p.el.getBoundingClientRect().width };
     const tape = tapeAt(p, at);
     const sticky = stickyAt(p.render, at[0], at[1]);
-    // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js).
+    // "Look up 你好" on top for Chinese under the pointer (chinese/zh-menu.js); on a picture with
+    // no text there, read in the background and added to the open menu once found.
     const zh = await pageZhEntries(p, x, y).catch(() => []);
+    const fromPicture = zh.length ? null : pageZhPicture(p, x, y).catch(() => []);
+    const addWhenRead = (menu) => fromPicture?.then((found) => found.length && extendContextMenu(menu, found));
     try {
       const item = await pickWhole(args);
-      if (item) { selection.show(item); return itemMenu(item, x, y, { tape, zh, sticky }); }
+      if (item) { selection.show(item); itemMenu(item, x, y, { tape, zh, sticky }); addWhenRead(openMenu()); return; }
       const locked = await call("pickLock", args);
       if (locked?.locked) {
         return openContextMenu(x, y, [...tapeEntries(p, tape), tape && "-", ...stickyEntries(sticky), sticky && "-", { label: "Unlock", icon: "unlock", run: () => action("lock", { page: p.index, itemId: locked.id, locked: false }).then(() => status("Unlocked.")) }], { title: `${ITEM_NAMES[locked.kind] || "Item"} (locked)` });
@@ -265,7 +268,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
     const sharedUml = getSharedUmlClip();
     const canPastePage = Boolean(currentClip() || sharedUml);
     const runPagePaste = () => (currentClip() && (!sharedUml || (currentClip().at || 0) >= (sharedUml.at || 0)) ? pasteClip(p, at) : pasteUmlIntoPage(sharedUml, p, at));
-    openContextMenu(x, y, [
+    const menu = openContextMenu(x, y, [
       ...zh,
       ...tapeEntries(p, tape),
       tape && "-",
@@ -278,6 +281,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       ...(app.doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
       { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },
     ], { title: tape ? "Tape" : `Page ${p.index + 1}` });
+    addWhenRead(menu);
   }
   // A finger held still for a moment opens the menu (as a right-click). Not while it draws: a
   // finger that pans, selects or types does; a second finger (two-finger hold, pinch) cancels it.

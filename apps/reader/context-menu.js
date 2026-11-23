@@ -134,6 +134,22 @@ function openSub(root, parent, button, items, title, depth) {
   (root.__subs ||= []).push(el);
 }
 
+// The menu open now (its element), or null.
+export const openMenu = () => open?.el || null;
+// Entries found after `el` opened (something read in the background) put at its top, under its
+// title, with a divider; false when that menu has gone meanwhile.
+export function extendContextMenu(el, entries) {
+  const list = entries.filter(Boolean);
+  if (!open || open.el !== el || !list.some((e) => e !== '-')) return false;
+  const extra = panel(list, '', open.state, 0);
+  for (const b of extra.querySelectorAll(':scope > button')) b.classList.add('context-added');
+  const nodes = [...extra.childNodes, document.createElement('hr')];
+  const title = el.querySelector(':scope > .context-menu-title');
+  if (title) title.after(...nodes); else el.prepend(...nodes);
+  place(el, parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0);
+  return true;
+}
+
 // `onClose`: called when it goes, chosen from or not (before the chosen entry runs).
 export function openContextMenu(x, y, entries, { title = '', host = null, onClose = null } = {}) {
   closeContextMenu();

@@ -7,7 +7,8 @@
 //   const p = strokePlayer(host, { text: '你好', size: 200, grid: 'mi', outline: true, autoplay: true });
 //   await p.ready;            // stroke data loaded (strokes.js) unless given as `data`
 //   p.play(); p.pause(); p.go(n); p.forward(); p.replay(); p.index; p.steps;
-//   p.setText('谢谢'); p.set({ grid: 'tian', outline: false }); p.data; p.destroy();
+//   p.setText('谢谢'); p.set({ grid: 'tian', outline: false, still: true }); p.data; p.destroy();
+// `still`: a finished copy of the characters beside the animated ones (only where something animates).
 import { stepPlayer } from '../prefabs/kit/step-player.js';
 import { glyphSvg, gridSvg } from './stroke-svg.js';
 import { strokesFor } from './strokes.js';
@@ -30,12 +31,12 @@ function loopIcon() {
 }
 
 // `text`, `data` ({ char: strokeData }, loaded when missing), `size` (px per character), `grid`
-// ("mi" | "tian" | "none"), `outline` (grey character under the strokes), `start` (strokes done
-// at first; default 0, or all when `still`), `autoplay`, `colour`, `active`, `onStep(at, steps)`,
+// ("mi" | "tian" | "none"), `outline` (grey character under the strokes), `still` (a finished copy
+// beside them), `start` (strokes done at first: a number, or "all"), `autoplay`, `colour`, `active`, `onStep(at, steps)`,
 // `caption(at, info)`: a caption of your own. Keys work when the player has focus.
-export function strokePlayer(host, { text = '', data = null, size = 180, grid = 'mi', outline = true, start = 0, autoplay = false, colour = '#1f2328', active = '#d1242f', gridColour = '#e3a9a9', onStep = null, caption = null } = {}) {
+export function strokePlayer(host, { text = '', data = null, size = 180, grid = 'mi', outline = true, still = false, start = 0, autoplay = false, colour = '#1f2328', active = '#d1242f', gridColour = '#e3a9a9', onStep = null, caption = null } = {}) {
   const id = `hzp${++players}`;
-  const opts = { size, grid, outline, colour, active, gridColour };
+  const opts = { size, grid, outline, still, colour, active, gridColour };
   const el = document.createElement('div');
   el.className = 'hz-player';
   const stage = document.createElement('div');
@@ -171,6 +172,19 @@ export function strokePlayer(host, { text = '', data = null, size = 180, grid = 
       }
       stage.append(cell);
     });
+    // The finished copy: each character whole, without its loop button.
+    if (opts.still && plan.length) {
+      const copy = document.createElement('div');
+      copy.className = 'hz-still';
+      copy.setAttribute('role', 'img');
+      copy.setAttribute('aria-label', `${chars.join('')}, finished`);
+      copy.style.gap = `${gap}px`;
+      copy.innerHTML = chars.map((c) => {
+        const d = glyphs[c];
+        return `<div class="hz-cell"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${opts.size} ${opts.size}" width="${opts.size}" height="${opts.size}" style="display:block;max-width:100%;height:auto">${gridSvg(0, 0, opts.size, opts.grid, opts.gridColour)}${d ? glyphSvg(d, { x: 0, y: 0, size: opts.size, colour: opts.colour }) : ''}</svg></div>`;
+      }).join('');
+      stage.append(copy);
+    }
     masks = plan.map((p) => stage.querySelector(`[data-g="${p.c}"] [data-i="${p.s}"]`));
     plan.forEach((p, i) => { p.len = Number(masks[i]?.dataset.len) || 600; });
     syncLoopAll();

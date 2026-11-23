@@ -1,7 +1,7 @@
 // Browser check of the hanzi prefab module (docs/CHINESE-INPUT.md §7): Insert prefab → Stroke
 // order opens the player in a movable window, plays (a frame mid-stroke), steps with the keys,
 // puts a step on the page; practice accepts the right stroke traced with the mouse and refuses a
-// wrong one; the stroke sequence card inserts. Needs the stroke shards
+// wrong one; Insert puts it on the page. Needs the stroke shards
 // (node tools/build_chinese_strokes.mjs) and a web build.
 //   node tools/hanzi_e2e.mjs [screenshots folder]
 import assert from 'node:assert/strict';
@@ -25,7 +25,7 @@ await p.click('.prefab-card:has(strong:text-is("Stroke order"))');
 const win = p.locator('.pk-module-window');
 await win.locator('.hz-stage svg [data-i]').first().waitFor({ state: 'attached' });
 const count = () => win.locator('.pk-step-count').textContent();
-assert.equal(await count(), '13 / 13', 'a new figure shows every stroke');
+assert.match(await count(), /^\d+ \/ 13$/, 'a new figure plays its 13 strokes');
 assert.equal(await win.locator('.hz-stage svg [data-i]').count(), 13);
 // Play from the start; a frame in the middle of a stroke.
 await win.locator('.pk-step-player').focus();
@@ -87,10 +87,10 @@ console.log('· practice: a traced stroke accepted, a reversed one refused');
 await p.keyboard.press('Escape');
 await win.waitFor({ state: 'detached' });
 
-// The stroke sequence card.
+// Inserted with Insert.
 await p.evaluate(() => document.getElementById('insertGraph').click());
 await p.locator('.prefab-grid').waitFor();
-await p.click('.prefab-card:has(strong:text-is("Stroke sequence"))');
+await p.click('.prefab-card:has(strong:text-is("Stroke order"))');
 await win.locator('.hz-stage svg').first().waitFor();
 const before = await images();
 await win.locator('.pk-bar button:has-text("Insert")').click();
@@ -98,8 +98,9 @@ await win.waitFor({ state: 'detached' });
 await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render [data-item^="image:"]').length > n, before);
 await sleep(400);
 await shot('hanzi-page');
-console.log('· the stroke sequence inserted');
-assert.ok(fetched.some((u) => u.endsWith('/index.json')) && fetched.length <= 3, `only the index and a shard or two: ${fetched}`);
+console.log('· inserted');
+const shards = fetched.filter((u) => u.includes('/strokes/'));
+assert.ok(shards.some((u) => u.endsWith('/index.json')) && shards.length <= 3, `only the stroke index and a shard or two: ${shards}`);
 assert.deepEqual(errors, []);
 console.log('Hanzi stroke order: OK');
 await b.close(); process.exit(0);

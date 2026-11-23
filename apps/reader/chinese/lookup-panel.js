@@ -11,14 +11,13 @@ import { openContextMenu } from '../context-menu.js';
 import { icon } from '../icons.js';
 import { zhWindow, modalHost, langToggle } from './zh-window.js';
 import { levelLabel, vocabCard, HAN } from './vocab.js';
-import { speak, speakSyllable, stopSpeech, canSpeak } from './speech.js';
+import { stopSpeech, canSpeak } from './speech.js';
 import { localizeLookup, zhLang } from './translate.js';
 import { numbersToMarks } from './pinyin.js';
 
-const IDC = /[⿰-⿿]/u;
-// How the parts sit (the first Ideographic Description Character of the decomposition).
-const IDC_NAMES = { '⿰': 'left and right', '⿱': 'top and bottom', '⿲': 'left, middle and right', '⿳': 'top, middle and bottom', '⿴': 'enclosed', '⿵': 'open at the bottom', '⿶': 'open at the top', '⿷': 'open at the right', '⿸': 'from the top left', '⿹': 'from the top right', '⿺': 'from the bottom left', '⿻': 'overlaid' };
-const ETYMOLOGY = { ideographic: 'Ideographic', pictographic: 'Pictographic', pictophonetic: 'Sound and meaning' };
+import { IDC, sayer, syllables as toneSyllables, formRows, structureRows } from './char-info.js';
+
+export { toneOf } from './char-info.js';
 // Crisp bilingual (en / es) meanings for common Kangxi radicals & component variants.
 const COMPONENT_MEANINGS = {
   一: ['one', 'uno'], 二: ['two', 'dos'], 十: ['ten', 'diez'], 八: ['eight', 'ocho'],
@@ -117,10 +116,6 @@ async function resolveComponentMeanings(c, lang, scriptValue, client) {
   }
   return out;
 }
-export const toneOf = (syllable) => {
-  const s = String(syllable).normalize('NFD');
-  return /̄/.test(s) ? 1 : /́/.test(s) ? 2 : /̌/.test(s) ? 3 : /̀/.test(s) ? 4 : 5;
-};
 // The readings of the panel's header, the one used here first: [{ pinyin, here }].
 export function readingsFor(result, here = '') {
   const list = result?.char?.readings?.length ? result.char.readings.map((r) => r.pinyin) : (result?.entries || []).map((e) => e.pinyin);
@@ -215,13 +210,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     };
     return b;
   };
-  // Plays `t` (its reading when one character), lighting `button` while it plays.
-  const say = (t, { reading = '', button = null, slow = false, syllable = false } = {}) => {
-    const onState = (on) => button?.classList.toggle('playing', on);
-    const opts = { script: script(), slow, onState };
-    const run = syllable ? speakSyllable(reading, { ...opts, fallback: t }) : speak(t, { ...opts, reading });
-    run.then((ok) => { if (!ok) status(navigator.onLine === false ? 'Offline, and the system has no Chinese voice.' : 'The pronunciation could not be played.', true); });
-  };
+  const say = sayer({ script, status });
   const el = (tag, cls = '', textContent = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (textContent) e.textContent = textContent; return e; };
   const btn = (label, iconName, run, cls = '') => {
     const b = el('button', cls);
@@ -233,24 +222,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
   };
   // A character or word that opens its own look-up.
   const link = (t, cls = 'zh-lk-link zh-cjk') => { const b = el('button', cls, t); b.type = 'button'; b.title = `Look up ${t}`; b.onclick = () => go(t); return b; };
-  // Pinyin in tone colours; each syllable plays its tone when clicked (`chars`: the characters
-  // it reads, spoken instead when there is no recording of that syllable).
-  const syllables = (pinyin, chars = '') => {
-    const s = el('span', 'zh-lk-py');
-    const han = [...chars].filter((c) => HAN.test(c));
-    let k = 0;
-    String(pinyin).split(/(\s+)/).forEach((p) => {
-      if (!p.trim()) { s.append(p); return; }
-      const b = el('button', `zh-lk-syl zh-t${toneOf(p)}`, p);
-      const ch = han.length === String(pinyin).trim().split(/\s+/).length ? han[k] : (han.length === 1 ? han[0] : '');
-      k++;
-      b.type = 'button';
-      b.title = `Listen to ${p}${toneOf(p) < 5 ? ` (tone ${toneOf(p)})` : ''} · Shift-click: slower`;
-      b.onclick = (e) => { e.stopPropagation(); say(ch || '', { reading: p, button: b, slow: e.shiftKey, syllable: true }); };
-      s.append(b);
-    });
-    return s;
-  };
+  const syllables = (pinyin, chars = '') => toneSyllables(pinyin, chars, say);
   const section = (title, open = true) => {
     const d = el('details', 'zh-lk-section');
     d.open = open;
@@ -429,12 +401,7 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
     const forms = formsOf(result, t);
     if (forms.length) {
       const s = section('Forms');
-      for (const f of forms) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', f.label));
-        for (const c of f.chars) row.append(link(c));
-        s.append(row);
-      }
+      s.append(...formRows(forms, link));
       body.push(s);
     }
     // ── Structure ──
@@ -446,31 +413,10 @@ export function openLookup(text, { host = {}, context = {}, near = null } = {}) 
       wrap.append(link(ch), el('span', 'zh-lk-part-gloss muted', m));
       return wrap;
     };
-    if (c && (c.radical || c.decomposition || c.etymology)) {
+    const structure = structureRows(c, partChip);
+    if (structure.length) {
       const s = section('Structure');
-      if (c.radical?.char) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', 'Radical'), partChip(c.radical.char), el('span', 'muted', `No. ${c.radical.number}${c.radical.residual ? ` + ${c.radical.residual} strokes` : ''}`));
-        s.append(row);
-      }
-      if (c.decomposition && c.decomposition !== t) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', 'Parts'));
-        const layout = IDC_NAMES[[...c.decomposition][0]];
-        for (const p of [...c.decomposition]) if (!IDC.test(p)) row.append(HAN.test(p) ? partChip(p) : el('span', 'muted', p));
-        if (layout) row.append(el('span', 'muted', layout));
-        s.append(row);
-      }
-      const e = c.etymology;
-      if (e?.type) {
-        const row = el('div', 'zh-lk-row');
-        row.append(el('span', 'zh-lk-label', ETYMOLOGY[e.type] || e.type));
-        if (e.type === 'pictophonetic' && (e.semantic || e.phonetic)) {
-          if (e.semantic) row.append(partChip(e.semantic), el('span', 'muted', `meaning${e.hint ? ` (${e.hint})` : ''}`));
-          if (e.phonetic) row.append(partChip(e.phonetic), el('span', 'muted', 'sound'));
-        } else if (e.hint) row.append(el('span', '', e.hint));
-        s.append(row);
-      }
+      s.append(...structure);
       body.push(s);
     }
     // ── Words with it (built when opened) ──

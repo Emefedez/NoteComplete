@@ -39,7 +39,8 @@ const charPoint = (p, text, i) => p.evaluate(([t, k]) => {
   const q = new DOMPoint(r.x + r.width / 2, r.y + r.height / 2).matrixTransform(m);
   return [q.x, q.y];
 }, [text, i]);
-const menuLabels = (p) => p.locator('.context-menu').first().locator('button span').allTextContents();
+// Look-up entries carry the reading and meaning after the word: "Look up 好 (hǎo · good)".
+const menuLabels = async (p) => (await p.locator('.context-menu').first().locator('button span').allTextContents()).map((l) => l.replace(/^(Look up \S+) \(.*$/, '$1'));
 const menuClick = (p, label) => p.locator('.context-menu button', { hasText: label }).first().click();
 
 try {
@@ -201,10 +202,11 @@ try {
   await noteWithText(q);
   await q.evaluate(async () => { const m = await import('./chinese/zh-menu.js'); await m.lookUp('好'); });
   const sheet = q.locator('.zh-lookup.zh-sheet');
-  await sheet.locator('.hz-stage svg').waitFor({ timeout: 10000 });
-  const r = await sheet.boundingBox();
-  assert.ok(Math.abs(r.y + r.height - 844) < 2 && r.width >= 388, `a bottom sheet: ${JSON.stringify(r)}`);
+  await sheet.locator('.hz-cell > svg').first().waitFor({ timeout: 10000 });
   await sleep(600);
+  // Against the layout viewport (a page a few pixels wider than the phone scales it).
+  const r = await sheet.boundingBox(), [vw, vh] = await q.evaluate(() => [innerWidth, innerHeight]);
+  assert.ok(Math.abs(r.y + r.height - vh) < 2 && r.width >= vw - 2, `a bottom sheet: ${JSON.stringify(r)} in ${vw} × ${vh}`);
   if (DIR) await q.screenshot({ path: `${DIR}/zh-phone.png` });
   console.log('· phone: bottom sheet');
   assert.deepEqual(errors, [], errors.join('\n'));

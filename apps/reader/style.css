@@ -4197,6 +4197,9 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-menu button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 32px; padding: 5px 9px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
 .context-menu button:hover:not(:disabled), .context-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
 .context-menu button:disabled { opacity: .45; cursor: default; }
+.context-menu button.context-added { animation: context-added .25s ease-out; }
+@keyframes context-added { from { opacity: 0; transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) { .context-menu button.context-added { animation: none; } }
 .context-menu button.danger { color: #c2410c; }
 .context-menu button svg { flex: none; width: 17px; height: 17px; }
 .context-menu .context-chevron { width: 14px; height: 14px; margin-right: -3px; opacity: .55; }
@@ -4989,6 +4992,7 @@ html.nc-native-app .math-keypad { padding-bottom: 6px; }
 .hz-stage { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
 .hz-cell { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
 .hz-cell > svg { display: block; background: #fff; border-radius: 6px; max-width: 100%; height: auto; }
+.hz-still { display: flex; flex-wrap: wrap; justify-content: center; padding-left: 10px; border-left: 1px dashed var(--line); }
 .hz-cell-loop {
   position: absolute;
   top: 5px;
