@@ -1,6 +1,7 @@
 // New versions (desktop app): a pill in the top bar says what is available and asks;
-// nothing installs without Update. Linux AppImages update in place and restart on
-// request; other installs open the release page. Help → Check for updates… asks now.
+// nothing installs without Update. Linux AppImages download the new version, put it in
+// place of the running file and reopen (the open tabs come back: main.js update:restart);
+// other installs open the release page. Help → Check for updates… asks now.
 const $ = id => document.getElementById(id);
 
 export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }) {
@@ -12,30 +13,43 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
     $('updateGo').textContent = go; $('updateGo').hidden = !go;
     $('updateLater').hidden = !later; $('updateSkip').hidden = !skip;
   };
+  // ipcRenderer.invoke wraps errors as "Error invoking remote method '…': Error: why".
+  const reason = error => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, '');
   function show(result) {
     offer = result;
     $('updateText').textContent = `Version ${result.version}`;
-    $('updateChip').title = `NoteComplete ${result.version} is available (this is ${result.current})`;
+    $('updateChip').title = `NoteComplete ${result.version} is available (this is ${result.current})${result.reason ? `; it cannot update itself here (${result.reason})` : ''}`;
     buttons(result.install === 'appimage' ? 'Update' : 'Download');
     $('updateChip').hidden = false;
   }
+  async function restart() {
+    buttons('', false, false);
+    $('updateText').textContent = `Restarting into ${offer.version}…`;
+    try { await bridge.restart(); } catch (error) {
+      // Installed but not reopened: the next start runs the new version.
+      $('updateText').textContent = `${offer.version} installed`;
+      $('updateGo').dataset.restart = '1';
+      buttons('Restart now', true, false);
+      status(`Could not restart: ${reason(error)}`, true);
+    }
+  }
   $('updateGo').onclick = async () => {
     if (!offer) return;
-    if ($('updateGo').dataset.restart) return bridge.restart();
+    if ($('updateGo').dataset.restart) return restart();
     if (offer.install !== 'appimage') { await bridge.openPage(offer.page); return hide(); }
     buttons('', false, false);
     $('updateText').textContent = 'Downloading…';
     try {
       await bridge.install(p => { $('updateText').textContent = `Downloading ${Math.round(p * 100)}%`; });
-      $('updateText').textContent = `${offer.version} installed`;
-      $('updateGo').dataset.restart = '1';
-      buttons('Restart now', true, false);
-      $('updateLater').textContent = 'Later';
     } catch (error) {
-      $('updateText').textContent = error.message;
-      buttons('Download', true, false);
-      offer = { ...offer, install: 'page' };
+      // Say why and offer the same update again, rather than sending the user off to
+      // download it by hand (the running file is untouched: updater.js swaps last).
+      $('updateText').textContent = `Update failed: ${reason(error)}`;
+      buttons('Retry', true, false);
+      return;
     }
+    // Installed in place of the running AppImage: reopen it now, as asked by Update.
+    await restart();
   };
   $('updateLater').onclick = hide;
   $('updateSkip').onclick = async () => { if (offer) await bridge.skip(offer.version); hide(); status(`Version ${offer?.version} will not be offered again. Help → Check for updates… still finds it.`); };

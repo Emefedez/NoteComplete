@@ -714,7 +714,14 @@ app.whenReady().then(async () => {
     }
     return opening;
   }));
-  ipcMain.handle('update:install', guarded(event => updates.install(p => { if (!event.sender.isDestroyed()) event.sender.send('update:progress', p); })));
+  ipcMain.handle('update:install', guarded(async event => {
+    log.write(`update: installing over ${process.env.APPIMAGE || '(no AppImage)'}`);
+    try {
+      const done = await updates.install(p => { if (!event.sender.isDestroyed()) event.sender.send('update:progress', p); });
+      log.write(`update: installed ${done.version}`);
+      return done;
+    } catch (error) { log.write(`update: failed: ${error.message}`); throw error; }
+  }));
   ipcMain.handle('update:skip', guarded((_event, version) => updates.skip(String(version))));
   ipcMain.handle('update:settings', guarded(() => updates.settings()));
   ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));

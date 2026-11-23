@@ -1,9 +1,11 @@
 // Version checks against GitHub Releases. Nothing is installed without the user's
 // say-so: the reader shows what is available and asks. On Linux an AppImage updates
-// itself (download, check against SHA256SUMS.txt, swap, keep the old one as
-// .previous); elsewhere the release page opens.
+// itself (download beside it, check against SHA256SUMS.txt, swap, keep the old one as
+// .previous) and the reader restarts it; elsewhere the release page opens.
 import { createHash } from 'node:crypto';
-import { chmod, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { access, chmod, open, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { spawn as spawnProcess } from 'node:child_process';
 import { homedir } from 'node:os';
 
@@ -100,33 +102,61 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     const version = release.tag_name.replace(/^v/i, '');
     found = { release, asset };
     await remember({ available: version });
+    // Self-update only for an AppImage with a matching installer, in a folder this user can
+    // write to (the new file goes beside it and takes its place).
+    const why = platform !== 'linux' || !appImage ? 'not an AppImage' : !asset ? 'no AppImage for this machine in the release' : await writable(appImage);
     return {
       current, version, page: release.html_url, skipped: !manual && s.skip === version,
-      // Self-update only for a writable AppImage with a matching installer.
-      install: platform === 'linux' && !!appImage && !!asset ? 'appimage' : 'page',
+      install: why ? 'page' : 'appimage', ...(why ? { reason: why } : {}),
     };
   }
+  // Null when the AppImage's folder can be written to, else why not.
+  async function writable(file) {
+    try { await access(path.dirname(file), constants.W_OK); return null; } catch { return `cannot write to ${path.dirname(file)}`; }
+  }
   async function install(progress = () => {}) {
-    if (!found?.asset || !appImage) throw Error('This copy cannot update itself; download the new version from the release page.');
+    if (platform !== 'linux' || !appImage) throw Error('This copy cannot update itself; download the new version from the release page.');
+    // What the offer was made from can be gone (a later check failed or this window asked
+    // before another): look again rather than give up.
+    if (!found?.asset) await check({ manual: true });
+    if (!found?.asset) throw Error('The newest release has no AppImage for this machine.');
     const { release, asset } = found;
+    const headers = { 'User-Agent': 'NoteComplete' };
     const sumsAsset = release.assets.find(a => a.name === 'SHA256SUMS.txt');
     if (!sumsAsset) throw Error('The release has no checksums; not installing it.');
-    const sums = parseSums(await (await fetch(sumsAsset.browser_download_url, { headers: { 'User-Agent': 'NoteComplete' } })).text());
-    const expected = sums.get(asset.name);
+    const sumsResponse = await fetch(sumsAsset.browser_download_url, { headers });
+    if (!sumsResponse.ok) throw Error(`Could not read the checksums (${sumsResponse.status}).`);
+    const expected = parseSums(await sumsResponse.text()).get(asset.name);
     if (!expected) throw Error(`The checksums do not list ${asset.name}; not installing it.`);
-    const response = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'NoteComplete' } });
+    const response = await fetch(asset.browser_download_url, { headers });
     if (!response.ok || !response.body) throw Error(`Download failed (${response.status}).`);
-    const total = Number(response.headers.get('content-length')) || asset.size || 0, chunks = [];
-    let received = 0;
-    for await (const chunk of response.body) { chunks.push(chunk); received += chunk.length; progress(total ? received / total : 0); }
-    const bytes = Buffer.concat(chunks);
-    if (createHash('sha256').update(bytes).digest('hex') !== expected) throw Error('The download does not match its checksum; not installing it.');
+    // Streamed to a file beside the AppImage (same file system, so the swap is a rename),
+    // hashed on the way: the image is ~150 MB and need not sit in memory.
     const next = `${appImage}.download`, previous = `${appImage}.previous`;
-    await writeFile(next, bytes);
-    await chmod(next, (await stat(appImage)).mode | 0o755);
-    await rm(previous, { force: true });
-    await rename(appImage, previous);
-    await rename(next, appImage);
+    const total = Number(response.headers.get('content-length')) || asset.size || 0, hash = createHash('sha256');
+    let received = 0, out;
+    try {
+      out = await open(next, 'w', 0o755);
+      for await (const chunk of response.body) {
+        hash.update(chunk);
+        await out.write(chunk);
+        received += chunk.length;
+        progress(total ? Math.min(received / total, 1) : 0);
+      }
+      await out.close();
+      out = null;
+      if (hash.digest('hex') !== expected) throw Error('The download does not match its checksum; not installing it.');
+      await chmod(next, (await stat(appImage)).mode | 0o755);
+      await rm(previous, { force: true });
+      await rename(appImage, previous);
+      try { await rename(next, appImage); } catch (error) { await rename(previous, appImage).catch(() => {}); throw error; }
+    } catch (error) {
+      await out?.close().catch(() => {});
+      await rm(next, { force: true });
+      if (error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'EROFS') throw Error(`Cannot replace ${appImage}: ${error.code}. Move the AppImage to a folder you own and update again.`);
+      throw error;
+    }
+    progress(1);
     await remember({ available: null, installed: release.tag_name });
     return { version: release.tag_name.replace(/^v/i, '') };
   }

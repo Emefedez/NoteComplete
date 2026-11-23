@@ -111,3 +111,25 @@ test('falls back to GitHub releases.atom and expanded_assets when api.github.com
   assert.equal(found.version, '1.3.0');
   assert.equal(found.install, 'appimage');
 });
+
+test('a failed download leaves the AppImage alone, and an update found earlier is looked up again', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-update-'));
+  const appImage = path.join(dir, 'NoteComplete.AppImage');
+  await writeFile(appImage, 'old', { mode: 0o755 });
+  const payload = Buffer.from('new build'), hash = createHash('sha256').update(payload).digest('hex');
+  const release = { tag_name: 'v1.3.0', html_url: 'r', assets: [
+    { name: 'NoteComplete-1.3.0-linux-x86_64.AppImage', browser_download_url: 'asset', size: payload.length },
+    { name: 'SHA256SUMS.txt', browser_download_url: 'sums' }] };
+  let broken = true;
+  const fetch = async url => url.includes('api.github.com') ? { ok: true, json: async () => [release] }
+    : url === 'sums' ? { ok: true, text: async () => `${hash}  ./NoteComplete-1.3.0-linux-x86_64.AppImage\n` }
+    : { ok: true, headers: new Map(), body: (async function* () { yield payload.subarray(0, 3); if (broken) throw Error('connection reset'); yield payload.subarray(3); })() };
+  const u = updater({ app: { getVersion: () => '1.2.0' }, fetch, stateFile: path.join(dir, 'state.json'), appImage, platform: 'linux', arch: 'x64' });
+  // No check in this process yet: install finds the release itself.
+  await assert.rejects(u.install(), /connection reset/);
+  assert.equal(await readFile(appImage, 'utf8'), 'old');
+  await assert.rejects(readFile(`${appImage}.download`), /ENOENT/);
+  broken = false;
+  assert.equal((await u.install()).version, '1.3.0');
+  assert.equal(await readFile(appImage, 'utf8'), 'new build');
+});
