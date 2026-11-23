@@ -1,5 +1,7 @@
-## What's new in 1.2.78
+## What's new in 1.2.79
 
+- **iPhone photos (HEIC) show on the computer too.** In the desktop app and in Chrome, a HEIC photo in a note is now decoded on your device (libheif) and shown, instead of the labelled box. The decoder is downloaded only the first time a note has such a photo.
+- **Chinese 中 button no longer covers the scroll bar** in a long Ask AI question (and other fields with the small 中 button).
 - **Notes with iPhone photos open again.** A note holding a HEIC picture (the iPhone camera's format) stopped with “Unsupported image at 0x0”. HEIC, AVIF, WebP and GIF pictures are now read: WebP and GIF show everywhere, HEIC and AVIF on iPad and iPhone; on a computer a labelled box shows where the photo is (Chrome and Electron cannot read HEIC yet). A picture in an unknown format is a labelled box instead of an error.
 - **Table backgrounds.** The table editor has a Background choice (none, header, striped rows, whole table) and five colours; the cells show it before you insert. Tables made before keep their blue header.
 - **R graph prefabs preview their own plot.** Until Run in R draws the exact figure, each R prefab shows a small version of its plot from its own numbers: the normal, t and chi-squared curves with the shaded region, the binomial bars, the histogram with its density line, the boxplots and the scatter with its fitted line. The prefab menu shows them too. An emptied data field now uses the preset's data instead of a single 0.
