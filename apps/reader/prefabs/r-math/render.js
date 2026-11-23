@@ -4,6 +4,7 @@
 // references inline into safe <g><path/></g> elements), or draws a crisp vector preview card
 // when the figure has not been rendered in R yet.
 import { escapeHtml } from '../kit/svg.js';
+import { presetPreview } from './preview.js';
 
 export const PRESET_LABELS = {
   normal: 'Normal distribution',
@@ -26,6 +27,8 @@ const safeColor = (c, fallback = '#245dc4') => (/^#[0-9a-fA-F]{6}$/.test(String(
 function parseNumList(raw, fallback) {
   const nums = String(raw ?? '')
     .split(/[\s,;]+/)
+    // An empty field is no value (Number('') would be 0): the preset's own data then.
+    .filter(Boolean)
     .map((s) => Number(s))
     .filter(Number.isFinite);
   return nums.length ? nums : fallback;
@@ -341,24 +344,15 @@ export function sanitizeRPlotSvg(rawSvg) {
 function placeholderCard(s) {
   const w = s.width, h = s.height;
   const title = s.title || PRESET_LABELS[s.preset] || 'R Figure';
-  // Decorative miniature curve preview matching NoteComplete's accent blue palette.
-  const pts = [];
-  for (let i = 0; i <= 40; i++) {
-    const t = -3 + (6 * i) / 40;
-    const px = 48 + ((w - 96) * i) / 40;
-    const py = h - 62 - Math.exp(-0.5 * t * t) * (h - 140);
-    pts.push(`${px.toFixed(1)},${py.toFixed(1)}`);
-  }
-  const shadePts = `48,${h - 62} ${pts.slice(10, 31).join(' ')} ${(48 + ((w - 96) * 30) / 40).toFixed(1)},${h - 62}`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">
+  // A small version of this preset's plot from its own parameters (preview.js), until R draws it.
+  const plot = presetPreview(s, [52, 44, w - 28, h - 58], safeColor(s.params?.color, '#245dc4'));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="sans-serif">
     <rect x="1" y="1" width="${w - 2}" height="${h - 2}" rx="8" fill="#ffffff" stroke="#dce0e5" stroke-width="1.5"/>
     <rect x="14" y="12" width="44" height="20" rx="5" fill="#eaf0fc"/>
     <text x="36" y="26" text-anchor="middle" font-size="11" font-weight="700" fill="#245dc4">R</text>
     <text x="68" y="27" font-size="14" font-weight="600" fill="#242830">${escapeHtml(title)}</text>
-    <line x1="44" y1="${h - 62}" x2="${w - 44}" y2="${h - 62}" stroke="#94a3b8" stroke-width="1.2"/>
-    <polygon points="${shadePts}" fill="#245dc4" fill-opacity="0.18"/>
-    <polyline points="${pts.join(' ')}" fill="none" stroke="#245dc4" stroke-width="2.2"/>
-    <text x="${w / 2}" y="${h - 24}" text-anchor="middle" font-size="12" fill="#626b76">Click Run in R inside the editor to generate the live vector plot</text>
+    ${plot}
+    <text x="${w / 2}" y="${h - 18}" text-anchor="middle" font-size="11" fill="#626b76">Preview · Run in R inside the editor for the exact plot</text>
   </svg>`;
   return { svg, width: w, height: h };
 }
