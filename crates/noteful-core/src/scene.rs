@@ -306,24 +306,51 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
         let mime = match b.kind {
             "jpeg" => "image/jpeg",
             "png" => "image/png",
-            _ => return Err(Error::new(0, "Unsupported image")),
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            "heic" => "image/heic",
+            "avif" => "image/avif",
+            // A picture in a format not known here: a labelled box in its place, so the rest of
+            // the page still shows (it used to fail the whole page).
+            _ => "",
         };
-        let href = format!(
-            "data:{mime};base64,{}",
-            STANDARD.encode(
-                package
-                    .resource(id)
-                    .ok_or_else(|| Error::new(0, "Missing image bytes"))?
+        // HEIC (an iPhone photo) and AVIF show where the browser reads them (Safari on iPad and
+        // iPhone); elsewhere the labelled box under them says what is there, and data-format
+        // lets the reader put a converted copy in its place.
+        let unknown = mime.is_empty();
+        let under = if unknown || matches!(b.kind, "heic" | "avif") {
+            let label = if unknown { "Picture".to_owned() } else { format!("{} picture", b.kind.to_uppercase()) };
+            format!(
+                "<rect class=\"nc-picture-missing\" width=\"{w}\" height=\"{h}\" fill=\"#e8e8ec\" stroke=\"#b8b8c0\" stroke-width=\"1\"/><text x=\"{}\" y=\"{}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"sans-serif\" font-size=\"{}\" fill=\"#70707a\">{label}</text>",
+                w / 2.,
+                h / 2.,
+                (w.min(h) / 8.).clamp(6., 28.)
             )
-        );
-        match image_crop(p, w, h, sw, sh)? {
-            // Cropped (Noteful's cutout): the placement box is the crop's bounding box, so the
-            // whole image is drawn larger and offset, and clipped to the crop outline.
-            Some(Crop { left, top, width, height, outline }) => {
-                let clip = format!("nc-crop-{}", text(&o["1"]));
-                format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\" href=\"{href}\"/>")
-            }
-            None => format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\" href=\"{href}\"/>"),
+        } else {
+            String::new()
+        };
+        if unknown {
+            under
+        } else {
+            let format = if under.is_empty() { String::new() } else { format!(" data-format=\"{}\"", b.kind) };
+            let href = format!(
+                "data:{mime};base64,{}",
+                STANDARD.encode(
+                    package
+                        .resource(id)
+                        .ok_or_else(|| Error::new(0, "Missing image bytes"))?
+                )
+            );
+            let picture = match image_crop(p, w, h, sw, sh)? {
+                // Cropped (Noteful's cutout): the placement box is the crop's bounding box, so the
+                // whole image is drawn larger and offset, and clipped to the crop outline.
+                Some(Crop { left, top, width, height, outline }) => {
+                    let clip = format!("nc-crop-{}", text(&o["1"]));
+                    format!("<clipPath id=\"{clip}\"><path d=\"{outline}\"/></clipPath><image x=\"{left}\" y=\"{top}\" width=\"{width}\" height=\"{height}\" preserveAspectRatio=\"none\" clip-path=\"url(#{clip})\"{format} href=\"{href}\"/>")
+                }
+                None => format!("<image width=\"{w}\" height=\"{h}\" preserveAspectRatio=\"none\"{format} href=\"{href}\"/>"),
+            };
+            format!("{under}{picture}")
         }
     } else if kind == 2 || kind == 19 {
         // Kind 19 (owner notes: "7- ELECTRÓNICA DIGITAL") is a tag such as "#SD I":

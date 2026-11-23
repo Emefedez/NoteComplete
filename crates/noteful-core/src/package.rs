@@ -104,6 +104,8 @@ impl<'a> Package<'a> {
                 "jpeg"
             } else if raw.starts_with(b"\x89PNG\r\n\x1a\n") {
                 "png"
+            } else if let Some(kind) = picture_kind(raw) {
+                kind
             } else if let Some(kind) = crate::audio_kind(raw) {
                 kind
             } else if id.starts_with("n:") {
@@ -215,5 +217,41 @@ impl<'a> Package<'a> {
         json!({"magic":"aabbccde","byte_order":"big-endian","size":self.data.len(),
             "index_offset":self.index_offset,"index_size":self.index_size,"coverage":"exact",
             "index_fields":self.index.iter().map(Field::to_json).collect::<Vec<_>>(),"blocks":blocks})
+    }
+}
+
+/// Pictures other than JPEG and PNG that an iPad note may hold: HEIC/HEIF photos (an
+/// iPhone's camera), AVIF, WebP and GIF. M4A audio is also an ISO "ftyp" file: only the
+/// picture brands count here.
+pub(crate) fn picture_kind(raw: &[u8]) -> Option<&'static str> {
+    if raw.len() >= 12 && &raw[4..8] == b"ftyp" {
+        return match &raw[8..12] {
+            b"heic" | b"heix" | b"hevc" | b"hevx" | b"heim" | b"heis" | b"mif1" | b"msf1" => Some("heic"),
+            b"avif" | b"avis" => Some("avif"),
+            _ => None,
+        };
+    }
+    if raw.starts_with(b"GIF87a") || raw.starts_with(b"GIF89a") {
+        return Some("gif");
+    }
+    if raw.len() >= 12 && raw.starts_with(b"RIFF") && &raw[8..12] == b"WEBP" {
+        return Some("webp");
+    }
+    None
+}
+
+#[cfg(test)]
+mod picture_kind_tests {
+    use super::picture_kind;
+    #[test]
+    fn photos_from_an_iphone_and_other_pictures_are_told_apart_from_audio() {
+        assert_eq!(picture_kind(b"\0\0\0\x24ftypheic\0\0\0\0mif1"), Some("heic"));
+        assert_eq!(picture_kind(b"\0\0\0\x1cftypmif1\0\0\0\0heic"), Some("heic"));
+        assert_eq!(picture_kind(b"\0\0\0\x1cftypavif\0\0\0\0"), Some("avif"));
+        assert_eq!(picture_kind(b"GIF89a\x01\0\x01\0"), Some("gif"));
+        assert_eq!(picture_kind(b"RIFF\x10\0\0\0WEBPVP8 "), Some("webp"));
+        // M4A audio is an ftyp file too: not a picture.
+        assert_eq!(picture_kind(b"\0\0\0\x20ftypM4A \0\0\0\0"), None);
+        assert_eq!(picture_kind(b"\xff\xd8\xff"), None);
     }
 }
