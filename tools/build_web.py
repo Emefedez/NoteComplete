@@ -124,6 +124,13 @@ def main():
         out.mkdir(parents=True,exist_ok=True)
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/name,out/Path(name).name)
         shutil.copy2(ROOT/'apps/reader/node_modules'/package/'LICENSE',out/'LICENSE')
+    # HEIC photo decoder (heic.js): libheif with its WebAssembly inside, loaded only when a note
+    # holds an iPhone photo, which Chromium and Electron cannot show (LGPL-3.0).
+    heif=ROOT/'apps/reader/vendor/libheif'
+    if heif.exists(): shutil.rmtree(heif)
+    heif.mkdir(parents=True,exist_ok=True)
+    shutil.copy2(ROOT/'apps/reader/node_modules/libheif-js/libheif-wasm/libheif-bundle.mjs',heif/'libheif-bundle.mjs')
+    shutil.copy2(ROOT/'apps/reader/node_modules/libheif-js/LICENSE',heif/'LICENSE')
     check_webllm()
     vendor_modules()
     write_manifest()
@@ -160,7 +167,7 @@ def check_webllm():
 # instead of at install, so a first visit (a tablet joining a session) downloads the app and
 # not 40 MB of engines. Speech, text recognition, Word and spreadsheet readers, math, Dark
 # Reader, and the fonts, character maps and image decoders only some PDFs use.
-LAZY=('vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/mathlive/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/','vendor/chinese/','vendor/fonts/noto-sans-sc')
+LAZY=('vendor/libheif/','vendor/transformers/','vendor/tesseract/','vendor/mammoth/','vendor/sheetjs/','vendor/katex/','vendor/mathlive/','vendor/darkreader/','vendor/pdfjs/cmaps/','vendor/pdfjs/standard_fonts/','vendor/pdfjs/wasm/','vendor/chinese/','vendor/fonts/noto-sans-sc')
 def write_manifest():
     """precache.json: every file the app ships, with a hash of its contents (the service worker
     downloads a file again only when its hash changes; the desktop and Android apps ship

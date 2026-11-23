@@ -1838,6 +1838,8 @@ async function renderPage(p, provided) {
     keepHeld(p, shows, true);
     const typing = textBox.isTypingOn(p);
     p.el.replaceChildren(render, overlay, lockMarks(result));
+    // An iPhone photo (HEIC): decoded into a picture Chromium shows (heic.js), on Safari as is.
+    if (result.svg.includes('data-format="heic"')) import("./heic.js").then((m) => m.showHeicPictures(render)).catch(() => { /* The labelled box stays. */ });
     // What the page now shows, for a line added to it without a redraw (addDrawn).
     p.shown = result;
     p.inkItems = inkItems;

@@ -226,7 +226,9 @@ impl<'a> Package<'a> {
 pub(crate) fn picture_kind(raw: &[u8]) -> Option<&'static str> {
     if raw.len() >= 12 && &raw[4..8] == b"ftyp" {
         return match &raw[8..12] {
-            b"heic" | b"heix" | b"hevc" | b"hevx" | b"heim" | b"heis" | b"mif1" | b"msf1" => Some("heic"),
+            b"heic" | b"heix" | b"hevc" | b"hevx" | b"heim" | b"heis" | b"mif1" | b"msf1" => {
+                Some("heic")
+            }
             b"avif" | b"avis" => Some("avif"),
             _ => None,
         };
@@ -245,8 +247,14 @@ mod picture_kind_tests {
     use super::picture_kind;
     #[test]
     fn photos_from_an_iphone_and_other_pictures_are_told_apart_from_audio() {
-        assert_eq!(picture_kind(b"\0\0\0\x24ftypheic\0\0\0\0mif1"), Some("heic"));
-        assert_eq!(picture_kind(b"\0\0\0\x1cftypmif1\0\0\0\0heic"), Some("heic"));
+        assert_eq!(
+            picture_kind(b"\0\0\0\x24ftypheic\0\0\0\0mif1"),
+            Some("heic")
+        );
+        assert_eq!(
+            picture_kind(b"\0\0\0\x1cftypmif1\0\0\0\0heic"),
+            Some("heic")
+        );
         assert_eq!(picture_kind(b"\0\0\0\x1cftypavif\0\0\0\0"), Some("avif"));
         assert_eq!(picture_kind(b"GIF89a\x01\0\x01\0"), Some("gif"));
         assert_eq!(picture_kind(b"RIFF\x10\0\0\0WEBPVP8 "), Some("webp"));

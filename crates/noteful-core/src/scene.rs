@@ -319,7 +319,11 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
         // lets the reader put a converted copy in its place.
         let unknown = mime.is_empty();
         let under = if unknown || matches!(b.kind, "heic" | "avif") {
-            let label = if unknown { "Picture".to_owned() } else { format!("{} picture", b.kind.to_uppercase()) };
+            let label = if unknown {
+                "Picture".to_owned()
+            } else {
+                format!("{} picture", b.kind.to_uppercase())
+            };
             format!(
                 "<rect class=\"nc-picture-missing\" width=\"{w}\" height=\"{h}\" fill=\"#e8e8ec\" stroke=\"#b8b8c0\" stroke-width=\"1\"/><text x=\"{}\" y=\"{}\" text-anchor=\"middle\" dominant-baseline=\"middle\" font-family=\"sans-serif\" font-size=\"{}\" fill=\"#70707a\">{label}</text>",
                 w / 2.,
@@ -332,7 +336,11 @@ pub(crate) fn object(o: &Value, package: Option<&Package<'_>>, index: usize) -> 
         if unknown {
             under
         } else {
-            let format = if under.is_empty() { String::new() } else { format!(" data-format=\"{}\"", b.kind) };
+            let format = if under.is_empty() {
+                String::new()
+            } else {
+                format!(" data-format=\"{}\"", b.kind)
+            };
             let href = format!(
                 "data:{mime};base64,{}",
                 STANDARD.encode(

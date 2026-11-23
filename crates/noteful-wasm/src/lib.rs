@@ -645,7 +645,10 @@ fn summary(data: &[u8]) -> noteful_core::Result<String> {
         if let Some(e) = &block.stroke_error {
             warnings.push(format!("{}: {e}", block.id));
         }
-        if matches!(block.kind, "pdf" | "png" | "jpeg" | "gif" | "webp" | "heic" | "avif") {
+        if matches!(
+            block.kind,
+            "pdf" | "png" | "jpeg" | "gif" | "webp" | "heic" | "avif"
+        ) {
             resources.push(json!({"id":block.id,"kind":block.kind,"bytes":block.size}));
         }
     }
