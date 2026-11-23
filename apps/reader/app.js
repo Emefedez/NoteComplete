@@ -277,6 +277,7 @@ function keepMargin() {
 // A drawn page given back to its placeholder: off screen, or no longer showing the note as it is.
 function unmountPage(p) {
   p.token++;
+  p.pdfMissed = false;
   p.view = null;
   p.ink = null;
   p.pdfReady = false;
@@ -349,6 +350,7 @@ function attachPageObserver() {
         if (!p || p.el !== entry.target) continue;
         p.near = entry.isIntersecting;
         if (!p.near) renderQueue.delete(p);
+        else if (p.view && p.pdfMissed && !p.loading) renderPage(p, p.view);
         else if (!p.view) {
           // A page in the window now is drawn at once; one only near it waits its turn
           // (pumpRenders), nearest first, so a jump shows the page asked for first.
@@ -421,19 +423,23 @@ async function pumpRenders() {
       if (!next) break;
       renderQueue.delete(next);
       await offscreenPause(next);
-      if (note !== epoch) break;
+      // Another document opened meanwhile: its pages (queued since, reset() emptied the
+      // rest) are drawn on, not left waiting for a scroll to queue them again.
+      if (note !== epoch) continue;
       if (!wantsRender(next)) continue;
       // The view first (from the cache, or the engine), then the page drawn from it in one go.
       const version = revision;
       let view = null;
       try { view = await pageView(next.index); } catch { /* renderPage asks again and shows why. */ }
-      if (note !== epoch) break;
+      if (note !== epoch) continue;
       if (!wantsRender(next)) continue;
       renderPage(next, view && version === revision ? view : undefined);
       await nextFrame();
     }
   } finally {
     renderPumping = false;
+    // Pages queued while the last one was drawn (queueRender found the pump busy).
+    if (renderQueue.size) queueMicrotask(pumpRenders);
   }
 }
 qualitySettings((value, rasterChanged, detail, preloadChanged) => {
@@ -1753,6 +1759,7 @@ async function renderPage(p, provided) {
     return;
   }
   p.retry = false;
+  p.pdfMissed = false;
   p.loading = true;
   const token = ++p.token,
     version = revision,
@@ -1897,7 +1904,10 @@ async function renderPage(p, provided) {
     }
   } catch (e) {
     // A raster skipped because the page left the screen while it waited is no error.
-    if (note === epoch && token === p.token && e?.message !== "No longer shown") {
+    // Its PDF page skipped because it left the band while it waited: drawn when it is back
+    // (below, or the page observer), not left blank until the page is taken down and redrawn.
+    if (e?.message === "No longer shown") p.pdfMissed = true;
+    else if (note === epoch && token === p.token) {
       const error = document.createElement("p");
       error.className = "page-error";
       error.textContent = "Could not display this page: " + e.message;
@@ -1911,6 +1921,7 @@ async function renderPage(p, provided) {
     if (note === epoch && panels[p.index] === p) {
       if (p.near && (p.retry || version !== revision || token !== p.token))
         renderPage(p);
+      else if (p.near && p.pdfMissed && p.view) renderPage(p, p.view);
       else if (p.view?.pdf_background) scheduleDetail();
       if (p.index === page) $("svg").disabled = !p.pdfReady;
     }
