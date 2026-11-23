@@ -1,5 +1,6 @@
-## What's new in 1.2.75
+## What's new in 1.2.76
 
+- **Ctrl A selects the document's text.** In a text document (a Word file opened as Markdown, a .md or .txt), Ctrl A selected the whole window, toolbars and tabs included. It now selects only the text, or everything in the editor while editing.
 - **Word documents no longer break after “Synced … from disk”.** A .docx, .doc, .odt, .pptx or other document opened as Markdown turned into garbage when you came back to the NoteComplete window: the check for a file changed by another program read the binary original as text and put it in place of the converted document, and a Save then wrote that garbage to the .md copy. Converted documents are no longer reloaded this way (the original file was never changed), and the reload of plain text files ignores binary content and reads accented text as it does on open.
 - **Chinese: stroke order window as an extended look-up.** Pinyin with tones, listen, favourite and HSK level under the player; collapsible Meanings, Structure, Words with it and On the page; a still copy beside the animation. Right-click a Chinese character inside a scanned PDF or a picture to look it up, hear it or see its stroke order.
 - **Web app on phones.** The global bar fits the screen again (labels no longer spill out of icon buttons) and the app can no longer be panned sideways as a page.
