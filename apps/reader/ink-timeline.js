@@ -1,5 +1,7 @@
 import {inkOpacity} from './timeline.js';
 export function indexTimedInk(container, timings) {
+ // Most pages have no timed ink: no walk over every item of a heavy page then.
+ if (!timings?.length) return [];
  const byId = new Map(timings.map(timing => [timing.item_id, timing]));
  return [...container.querySelectorAll('[data-item]')].flatMap(el => {
   const timing = byId.get(el.dataset.item);

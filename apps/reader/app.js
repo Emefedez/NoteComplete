@@ -115,6 +115,7 @@ import { toolWidths } from "./tool-widths.js";
 import { layerPanelController } from "./layer-panel.js";
 import { pageThumbnails } from "./page-thumbnails.js";
 import { pdfDetail } from "./pdf-detail.js";
+import { ViewCache, READS } from "./view-cache.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -233,6 +234,7 @@ themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("t
 const chromeState = new ChromeState();
 let panels = [],
   observer = null,
+  keepObserver = null,
   thumbnailObserver = null,
   scrollFrame = 0,
   zoom = "fit";
@@ -254,37 +256,185 @@ lagLog.start();
   $("lagLogSave").onclick = () => download(new Blob([lagLog.report()], { type: "text/plain" }), `NoteComplete lag log ${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}.txt`, "text/plain");
   $("lagLogClose").onclick = () => dialog.close();
 }
-function preloadMargin() {
+function preloadMarginPx() {
   const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
-  return `${count * 950}px 0px`;
+  return count * 950;
+}
+function preloadMargin() {
+  return `${preloadMarginPx()}px 0px`;
 }
 function preloadCacheSize() {
   const count = Math.max(0, Math.min(20, Math.round(Number(displayQuality?.preloadPages ?? 2))));
   return Math.max(6, Math.min(48, count * 2 + 4));
 }
+// A page leaving the preload band stays drawn until it is this much further away, so that
+// scrolling back and forth over the band's edge does not take a heavy page apart and parse
+// its ink again each time.
+const KEEP_EXTRA_PX = 950;
+function keepMargin() {
+  return `${preloadMarginPx() + KEEP_EXTRA_PX}px 0px`;
+}
+// A drawn page given back to its placeholder: off screen, or no longer showing the note as it is.
+function unmountPage(p) {
+  p.token++;
+  p.view = null;
+  p.ink = null;
+  p.pdfReady = false;
+  placeholder(p);
+}
+// Taking a heavy page apart is itself a long task (the browser lets go of every element), so
+// pages far off screen are taken down when the browser is idle, not in the middle of a scroll.
+const unmountDue = new Set();
+let unmountTimer = 0;
+const idle = globalThis.requestIdleCallback ? (fn) => requestIdleCallback(fn, { timeout: 1000 }) : (fn) => setTimeout(fn, 200);
+function unmountSoon(p) {
+  unmountDue.add(p);
+  if (!unmountTimer) unmountTimer = idle(unmountFar);
+}
+// Recently left pages kept parsed (Display quality → Recent pages kept ready): when a page is
+// taken down while the note is unchanged, its ink is parsed into a template in that idle moment,
+// and coming back to the same view clones it (about 3× faster than parsing again).
+const parsedPages = new Map();
+function keepParsed(p, deadline) {
+  const limit = displayQuality?.keptPages ?? 0;
+  const view = p.view;
+  // Only a view the cache would hand back as it is: an edited note has a new one.
+  if (!limit || !view || typeof view.svg !== "string" || viewCache.views.get(p.index) !== view) return;
+  // Parsing a page with much ink is a long task: only in real idle time, never as an idle
+  // callback forced by its timeout in the middle of a jump or scroll.
+  if (!deadline || deadline.didTimeout || !(deadline.timeRemaining?.() > 8)) return;
+  if (parsedPages.get(p.index)?.view === view) return;
+  const template = document.createElement("template");
+  template.innerHTML = view.svg;
+  parsedPages.delete(p.index);
+  parsedPages.set(p.index, { view, content: template.content });
+  for (const index of parsedPages.keys()) {
+    if (parsedPages.size <= limit) break;
+    parsedPages.delete(index);
+  }
+}
+function trimParsed() {
+  const limit = displayQuality?.keptPages ?? 0;
+  for (const index of parsedPages.keys()) {
+    if (parsedPages.size <= limit) break;
+    parsedPages.delete(index);
+  }
+}
+function unmountFar(deadline) {
+  unmountTimer = 0;
+  let done = 0;
+  for (const p of unmountDue) {
+    // At least one page per idle moment, more while the browser has time to spare.
+    if (done++ && !deadline?.didTimeout && !(deadline?.timeRemaining?.() > 8)) break;
+    unmountDue.delete(p);
+    if (panels[p.index] !== p || p.kept || p.near || gesture?.panel === p) continue;
+    if (p.view || p.render || p.loading) {
+      keepParsed(p, deadline);
+      unmountPage(p);
+    }
+  }
+  if (unmountDue.size) unmountTimer = idle(unmountFar);
+}
 function attachPageObserver() {
   observer?.disconnect();
+  keepObserver?.disconnect();
+  renderQueue.clear();
+  unmountDue.clear();
   if (!panels.length) return;
+  const viewport = $("viewport");
   observer = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
         const p = panels[Number(entry.target.dataset.page)];
         if (!p || p.el !== entry.target) continue;
         p.near = entry.isIntersecting;
-        if (p.near) {
-          if (!p.view) renderPage(p);
-        } else if (gesture?.panel !== p) {
-          p.token++;
-          p.view = null;
-          p.ink = null;
-          p.pdfReady = false;
-          placeholder(p);
+        if (!p.near) renderQueue.delete(p);
+        else if (!p.view) {
+          // A page in the window now is drawn at once; one only near it waits its turn
+          // (pumpRenders), nearest first, so a jump shows the page asked for first.
+          // The window is the observer's root less its margin: no layout read here.
+          const box = entry.boundingClientRect, root = entry.rootBounds, margin = preloadMarginPx();
+          if (!root || (box.bottom > root.top + margin && box.top < root.bottom - margin)) renderPage(p);
+          else queueRender(p);
         }
       }
     },
-    { root: $("viewport"), rootMargin: preloadMargin() },
+    { root: viewport, rootMargin: preloadMargin() },
   );
-  for (const p of panels) observer.observe(p.el);
+  keepObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const p = panels[Number(entry.target.dataset.page)];
+        if (!p || p.el !== entry.target) continue;
+        p.kept = entry.isIntersecting;
+        if (!p.kept) unmountSoon(p);
+      }
+    },
+    { root: viewport, rootMargin: keepMargin() },
+  );
+  for (const p of panels) {
+    observer.observe(p.el);
+    keepObserver.observe(p.el);
+  }
+}
+// Pages near the window wait here to be drawn, one at a time: the nearest to the page in view
+// first, and one off screen only once the pages stop moving (or it is about to come in), with a
+// frame between two, so that parsing a heavy page's ink never lands in the middle of a scroll
+// or several in one long task. A page that leaves the band meanwhile is never asked for, so a
+// fast scroll no longer leaves the engine a queue of pages already flown past.
+const renderQueue = new Set();
+let renderPumping = false;
+// Page views as the engine gave them, while the note has not changed (view-cache.js, pageView).
+const viewCache = new ViewCache();
+const OFFSCREEN_WAIT_MAX_MS = 600;
+function queueRender(p) {
+  renderQueue.add(p);
+  pumpRenders();
+}
+const wantsRender = (p) => panels[p.index] === p && p.near && !p.view && !p.loading;
+function nextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+}
+// Until the pages have stopped moving, the page is close to the window's edge, or long enough.
+async function offscreenPause(p) {
+  const start = performance.now();
+  for (;;) {
+    if (!wantsRender(p)) return;
+    const now = performance.now();
+    if (now - lastScrollAt >= SCROLL_SETTLE_MS || now - start >= OFFSCREEN_WAIT_MAX_MS) return;
+    const box = p.el.getBoundingClientRect(), view = $("viewport").getBoundingClientRect(), reach = view.height / 2;
+    if (box.bottom > view.top - reach && box.top < view.bottom + reach) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+async function pumpRenders() {
+  if (renderPumping) return;
+  renderPumping = true;
+  try {
+    while (renderQueue.size) {
+      const note = epoch;
+      let next = null;
+      for (const p of renderQueue) {
+        if (!wantsRender(p)) renderQueue.delete(p);
+        else if (!next || Math.abs(p.index - page) < Math.abs(next.index - page)) next = p;
+      }
+      if (!next) break;
+      renderQueue.delete(next);
+      await offscreenPause(next);
+      if (note !== epoch) break;
+      if (!wantsRender(next)) continue;
+      // The view first (from the cache, or the engine), then the page drawn from it in one go.
+      const version = revision;
+      let view = null;
+      try { view = await pageView(next.index); } catch { /* renderPage asks again and shows why. */ }
+      if (note !== epoch) break;
+      if (!wantsRender(next)) continue;
+      renderPage(next, view && version === revision ? view : undefined);
+      await nextFrame();
+    }
+  } finally {
+    renderPumping = false;
+  }
 }
 qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   displayQuality = value;
@@ -296,6 +446,8 @@ qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   else document.documentElement.style.setProperty("--page-filter", `contrast(${value.contrast}%) brightness(${value.brightness}%)`);
   if (preloadChanged) {
     backgrounds?.setMaxKept(preloadCacheSize());
+    viewCache.setMaxEntries(preloadCacheSize() * 2);
+    trimParsed();
     attachPageObserver();
   }
   if (rasterChanged) redrawPdfPages();
@@ -308,6 +460,7 @@ function redrawPdfPages() {
     dropDetail(panel);
     panel.token++;
     if (panel.near) renderPage(panel, panel.view);
+    else if (panel.view) unmountPage(panel);
   }
 }
 (function watchPixelRatio() {
@@ -355,7 +508,10 @@ function uiZoom() {
 function placeStatus() {
   const z = uiZoom(), vh = innerHeight / z;
   let bottom = 0;
-  for (const bar of document.querySelectorAll("#toolbar, .navigation, #tabletDock")) {
+  // Looked up one by one: a selector list with a class searched every element of the drawn
+  // pages (thousands on a page with much ink) each time a message showed, on every jump.
+  for (const bar of [$("toolbar"), document.querySelector(".navigation"), document.getElementById("tabletDock")]) {
+    if (!bar) continue;
     const r = bar.getBoundingClientRect();
     if (r.height && r.top / z > vh / 2) bottom = Math.max(bottom, vh - r.top / z);
   }
@@ -536,6 +692,8 @@ function call(op, args = {}, transfer = null) {
     : (args.bytes instanceof ArrayBuffer || ArrayBuffer.isView(args.bytes) ? [args.bytes] : []);
   const list = [...new Set(raw.map((x) => (ArrayBuffer.isView(x) ? x.buffer : x)).filter((x) => x instanceof ArrayBuffer))];
   const answered = lagLog.call(op);
+  viewCache.sending(op);
+  if (!READS.has(op)) parsedPages.clear();
   const reply = engine.call({ op, page, ...args }, list);
   reply.then(answered, answered);
   return reply;
@@ -571,6 +729,14 @@ async function viewAfter(reply) {
   }
   const view = await call("view", { page: drawn.page });
   drawnItems.set(view, { id: drawn.id });
+  return view;
+}
+async function pageView(index) {
+  const kept = viewCache.get(index);
+  if (kept) return kept;
+  const generation = viewCache.generation;
+  const view = await call("view", { page: index });
+  viewCache.put(index, view, generation);
   return view;
 }
 // Notes of 32 MB and more replace the engine's worker when they close (engine.js).
@@ -616,6 +782,11 @@ function reset({ opening = false, keepSession = false } = {}) {
   document.body.classList.remove("bar-compact");
   setCompact(false);
   observer?.disconnect();
+  keepObserver?.disconnect();
+  renderQueue.clear();
+  unmountDue.clear();
+  viewCache.clear();
+  parsedPages.clear();
   thumbnailObserver?.disconnect();
   thumbQueue.clear();
   thumbsDue.clear();
@@ -1554,8 +1725,11 @@ function resize() {
       p.rasterWidth > 0 &&
       Math.abs(width - p.rasterWidth) / p.rasterWidth > 0.08 &&
       !p.loading
-    )
-      reraster.push(p);
+    ) {
+      // One kept drawn outside the band (keepObserver) is drawn afresh when it comes back.
+      if (!p.near && p.index !== page && gesture?.panel !== p) unmountPage(p);
+      else reraster.push(p);
+    }
   }
   updateZoom();
   selection.render(panels[selection.item?.page]);
@@ -1584,7 +1758,7 @@ async function renderPage(p, provided) {
     version = revision,
     note = epoch;
   try {
-    const result = provided || (await call("view", { page: p.index }));
+    const result = provided || (await pageView(p.index));
     if (note !== epoch || token !== p.token || version !== revision) return;
     if (gesture?.panel === p) {
       p.stale = true;
@@ -1596,7 +1770,13 @@ async function renderPage(p, provided) {
     p.viewRevision = shows;
     const render = document.createElement("div");
     render.className = "render";
-    render.innerHTML = result.svg;
+    const parsed = parsedPages.get(p.index);
+    if (parsed?.view === result) {
+      render.append(document.importNode(parsed.content, true));
+      // Most recently used last.
+      parsedPages.delete(p.index);
+      parsedPages.set(p.index, parsed);
+    } else render.innerHTML = result.svg;
     paintTapes(render, p.index);
     // An edit redraws the page's ink; the PDF raster under it stays the same,
     // so the existing image moves over at once instead of blinking out while
@@ -2167,7 +2347,11 @@ function showEdit(op, args, result) {
       p.thumbnailReady = false;
       updatePagePreview(p, true);
     }
-    if (!(p.near || p.index === page)) continue;
+    if (!(p.near || p.index === page)) {
+      // Kept drawn just outside the band (keepObserver): drawn again when it comes back.
+      if (p.render && gesture?.panel !== p) unmountPage(p);
+      continue;
+    }
     // Strokes in quick succession: the page is redrawn once the pen pauses. Until then the
     // strokes stay on screen as drawn, and the next one starts at once instead of waiting
     // for the whole page to be rebuilt.
@@ -4920,7 +5104,12 @@ $("audioDownload").onclick = async (event) => {
 
 function currentZoom() {
   const p = panels[page];
-  return p ? p.el.getBoundingClientRect().width / p.size[0] : 1;
+  if (!p) return 1;
+  // The width resize() set, read without laying the pages out (this runs on every page
+  // change while scrolling, often right after a page was drawn).
+  const set = parseFloat(p.el.style.width);
+  // A pinch in progress scales the pages with a transform (pinchBy), which the rectangle had.
+  return set > 0 ? (set * (pinch?.scale || 1)) / p.size[0] : p.el.getBoundingClientRect().width / p.size[0];
 }
 function updateZoom() {
   const value = currentZoom();
@@ -6562,6 +6751,9 @@ $("ocrOpen").onclick = () => find.openOcr(page);
 // Inserted pages (or undoing them) change the page list: rebuild it and stay on `focus`.
 function restructure(result, focus, message) {
   observer?.disconnect();
+  keepObserver?.disconnect();
+  renderQueue.clear();
+  unmountDue.clear();
   thumbnailObserver?.disconnect();
   selection.clear();
   // The old pages go as pages leaving the view do: their PDF rasters back to the cache, for the

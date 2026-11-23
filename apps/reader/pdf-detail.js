@@ -47,7 +47,13 @@ export function pdfDetail({ $, INK_HEAVY, ns, placeRaster, app }) {
       if (detailAgain) { detailAgain = false; scheduleDetail(); }
     }
   }
-  const pageDetail = (p) => p.render?.querySelector(":scope > .pdf-detail, [data-background] > .pdf-detail");
+  // In two steps: as one selector list, a page without a detail tile (most) was searched to
+  // its last ink element, on every draw and every page taken down.
+  const pageDetail = (p) => {
+    const render = p.render;
+    if (!render) return null;
+    return render.querySelector(":scope > .pdf-detail") || render.querySelector("[data-background]")?.querySelector(":scope > .pdf-detail") || null;
+  };
   function dropDetail(p) {
     const old = pageDetail(p);
     if (!old) return;
