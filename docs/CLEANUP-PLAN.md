@@ -202,6 +202,43 @@ Done in four commits (`f989e9e`, `2f7e953`, `abe5334`, and the `text-box.js` com
 each with its tests, the parts that have a clear edge: auto-save, the download queue's
 window, page export wiring, the text box editor. No behaviour change; one commit each.
 
+### Q2b `app.js` grew back to 10,074 lines `[P]`
+
+By v1.2.71 it had 123 module-level `let`s and 319 functions. Moved out the parts that only
+read the note's state, each a factory that `app.js` calls once with what it needs (as
+`textBoxController`): `media-open.js` (audio, video and R files), `page-dialogs.js` (Pages →
+Insert and Change PDF background), `pen-setup.js` (Pen button… and the pen test),
+`pen-hover.js` (pen hover ring and touch tooltips), `figures.js` (graphs, tables, prefabs,
+UML and their editors), `item-clipboard.js` (copy, cut, paste), `item-menus.js` (the item
+and page menus, pictures of items) and `study-import.js`. Code moved verbatim; mutable state
+is read through an `app` object of getters (and a setter where a module writes it, as
+`penProfile`), so there is still one copy of each variable. `app.js` is 8,269 lines, 104
+`let`s, 250 functions. Checked with `tsc --checkJs` (no unresolved names), a walk of what
+runs at load (no `const` read before it is set that was not read early before), and the
+same browser run before and after (open a note, insert a page, the dialogs, item and page
+menus, copy and paste, the prefab chooser, a study import).
+
+Not planned: gathering the state into one object. Of the 104 `let`s, 68 are used by at most
+four statements of one feature (thumbnail timers, detail rendering, pen hover, …) and belong
+in that feature's module, not in a shared object. Only 15 are used across the file (`doc`
+123 statements, `panels`, `page`, `tool`, `editing`, `dirty`, …): putting those in an object
+rewrites about 600 references, conflicts with every feature change, and makes `app.js` no
+smaller, while the `app` getters already let a module read them. The pointer handlers
+(`pointerDown`, `pointerUp`, `appendPoint`) and `renderPage` read and write most of that
+state, so as modules they would take 30+ dependencies: they stay in `app.js`.
+
+Then, the same way, features that own their state, moved out with it: `pdf-detail.js` (fast
+zoom sharpening), `page-thumbnails.js` (the page list's thumbnails and current page),
+`layer-panel.js` (the Layers panel, `ensureEditableLayer`, ink dimmed to the audio) and
+`tool-widths.js` (each tool's width presets and their dialog). Where a variable a feature
+owns was also written from outside, the outside now calls the feature (`refreshThumbnailsSoon`,
+`widthPresetsNow`); `lastScrollAt`, written by the scroll handlers, stayed in `app.js`.
+`app.js` is 7,744 lines, 93 `let`s, 228 functions; same checks and the same browser run
+(plus a layer added, thumbnails drawn, a sharpened zoom and the width dialog).
+
+Left for later: tape (38 lines, and `reset` sets its mode) and zoom (20 lines) are too small
+to be worth a module; tool choices (`buildChoices`, `syncChoices`, tool prefs) is next.
+
 ### Q3 Errors that are dropped `[D]`
 
 Done: every bare `.catch(() => {})` in `apps/reader/` either documents why it is optional (`/* Optional. */`, `/* Reported by load(). */`, `/* Handled via race. */`, `/* Returned to caller. */`) or reports the failure via `console.warn` or `status(..., true)`.
