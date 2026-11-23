@@ -127,3 +127,19 @@ The codebase already employs several sound memory patterns that should be preser
 - A tablet joins from a snapshot of the whole project, source included: for a 250 MB note about 330 MB is sent and held while the tablet loads it, and the computer's worker serializes it once per joining tablet. Streaming the source separately (or from a cached copy on the device) would avoid this; not done.
 - The history digest serializes the edit history (images included) every 100 edits, only while a tablet is connected.
 - Remote notes edits re-set the TinyMDE content (one rebuild per remote change); fine for notes, not for very long ones typed by many people at once.
+
+## Moving into pages with much ink or many prefabs (2026-11-23)
+
+Measured with `tools/page_nav_bench.mjs` on a note from `tools/make_heavy_note.mjs` (30 A4 pages, 1,400 lines each, about 1.4 MB of SVG per page, the density of the densest page in the samples) at 4× CPU throttling, three runs each:
+
+| | Time to ink after a jump | Jumping back | Worst frame, jumps | Worst frame, fling |
+| :--- | ---: | ---: | ---: | ---: |
+| Before | 370 ms | 324 ms | 461 ms | 634 ms |
+| After | 285 ms | 277 ms | 378 ms | 405 ms |
+
+- **Page views cached** (`view-cache.js`): a page coming back is drawn without asking the worker to build, serialize and copy its SVG again. Any operation the worker does not list as a read empties the cache before it is sent.
+- **One page drawn at a time, nearest first** (`pumpRenders` in `app.js`): a page in the window is drawn at once; pages only near it queue, wait for scrolling to pause unless about to come in, and get a frame between them. Pages flown past are never asked for, so a fling no longer leaves the worker a backlog ahead of the page where it stopped.
+- **Keep band**: a page leaving the preload band stays drawn until it is one more page further away, and far pages are taken down at idle time; scrolling back and forth over the band's edge no longer parses a page again.
+- **Fewer scans of the whole page**: timed-ink indexing is skipped on pages without timings, and the status position and PDF detail lookups no longer use selectors that walk every ink element.
+
+What remains is the browser parsing and laying out the page's SVG (about 65 ms parse and 45 ms layout per dense page at 4×), now once per page visit instead of more. Coordinate precision barely changes it (30 % fewer characters, same time); `cloneNode` of a parsed page is about 3× faster than parsing, so keeping a parsed copy of recently left pages would be the next step for jumping back.
