@@ -588,8 +588,10 @@ function showSmallButtons() {
     el.insertAdjacentElement('afterend', b);
     el.parentElement?.classList.add('zh-host');
     el.__zhIme.addButton(b);
-    // At the field's own top-right corner (its parent may hold other buttons).
-    const place = () => { b.style.left = `${el.offsetLeft + el.offsetWidth - 26}px`; b.style.top = `${el.offsetTop + 4}px`; b.style.right = 'auto'; };
+    // At the field's own top-right corner (its parent may hold other buttons), inside its
+    // border and left of its scroll bar when it has one (a long Ask AI question): the inner
+    // width (clientWidth) leaves the scroll bar out, where the outer one put the button on it.
+    const place = () => { b.style.left = `${el.offsetLeft + el.clientLeft + el.clientWidth - 26}px`; b.style.top = `${el.offsetTop + el.clientTop + 3}px`; b.style.right = 'auto'; };
     place();
     el.addEventListener('focus', place);
     el.addEventListener('input', place);
