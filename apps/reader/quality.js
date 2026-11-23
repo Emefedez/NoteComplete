@@ -1,7 +1,7 @@
 export const presets = {
-  performance: { scale: 1, megapixels: 4, contrast: 100, brightness: 100, preloadPages: 1 },
-  balanced: { scale: 2, megapixels: 12, contrast: 100, brightness: 100, preloadPages: 2 },
-  sharp: { scale: 3, megapixels: 20, contrast: 105, brightness: 100, preloadPages: 4 },
+  performance: { scale: 1, megapixels: 4, contrast: 100, brightness: 100, preloadPages: 1, keptPages: 0 },
+  balanced: { scale: 2, megapixels: 12, contrast: 100, brightness: 100, preloadPages: 2, keptPages: 0 },
+  sharp: { scale: 3, megapixels: 20, contrast: 105, brightness: 100, preloadPages: 4, keptPages: 0 },
 };
 export function normalizeQuality(value = {}) {
   const limits = {
@@ -10,11 +10,16 @@ export function normalizeQuality(value = {}) {
     contrast: [75, 150],
     brightness: [75, 125],
     preloadPages: [0, 20],
+    // Recently left pages kept parsed (app.js parsedPages): coming back to one clones its ink
+    // instead of parsing it (0.5 ms against 3.5 ms for 0.6 MB of SVG), for a few MB each. Off in
+    // every preset: in tools/page_nav_bench.mjs the parsing done in idle time cost more main-thread
+    // time than going back saved, since layout and the rest of a page's drawing dominate.
+    keptPages: [0, 12],
   };
   return Object.fromEntries(Object.entries(limits).map(([key, [min, max]]) => {
     const n = value?.[key];
     const clamped = Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : presets.balanced[key];
-    return [key, key === "preloadPages" ? Math.round(clamped) : clamped];
+    return [key, key === "preloadPages" || key === "keptPages" ? Math.round(clamped) : clamped];
   }));
 }
 const storageKey = "notecomplete-quality-v1";
@@ -43,6 +48,7 @@ export function qualitySettings(onApply) {
     if (key === "scale") return `${n}×`;
     if (key === "megapixels") return `${n} MP`;
     if (key === "preloadPages") return n === 0 ? "0 (visible only)" : `${n} ${n === 1 ? "page" : "pages"}`;
+    if (key === "keptPages") return n === 0 ? "Off" : `${n} ${n === 1 ? "page" : "pages"}`;
     return `${n}%`;
   }
   function fill(value) {
@@ -75,7 +81,7 @@ export function qualitySettings(onApply) {
     event.preventDefault();
     const next = read(), nextDetail = form.elements.zoomDetail.checked;
     const rasterChanged = next.scale !== current.scale || next.megapixels !== current.megapixels || nextDetail !== detail;
-    const preloadChanged = next.preloadPages !== current.preloadPages;
+    const preloadChanged = next.preloadPages !== current.preloadPages || next.keptPages !== current.keptPages;
     current = next;
     detail = nextDetail;
     try {

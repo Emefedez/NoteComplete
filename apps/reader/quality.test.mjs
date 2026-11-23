@@ -6,7 +6,10 @@ import { rasterTarget } from './pdf-background.js';
 test('quality preferences reject invalid storage and bound memory controls', () => {
   assert.deepEqual(normalizeQuality(null), presets.balanced);
   assert.deepEqual(normalizeQuality({ scale: NaN, megapixels: '24' }), presets.balanced);
-  assert.deepEqual(normalizeQuality({ scale: 99, megapixels: 999, contrast: 0, brightness: -1, preloadPages: 99 }), { scale: 3, megapixels: 24, contrast: 75, brightness: 75, preloadPages: 20 });
+  assert.deepEqual(normalizeQuality({ scale: 99, megapixels: 999, contrast: 0, brightness: -1, preloadPages: 99, keptPages: 99 }), { scale: 3, megapixels: 24, contrast: 75, brightness: 75, preloadPages: 20, keptPages: 12 });
+  assert.equal(normalizeQuality({}).keptPages, 0, 'recent pages kept ready: off unless chosen');
+  assert.equal(normalizeQuality({ keptPages: 6 }).keptPages, 6);
+  assert.equal(normalizeQuality({ keptPages: -1 }).keptPages, 0);
   assert.equal(normalizeQuality({ preloadPages: -5 }).preloadPages, 0);
   assert.equal(normalizeQuality({ preloadPages: 3.7 }).preloadPages, 4);
 });

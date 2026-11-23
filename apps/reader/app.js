@@ -115,7 +115,7 @@ import { toolWidths } from "./tool-widths.js";
 import { layerPanelController } from "./layer-panel.js";
 import { pageThumbnails } from "./page-thumbnails.js";
 import { pdfDetail } from "./pdf-detail.js";
-import { ViewCache } from "./view-cache.js";
+import { ViewCache, READS } from "./view-cache.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -291,6 +291,35 @@ function unmountSoon(p) {
   unmountDue.add(p);
   if (!unmountTimer) unmountTimer = idle(unmountFar);
 }
+// Recently left pages kept parsed (Display quality → Recent pages kept ready): when a page is
+// taken down while the note is unchanged, its ink is parsed into a template in that idle moment,
+// and coming back to the same view clones it (about 3× faster than parsing again).
+const parsedPages = new Map();
+function keepParsed(p, deadline) {
+  const limit = displayQuality?.keptPages ?? 0;
+  const view = p.view;
+  // Only a view the cache would hand back as it is: an edited note has a new one.
+  if (!limit || !view || typeof view.svg !== "string" || viewCache.views.get(p.index) !== view) return;
+  // Parsing a page with much ink is a long task: only in real idle time, never as an idle
+  // callback forced by its timeout in the middle of a jump or scroll.
+  if (!deadline || deadline.didTimeout || !(deadline.timeRemaining?.() > 8)) return;
+  if (parsedPages.get(p.index)?.view === view) return;
+  const template = document.createElement("template");
+  template.innerHTML = view.svg;
+  parsedPages.delete(p.index);
+  parsedPages.set(p.index, { view, content: template.content });
+  for (const index of parsedPages.keys()) {
+    if (parsedPages.size <= limit) break;
+    parsedPages.delete(index);
+  }
+}
+function trimParsed() {
+  const limit = displayQuality?.keptPages ?? 0;
+  for (const index of parsedPages.keys()) {
+    if (parsedPages.size <= limit) break;
+    parsedPages.delete(index);
+  }
+}
 function unmountFar(deadline) {
   unmountTimer = 0;
   let done = 0;
@@ -299,7 +328,10 @@ function unmountFar(deadline) {
     if (done++ && !deadline?.didTimeout && !(deadline?.timeRemaining?.() > 8)) break;
     unmountDue.delete(p);
     if (panels[p.index] !== p || p.kept || p.near || gesture?.panel === p) continue;
-    if (p.view || p.render || p.loading) unmountPage(p);
+    if (p.view || p.render || p.loading) {
+      keepParsed(p, deadline);
+      unmountPage(p);
+    }
   }
   if (unmountDue.size) unmountTimer = idle(unmountFar);
 }
@@ -415,6 +447,7 @@ qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   if (preloadChanged) {
     backgrounds?.setMaxKept(preloadCacheSize());
     viewCache.setMaxEntries(preloadCacheSize() * 2);
+    trimParsed();
     attachPageObserver();
   }
   if (rasterChanged) redrawPdfPages();
@@ -660,6 +693,7 @@ function call(op, args = {}, transfer = null) {
   const list = [...new Set(raw.map((x) => (ArrayBuffer.isView(x) ? x.buffer : x)).filter((x) => x instanceof ArrayBuffer))];
   const answered = lagLog.call(op);
   viewCache.sending(op);
+  if (!READS.has(op)) parsedPages.clear();
   const reply = engine.call({ op, page, ...args }, list);
   reply.then(answered, answered);
   return reply;
@@ -752,6 +786,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   renderQueue.clear();
   unmountDue.clear();
   viewCache.clear();
+  parsedPages.clear();
   thumbnailObserver?.disconnect();
   thumbQueue.clear();
   thumbsDue.clear();
@@ -1735,7 +1770,13 @@ async function renderPage(p, provided) {
     p.viewRevision = shows;
     const render = document.createElement("div");
     render.className = "render";
-    render.innerHTML = result.svg;
+    const parsed = parsedPages.get(p.index);
+    if (parsed?.view === result) {
+      render.append(document.importNode(parsed.content, true));
+      // Most recently used last.
+      parsedPages.delete(p.index);
+      parsedPages.set(p.index, parsed);
+    } else render.innerHTML = result.svg;
     paintTapes(render, p.index);
     // An edit redraws the page's ink; the PDF raster under it stays the same,
     // so the existing image moves over at once instead of blinking out while

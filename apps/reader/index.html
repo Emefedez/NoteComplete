@@ -1236,11 +1236,12 @@
     <label>PDF resolution <output data-value="scale"></output><input name="scale" aria-label="PDF resolution" type="range" min="1" max="3" step="0.25"></label>
     <label>Page pixel budget <output data-value="megapixels"></output><input name="megapixels" aria-label="Page pixel budget" type="range" min="4" max="24" step="1"></label>
     <label>Preloaded PDF pages <output data-value="preloadPages"></output><input name="preloadPages" aria-label="Preloaded PDF pages" type="range" min="0" max="20" step="1"></label>
+    <label>Recent pages kept ready <output data-value="keptPages"></output><input name="keptPages" aria-label="Recent pages kept ready" type="range" min="0" max="12" step="1"></label>
     <label>Page contrast <output data-value="contrast"></output><input name="contrast" aria-label="Page contrast" type="range" min="75" max="150" step="5"></label>
     <label>Page brightness <output data-value="brightness"></output><input name="brightness" aria-label="Page brightness" type="range" min="75" max="125" step="5"></label>
     <label class="quality-check"><input name="zoomDetail" type="checkbox"> <span><strong>Fast zoom sharpening</strong> <span class="muted">Zoomed PDF pages sharpen in a fraction of the time by drawing only what is on screen, and keep sharpening while you pan. Areas just scrolled into view stay soft for a moment.</span></span></label>
     <div class="quality-sample"><strong>Reading preview</strong><p>Clear text, <span>soft pencil</span> and <mark>highlighted notes</mark>.</p></div>
-    <p class="muted">Higher resolution and more preloaded pages use more memory. Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
+    <p class="muted">Higher resolution, more preloaded pages and more recent pages kept ready use more memory (a page with much ink kept ready takes a few MB and is drawn a little sooner when you go back to it; off by default). Changes apply when saved. Contrast and brightness affect the reader only; original files and exports keep their colors.</p>
     <div class="quality-actions"><button type="button" data-reset>Reset to default</button><span class="spacer"></span><button type="button" data-cancel>Cancel</button><button type="submit" class="primary">Apply</button></div>
   </form>
 </dialog>

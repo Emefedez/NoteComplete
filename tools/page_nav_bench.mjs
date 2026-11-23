@@ -7,7 +7,8 @@
 //   fling     a fast scroll far down, then stopping
 //   back      jumping back to pages seen a moment before
 // Make a heavy note first (node tools/make_heavy_note.mjs heavy.nfedit) or pass any note.
-//   node tools/page_nav_bench.mjs <file> [--cpu 4] [--json out.json] [--profile]
+//   node tools/page_nav_bench.mjs <file> [--cpu 4] [--kept N] [--json out.json] [--profile]
+// --kept sets Display quality → Recent pages kept ready (0 turns it off; default: the app's).
 // --profile lists the functions that took the most main-thread time over all four.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { chromium, startReader, openReader } from './e2e_common.mjs';
@@ -16,6 +17,7 @@ const args = process.argv.slice(2);
 const flag = (name, fallback) => { const i = args.indexOf(name); if (i < 0) return fallback; const v = args[i + 1]; args.splice(i, 2); return v; };
 const cpu = Number(flag('--cpu', 4));
 const jsonOut = flag('--json', '');
+const kept = flag('--kept', '');
 const profile = args.includes('--profile') ? (args.splice(args.indexOf('--profile'), 1), true) : false;
 const file = args[0];
 if (!file) { console.error('usage: node tools/page_nav_bench.mjs <file> [--cpu 4] [--json out.json]'); process.exit(2); }
@@ -26,6 +28,7 @@ const ctx = await b.newContext({ viewport: { width: 1180, height: 820 }, deviceS
 const p = await ctx.newPage();
 const cdp = await ctx.newCDPSession(p);
 p.on('pageerror', (e) => console.error('pageerror', e.message));
+if (kept !== '') await p.addInitScript((n) => { localStorage.setItem('notecomplete-quality-v1', JSON.stringify({ scale: 2, megapixels: 12, contrast: 100, brightness: 100, preloadPages: 2, keptPages: n })); }, Number(kept));
 await p.addInitScript(() => {
   window.__long = [];
   window.__frames = [];
