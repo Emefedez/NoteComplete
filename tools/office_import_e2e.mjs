@@ -44,6 +44,16 @@ try {
   assert.deepEqual(vendor, ['mammoth/mammoth.browser.min.js']);
   if (DIR) await p.screenshot({ path: DIR + 'docx.png' });
   console.log('· .docx opened as Markdown (headings, bold, list, table)');
+  // Ctrl A selects the document's text, not the toolbars and tabs around it.
+  await p.click('#textBody h1');
+  await p.keyboard.press('Control+a');
+  const selected = await p.evaluate(() => {
+    const s = getSelection(), body = document.getElementById('textBody');
+    return { text: s.toString(), inside: body.contains(s.anchorNode) && body.contains(s.focusNode) };
+  });
+  assert.equal(selected.inside, true, 'the selection stays in the text');
+  assert.match(selected.text, /^Informe trimestral[\s\S]*Primer punto/);
+  console.log('· Ctrl A selected the text only');
   // Save keeps a .md copy of what is shown.
   const [saved] = await Promise.all([p.waitForEvent('download'), p.click('#textSave')]);
   assert.equal(saved.suggestedFilename(), 'Informe.md');

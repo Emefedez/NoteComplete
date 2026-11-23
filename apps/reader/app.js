@@ -13,7 +13,7 @@ import {
 } from "./media-import.js";
 import { htmlViewer } from "./html-view.js";
 import { textViewer, isMarkdownName, isDiagramName, zoomControl } from "./text-view.js";
-import { isRScriptName } from "./text-types.js";
+import { isRScriptName, decodeText } from "./text-types.js";
 import { textStudy } from "./text-study.js";
 import { textFind } from "./text-find.js";
 import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
@@ -4155,7 +4155,24 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
-  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
+  // Ctrl A in a text document selects its text, not the whole window (toolbars, tabs…).
+  // Inside a field or the editor the field's own select-all applies.
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyA" && !typingIn(e.target)
+    && textView?.visible && textView.hasDocument && !document.querySelector("dialog[open]")) {
+    e.preventDefault();
+    const root = textView.editing ? $("textEditor") : $("textBody");
+    const plain = root.querySelector("textarea");
+    if (plain) { plain.focus(); plain.select(); return; }
+    const target = root.querySelector("[contenteditable='true']") || root;
+    if (target !== root) target.focus();
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+  if (e.key === "?" &&!e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
     e.preventDefault();
     toggleKeyHints();
     return;
@@ -4658,13 +4675,21 @@ if ($("textOpenRStudio")) {
 }
 // When an R script or text file opened from disk is edited externally in R Commander Studio,
 // focusing NoteComplete reloads the updated file cleanly if there are no unsaved in-app edits.
+// Only plain text files: a converted document (.docx, .doc, .odt, .pdf…) shows Markdown made
+// from a binary file, so its bytes read as text would replace the document with garbage.
 window.addEventListener("focus", async () => {
-  if (!textView?.visible || !textView?.hasDocument || (dirty && changed)) return;
+  if (!textView?.visible || !textView?.hasDocument || converted || changed) return;
   if (docMember?.source !== "local" || !docMember?.path || !window.notecompleteFiles?.readRecent) return;
+  const member = docMember;
   try {
-    const bytes = await window.notecompleteFiles.readRecent(docMember.path);
+    const bytes = await window.notecompleteFiles.readRecent(member.path);
     if (!bytes) return;
-    const diskText = new TextDecoder("utf-8").decode(bytes);
+    const data = new Uint8Array(bytes);
+    // Binary content (a NUL byte) is never a text file's update.
+    if (data.subarray(0, 4096).includes(0)) return;
+    // Another document opened, or edits began, while the file was being read.
+    if (docMember !== member || converted || changed || !textView.hasDocument) return;
+    const diskText = decodeText(data);
     if (diskText && diskText !== textView.text) {
       await textView.open({
         text: diskText,
