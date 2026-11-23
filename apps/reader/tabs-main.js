@@ -19,7 +19,8 @@ host.install = async () => {
 // unless Help → "Open the welcome note at start" was turned off in this browser.
 const site = welcomeWanted() ? await fetch('./site.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
 if (site?.welcome) {
-  const showNotes = site.notes && window.innerWidth > 700;
+  // Not on a phone, upright or on its side: the panel would take half of a small screen.
+  const showNotes = site.notes && window.innerWidth > 700 && window.innerHeight > 500;
   host.open({ title: site.title || 'Welcome', open: site.welcome, notes: showNotes ? 1 : null });
   host.open({}, { activate: false });
 } else host.open();

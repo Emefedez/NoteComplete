@@ -44,12 +44,18 @@
 [hidden] {
   display: none !important;
 }
+/* The app never scrolls as a page: with body's overflow on the viewport, a few pixels too
+   wide let phones pan the whole app sideways (off-centre, the bar's end out of view). */
+html {
+  overflow: hidden;
+}
 body {
   margin: 0;
   height: calc(100dvh / var(--ui-zoom, 1));
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  overflow: clip;
 }
 html:fullscreen, body:fullscreen {
   width: 100%;
@@ -5157,6 +5163,13 @@ header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-read
   margin: 0;
   border: 0;
 }
+/* The rule above that shows these labels is more specific than the narrow-screen and
+   compact-bar rules that hide them, so they are hidden again here. Left shown, "Ask AI",
+   "Commands" and "Ctrl K" spilled out of their 30-px buttons past the screen's edge. */
+body.bar-compact .bar-end-actions .palette-trigger :is(span, kbd) { display: none; }
+@media (max-width: 1080px) { .bar-end-actions .palette-trigger kbd { display: none; } }
+@media (max-width: 960px) { .bar-end-actions .palette-trigger :is(span, kbd) { display: none; } }
+@media (max-width: 920px) { .bar-end-actions .bar-ai span { display: none; } }
 
 /* Global bar MP3 player (accent-colored controls, headset icon, seek bar, speed, close) */
 .global-audio-bar {
