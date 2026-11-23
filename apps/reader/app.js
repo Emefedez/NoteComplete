@@ -4012,7 +4012,24 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
-  if (e.key === "?" && !e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
+  // Ctrl A in a text document selects its text, not the whole window (toolbars, tabs…).
+  // Inside a field or the editor the field's own select-all applies.
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyA" && !typingIn(e.target)
+    && textView?.visible && textView.hasDocument && !document.querySelector("dialog[open]")) {
+    e.preventDefault();
+    const root = textView.editing ? $("textEditor") : $("textBody");
+    const plain = root.querySelector("textarea");
+    if (plain) { plain.focus(); plain.select(); return; }
+    const target = root.querySelector("[contenteditable='true']") || root;
+    if (target !== root) target.focus();
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return;
+  }
+  if (e.key === "?" &&!e.ctrlKey && !e.metaKey && !e.altKey && !typingIn(e.target)) {
     e.preventDefault();
     toggleKeyHints();
     return;
