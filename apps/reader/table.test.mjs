@@ -31,3 +31,24 @@ test('a table: border and rules as line shapes, a tinted header, a text box per 
   assert.ok(all.every((i) => i.part.id === 't1' && i.part.kind === 'table'));
   assert.equal(all.filter((i) => i.part.spec).length, 1);
 });
+
+test('backgrounds: none, the header, striped rows or the whole table, in a chosen colour', async () => {
+  const { TINTS } = await import('./table.js');
+  const cells = [['A', 'B'], ['1', '2'], ['3', '4'], ['5', '6'], ['7', '8']];
+  const bands = (spec) => tableItems([0, 0, 200, 100], { cells, ...spec }).lines.filter((l) => l.tool === 1 && l.under);
+  // Old tables (no background in their spec) keep their blue header.
+  assert.deepEqual(bands({}).map((b) => b.rgba), [TINTS.blue.head]);
+  assert.equal(bands({ background: 'none' }).length, 0);
+  assert.equal(bands({ header: false }).length, 0, 'no header row: nothing to tint');
+  // Striped: the header and the 2nd and 4th body rows (rows 3 and 5 of the table).
+  const striped = bands({ background: 'striped', tint: 'green' });
+  assert.deepEqual(striped.map((b) => b.rgba), [TINTS.green.head, TINTS.green.body, TINTS.green.body]);
+  assert.deepEqual(striped.map((b) => b.points[0][1]), [10, 50, 90], 'each band centred in its row');
+  const all = bands({ background: 'all', tint: 'yellow' });
+  assert.equal(all.length, 5);
+  assert.deepEqual(all[0].rgba, TINTS.yellow.head);
+  assert.ok(all.every((b) => b.width === 20), 'each band as tall as its row');
+  // Unknown values fall back, and the spec the table keeps has them.
+  assert.deepEqual([tableSpec({ background: 'x', tint: 'y' }).background, tableSpec({ background: 'x', tint: 'y' }).tint], ['header', 'blue']);
+  assert.equal(JSON.parse(tableItems([0, 0, 10, 10], { cells, background: 'all', tint: 'pink' }).lines.find((l) => l.part.spec).part.spec).tint, 'pink');
+});

@@ -4,12 +4,13 @@
 // with a live preview, then drawn (again) on the page as one undo step. The math keypad
 // (math-keypad.js) types into a graph's function fields, inside the window.
 import { graphSpec, graphItems } from './graph.js';
-import { tableSpec, resized } from './table.js';
+import { tableSpec, resized, TINTS, BACKGROUNDS } from './table.js';
 import { icon } from './icons.js';
 import { loadKatex } from './rich-text.js';
 import { movableWindow } from './prefabs/kit/window.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
+const rgb = ([r, g, b]) => `rgb(${Math.round(r * 255)} ${Math.round(g * 255)} ${Math.round(b * 255)})`;
 const make = (tag, props = {}, ...children) => {
   const el = Object.assign(document.createElement(tag), props);
   el.append(...children);
@@ -180,13 +181,27 @@ export function editTable({ spec = {}, editing = false } = {}) {
       make('span', { className: 'spacer' }),
       make('label', {}, header, ' Header row'),
     );
+    // Background: none, the header, striped rows or the whole table, in one of TINTS.
+    const background = make('select', {}, ...Object.entries(BACKGROUNDS).map(([key, label]) => make('option', { value: key, textContent: label })));
+    background.setAttribute('aria-label', 'Background');
+    background.value = value.background;
+    const swatches = Object.entries(TINTS).map(([key, tint]) => {
+      const swatch = make('button', { type: 'button', className: 'table-swatch', title: tint.label });
+      swatch.setAttribute('aria-label', `${tint.label} background`);
+      swatch.dataset.tint = key;
+      swatch.style.background = rgb(tint.head);
+      swatch.onclick = () => { value.tint = key; draw(); };
+      return swatch;
+    });
+    const look = make('div', { className: 'table-tools table-look' }, make('label', {}, 'Background ', background), make('span', { className: 'table-swatches' }, ...swatches));
+    background.addEventListener('input', () => { value.background = background.value; draw(); });
     const hint = make('p', { className: 'muted', textContent: 'Tab and the arrow keys move between cells; Tab in the last cell adds a row. $…$ in a cell is math.' });
-    body.append(tools, grid, hint);
+    body.append(tools, look, grid, hint);
     function change(edit, focus) {
       const cells = value.cells.map((r) => [...r]);
       edit(cells);
       if (cells.length > 30 || cells[0].length > 12) { error.textContent = 'Up to 30 rows and 12 columns.'; return; }
-      value = { ...tableSpec({ cells, header: header.checked }), widths: null };
+      value = { ...tableSpec({ cells, header: header.checked, background: value.background, tint: value.tint }), widths: null };
       draw(focus);
     }
     function cell(r, c) { return grid.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
@@ -198,7 +213,15 @@ export function editTable({ spec = {}, editing = false } = {}) {
         const input = make('input', { type: 'text', value: text, spellcheck: false, autocomplete: 'off' });
         input.dataset.r = r;
         input.dataset.c = c;
-        input.classList.toggle('table-head', header.checked && r === 0 && rows > 1);
+        const head = header.checked && r === 0 && rows > 1;
+        input.classList.toggle('table-head', head);
+        // The background as the table will have it (table.js tableItems).
+        const tint = TINTS[value.tint] || TINTS.blue, row = r - (header.checked && rows > 1 ? 1 : 0);
+        const fill = value.background === 'all' ? (head ? tint.head : tint.body)
+          : value.background === 'striped' ? (head ? tint.head : row % 2 === 1 ? tint.body : null)
+          : value.background === 'header' && head ? tint.head : null;
+        input.style.background = fill ? rgb(fill) : '';
+        if (fill) input.style.color = '#1f2328';
         input.setAttribute('aria-label', `Row ${r + 1}, column ${c + 1}`);
         input.addEventListener('focus', () => { at = [r, c]; });
         input.addEventListener('input', () => { value.cells[r][c] = input.value; });
@@ -220,6 +243,7 @@ export function editTable({ spec = {}, editing = false } = {}) {
         });
         return input;
       })));
+      for (const swatch of swatches) swatch.setAttribute('aria-pressed', String(swatch.dataset.tint === value.tint));
       const target = cell(Math.min(focus[0], rows - 1), Math.min(focus[1], cols - 1));
       target?.focus({ preventScroll: true });
     }
@@ -229,7 +253,7 @@ export function editTable({ spec = {}, editing = false } = {}) {
     const finish = (result) => { if (done) return; done = true; win.destroy(); resolve(result); };
     onFinish(finish);
     cancel.onclick = () => finish(null);
-    apply.onclick = () => finish(tableSpec({ ...value, header: header.checked }));
+    apply.onclick = () => finish(tableSpec({ ...value, header: header.checked, background: background.value }));
     cell(0, 0)?.focus({ preventScroll: true });
   });
 }

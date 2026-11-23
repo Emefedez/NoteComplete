@@ -2429,6 +2429,11 @@ body.bar-compact .tab { height: 22px; }
 .table-grid input { min-width: 0; min-height: 30px; padding: 2px 6px; border: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); font-size: 13px; }
 .table-grid input:focus { outline: 2px solid var(--accent); outline-offset: -2px; }
 .table-grid input.table-head { background: var(--accent-soft); font-weight: 600; }
+.table-look { gap: 8px; flex-wrap: wrap; }
+.table-look select { min-height: 28px; }
+.table-swatches { display: inline-flex; gap: 4px; }
+.table-swatch { width: 22px; height: 22px; min-height: 0; padding: 0; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; }
+.table-swatch[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
 /* Text from part of a recording (audio-trim.js): a band over the position bar with a handle at
    each end, and a row of times and icon buttons under it. */
 .audio-seek { position: relative; }

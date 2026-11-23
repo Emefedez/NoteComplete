@@ -4,18 +4,32 @@
 // has $…$). Every item is a part of the table (part.rs), the first one with its spec, so
 // selecting any of it selects the table and Edit table brings the cells back to change,
 // add or remove rows and columns. Noteful gets it as it looks.
-const LINE = [0.35, 0.38, 0.44, 1], HEAD = [0.78, 0.86, 0.98, 1], TEXT = [0.12, 0.14, 0.16, 1];
+const LINE = [0.35, 0.38, 0.44, 1], TEXT = [0.12, 0.14, 0.16, 1];
+// Background colours: the header's (and the whole table's) tint, and a lighter one for the
+// rows of the body. Blue is the header tint tables always had.
+export const TINTS = Object.freeze({
+  blue: { label: 'Blue', head: [0.78, 0.86, 0.98, 1], body: [0.9, 0.94, 0.995, 1] },
+  green: { label: 'Green', head: [0.78, 0.92, 0.8, 1], body: [0.9, 0.965, 0.91, 1] },
+  yellow: { label: 'Yellow', head: [0.99, 0.92, 0.66, 1], body: [1, 0.97, 0.85, 1] },
+  pink: { label: 'Pink', head: [0.98, 0.8, 0.86, 1], body: [0.995, 0.91, 0.94, 1] },
+  grey: { label: 'Grey', head: [0.84, 0.85, 0.87, 1], body: [0.93, 0.935, 0.945, 1] },
+});
+// none: no background; header: the header row tinted (as before); striped: the header and every
+// other row; all: the whole table, the header a shade darker.
+export const BACKGROUNDS = Object.freeze({ none: 'None', header: 'Header', striped: 'Striped rows', all: 'Whole table' });
 
-export const TABLE_DEFAULTS = Object.freeze({ v: 1, cells: [['', '', ''], ['', '', ''], ['', '', '']], header: true, widths: null });
-// A rectangular grid of strings (1–30 rows, 1–12 columns), a header flag and column widths
-// (relative; null: equal).
+export const TABLE_DEFAULTS = Object.freeze({ v: 1, cells: [['', '', ''], ['', '', ''], ['', '', '']], header: true, widths: null, background: 'header', tint: 'blue' });
+// A rectangular grid of strings (1–30 rows, 1–12 columns), a header flag, column widths
+// (relative; null: equal) and a background (BACKGROUNDS) in a colour (TINTS).
 export function tableSpec(value = {}) {
   const spec = { ...TABLE_DEFAULTS, ...value };
   const rows = (Array.isArray(spec.cells) && spec.cells.length ? spec.cells : TABLE_DEFAULTS.cells).slice(0, 30);
   const cols = Math.min(12, Math.max(1, ...rows.map((r) => (Array.isArray(r) ? r.length : 0))));
   const cells = rows.map((r) => Array.from({ length: cols }, (_, c) => String((Array.isArray(r) ? r[c] : '') ?? '').slice(0, 2000)));
   const widths = Array.isArray(spec.widths) && spec.widths.length === cols && spec.widths.every((w) => Number.isFinite(w) && w > 0) ? spec.widths : null;
-  return { v: 1, cells, header: spec.header !== false, widths };
+  const background = Object.hasOwn(BACKGROUNDS, spec.background) ? spec.background : 'header';
+  const tint = Object.hasOwn(TINTS, spec.tint) ? spec.tint : 'blue';
+  return { v: 1, cells, header: spec.header !== false, widths, background, tint };
 }
 // Rows and columns added or taken away, keeping what is typed.
 export function resized(spec, rows, cols) {
@@ -38,9 +52,17 @@ export function tableItems(box, spec = {}, { layer = 0, id = `t${Date.now().toSt
   for (let c = 0; c < cols; c++) xs.push(xs[c] + bw * (spec.widths ? spec.widths[c] : 1) / total);
   const rh = bh / rows, ys = Array.from({ length: rows + 1 }, (_, r) => by + r * rh);
   const lines = [], images = [];
-  // The header's tint: a highlighter band under the ink, which blends with what is over it
-  // (a filled shape would hide the header's text, drawn below strokes).
-  if (spec.header && rows > 1) lines.push({ points: [[bx, by + rh / 2], [bx + bw, by + rh / 2]], width: rh, rgba: HEAD, tool: 1, layer, square: true, under: true });
+  // Backgrounds: highlighter bands under the ink, which blend with what is over them (a filled
+  // shape would hide the cells' text, drawn below strokes). One band per tinted row.
+  const tint = TINTS[spec.tint], headed = spec.header && rows > 1;
+  const band = (r, rgba) => lines.push({ points: [[bx, ys[r] + rh / 2], [bx + bw, ys[r] + rh / 2]], width: rh, rgba, tool: 1, layer, square: true, under: true });
+  for (let r = 0; r < rows; r++) {
+    const head = headed && r === 0;
+    const body = r - (headed ? 1 : 0);
+    if (spec.background === 'all') band(r, head ? tint.head : tint.body);
+    else if (spec.background === 'striped') { if (head) band(r, tint.head); else if (body % 2 === 1) band(r, tint.body); }
+    else if (spec.background === 'header' && head) band(r, tint.head);
+  }
   // The border: the table's box exactly, so it can be drawn again where it is now after being
   // moved or resized (it carries the spec). Then the rules inside it.
   const border = { points: [[bx, by], [bx + bw, by], [bx + bw, by + bh], [bx, by + bh], [bx, by]], width: 1.4, rgba: LINE, tool: 0, layer, shape: { kind: 'rectangle', start: [bx, by], end: [bx + bw, by + bh] } };

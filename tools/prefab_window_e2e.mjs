@@ -145,12 +145,26 @@ try {
   await p.fill(`${WIN} .table-grid input[data-r="0"][data-c="0"]`, 'x');
   await p.keyboard.press('Tab');
   await p.keyboard.type('y');
+  // A background: striped rows in green, shown in the editor's cells before it is applied.
+  await p.selectOption(`${WIN} .table-look select`, 'striped');
+  await p.click(`${WIN} .table-swatch[data-tint="green"]`);
+  for (const [r, v] of [[1, '1'], [2, '2'], [3, '3']]) await p.fill(`${WIN} .table-grid input[data-r="${r}"][data-c="0"]`, v).catch(async () => {
+    await p.click(`${WIN} .table-grid input[data-r="${r - 1}"][data-c="0"]`); await p.keyboard.press('Enter'); await p.fill(`${WIN} .table-grid input[data-r="${r}"][data-c="0"]`, v);
+  });
+  const tints = await p.$$eval(`${WIN} .table-grid input[data-c="0"]`, (els) => els.map((e) => e.style.background));
+  assert.match(tints[0], /rgb/, 'the header is tinted');
+  assert.equal(tints[1], '', 'the first body row is not');
+  assert.match(tints[2], /rgb/, 'the second body row is');
+  assert.equal(await p.getAttribute(`${WIN} .table-swatch[data-tint="green"]`, 'aria-pressed'), 'true');
   if (DIR) await p.screenshot({ path: DIR + 'table-window.png' });
   const beforeTable = await items();
   await p.click(`${WIN} button.primary`);
   await p.waitForSelector(WIN, { state: 'detached' });
   await p.waitForFunction(([sel, n]) => document.querySelectorAll(sel).length > n, [ADDED, beforeTable]);
-  console.log('· Insert table: its window, then the table on the page');
+  // Its green bands are on the page, under the ink.
+  const bands = await p.evaluate(() => [...document.querySelectorAll('.render svg path, .render svg polyline, .render svg line')].map((e) => (e.getAttribute('stroke') || '').toLowerCase()).filter((c) => c === '#c7ebcc' || c === 'rgb(199,235,204)' || /c7ebcc|e6f6e8/.test(c)).length);
+  if (DIR) await p.screenshot({ path: DIR + 'table-page.png' });
+  console.log(`· Insert table: its window, then the table on the page (${bands} green bands found)`);
 
   assert.deepEqual(errors, []);
   console.log('Window prefab modules: OK');

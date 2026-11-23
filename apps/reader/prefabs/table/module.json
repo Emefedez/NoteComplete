@@ -14,7 +14,7 @@
       "id": "table",
       "group": "basic",
       "label": "Table",
-      "hint": "Rows and columns of typed cells, with headers; edit cells in place later",
+      "hint": "Rows and columns of typed cells, with headers and a background (header, striped rows or whole table, in a colour); edit cells in place later",
       "icon": "table"
     }
   ]
