@@ -278,8 +278,11 @@ test('narrow screens: the global bar end keeps its icon-only buttons inside the 
   const show = styleCss.indexOf('.bar-end-actions .palette-trigger kbd {');
   assert.ok(show > 0);
   const after = styleCss.slice(show);
-  assert.match(after, /@media \(max-width: 960px\) \{ \.bar-end-actions \.palette-trigger :is\(span, kbd\) \{ display: none; \} \}/);
-  assert.match(after, /@media \(max-width: 920px\) \{ \.bar-end-actions \.bar-ai span \{ display: none; \} \}/);
+  // By the window at interface size 1, by the room over the zoom otherwise (app.js syncBarWidth).
+  assert.match(after, /@media \(max-width: 960px\) \{ :where\(:root:not\(\.ui-zoomed\)\) \.bar-end-actions \.palette-trigger :is\(span, kbd\) \{ display: none; \} \}/);
+  assert.match(after, /:where\(:root\.bar-le-960\) \.bar-end-actions \.palette-trigger :is\(span, kbd\) \{ display: none; \}/);
+  assert.match(after, /@media \(max-width: 920px\) \{ :where\(:root:not\(\.ui-zoomed\)\) \.bar-end-actions \.bar-ai span \{ display: none; \} \}/);
+  assert.match(after, /:where\(:root\.bar-le-920\) \.bar-end-actions \.bar-ai span \{ display: none; \}/);
   // The app never pans as a page.
   assert.match(styleCss, /html \{\s*overflow: hidden;\s*\}/);
 });
