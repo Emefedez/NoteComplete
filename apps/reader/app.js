@@ -5448,6 +5448,7 @@ window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.p
 let notePath = "", noteEntryKey = "";
 
 const queueView = queueWindow({ queue: () => downloadQueue, $ });
+let downloadsBusy = false;
 const downloadQueue = createDownloadQueue({
   library,
   onItemDone: (item) => {
@@ -5455,7 +5456,14 @@ const downloadQueue = createDownloadQueue({
     dropbox?.onQueueItemDone?.(item);
     archive?.onQueueItemDone?.(item);
   },
-  onUpdate: (stats) => queueView.update(stats),
+  onUpdate: (stats) => {
+    queueView.update(stats);
+    // Desktop: a tab with downloads running is not throttled while another tab is shown.
+    if (stats.isBusy !== downloadsBusy) {
+      downloadsBusy = stats.isBusy;
+      window.notecompleteTabs?.busy?.(downloadsBusy)?.catch?.(() => {});
+    }
+  },
 });
 
 const drive = driveBrowser({

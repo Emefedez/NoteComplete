@@ -845,6 +845,12 @@ app.whenReady().then(async () => {
     const win = windowOf(event.sender);
     if (win && tabs.windowOf(id) === win.id && tabs.move(id, index)) broadcast(win);
   }));
+  // A hidden tab is throttled (Electron's backgroundThrottling) and its downloads crawled or
+  // stopped once another tab was opened. While a tab downloads it runs at full speed; it is
+  // throttled again when its queue is empty, so idle hidden tabs still cost nothing.
+  ipcMain.handle('tabs:busy', guarded((event, busy) => {
+    if (!event.sender.isDestroyed()) event.sender.setBackgroundThrottling(busy !== true);
+  }));
   ipcMain.handle('tabs:update', guarded((event, state = {}) => {
     const win = windowOf(event.sender);
     if (win && tabs.update(event.sender.id, { title: state.title, dirty: state.dirty })) broadcast(win);
