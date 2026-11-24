@@ -1,4 +1,12 @@
-## What's new in 1.2.79
+## What's new in 1.2.80
+
+- **Smoother pen ink, above all on iPad.** A stroke drawn with pressure is now one shape instead of hundreds of small circles and pieces, so its edge is drawn once: no seams, no beaded or jagged outline, and pages of handwriting are much lighter. The line you see while writing is the same shape as the finished one, so nothing changes when the pen lifts. Smoothing now follows time rather than the number of samples, so an Apple Pencil (240 samples a second) is no longer smoothed twice as hard as other pens, and a stroke no longer starts or ends as a thin needle when the pen reports no pressure yet.
+- **Test pen and stylus shows each stroke's input** (Help): samples per second, how many positions came in whole pixels, repeated points and the pressure at the first touch, to tell what a pen and browser send.
+- **Downloads keep going in a tab you leave.** In the desktop app, opening another tab no longer stalls the downloads of the one behind it. Only a tab that is downloading keeps running at full speed; others in the background stay as light as before.
+- **Page size from the right-click menu.** Right-click a page (or its thumbnail in Pages) for Page size… and Resize by dragging the borders, for that page.
+- **The tool bar stays on one row.** After opening a note the tools could keep their names and push undo, search and the panel buttons onto a second line. The tools now give way to icons, and when even those do not fit they scroll sideways.
+- **Ask AI folds like Commands** in the compact bar (scrolled down) and on narrow windows, instead of staying a wide pill.
+- **The bar fits its room at any interface size** on the web: labels fold by the space the bar really has when the interface is made larger or smaller.
 
 - **iPhone photos (HEIC) show on the computer too.** In the desktop app and in Chrome, a HEIC photo in a note is now decoded on your device (libheif) and shown, instead of the labelled box. The decoder is downloaded only the first time a note has such a photo.
 - **Chinese 中 button no longer covers the scroll bar** in a long Ask AI question (and other fields with the small 中 button).
