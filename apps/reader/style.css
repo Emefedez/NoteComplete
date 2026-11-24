@@ -1493,13 +1493,14 @@ body.bar-compact .bar-menu > summary { min-height: 22px; padding: 1px 8px; font-
 body.bar-compact .bar-icon { min-height: 22px; width: 26px; padding: 3px; }
 body.bar-compact .palette-trigger { min-height: 22px; padding: 0 6px; border-color: transparent; background: transparent; }
 body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { display: none; }
-@media (max-width: 1080px) {
-  .palette-trigger kbd { display: none; }
-}
-@media (max-width: 960px) {
-  .palette-trigger span, .palette-trigger kbd { display: none; }
-  .palette-trigger { width: 30px; padding: 4px; border-color: transparent; background: transparent; }
-}
+/* The bar's width steps (1080, 960, 920 px) are of the room the bar has. With the web's
+   interface size (CSS zoom on the page, app.js syncBarWidth) that is the window's width over the
+   zoom, which media queries do not see: then the bar-le-* classes stand in for them. */
+@media (max-width: 1080px) { :where(:root:not(.ui-zoomed)) .palette-trigger kbd { display: none; } }
+:where(:root.bar-le-1080) .palette-trigger kbd { display: none; }
+@media (max-width: 960px) { :where(:root:not(.ui-zoomed)) .palette-trigger :is(span, kbd) { display: none; } :where(:root:not(.ui-zoomed)) .palette-trigger { width: 30px; padding: 4px; border-color: transparent; background: transparent; } }
+:where(:root.bar-le-960) .palette-trigger :is(span, kbd) { display: none; }
+:where(:root.bar-le-960) .palette-trigger { width: 30px; padding: 4px; border-color: transparent; background: transparent; }
 
 /* Status: a transient toast that never takes layout space. */
 #status { position: fixed; left: 50%; bottom: calc(var(--above-bars, 0px) + 12px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px); z-index: 70; max-width: min(560px, calc(100vw - 32px)); min-height: 0; padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: 0 6px 24px #0003; font-size: 12px; opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; }
@@ -2067,7 +2068,9 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
   .quiz-options button[data-result="right"] { background: #173a2a; color: #9be3bd; }
   .quiz-options button[data-result="wrong"] { color: #ffb7b0; }
 }
-@media (max-width: 920px) { .bar-ai span { display: none; } .bar-ai { width: 32px; padding: 4px; border-color: transparent; } }
+@media (max-width: 920px) { :where(:root:not(.ui-zoomed)) .bar-ai span { display: none; } :where(:root:not(.ui-zoomed)) .bar-ai { width: 32px; padding: 4px; border-color: transparent; } }
+:where(:root.bar-le-920) .bar-ai span { display: none; }
+:where(:root.bar-le-920) .bar-ai { width: 32px; padding: 4px; border-color: transparent; }
 
 /* Command palette */
 .palette { padding: 0; width: min(620px, calc(100vw - 24px)); margin-top: 12vh; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: var(--shadow-dialog); overflow: hidden; }
@@ -3199,7 +3202,9 @@ button.category-toggle:hover {
 body.bar-compact .bar-share { min-height: 22px; padding: 0 8px; }
 body.bar-compact .collab-chip { width: 18px; min-width: 18px; height: 18px; min-height: 18px; font-size: 10px; line-height: 18px; }
 body.bar-compact .update-chip button { min-height: 18px; padding: 0 8px; }
-@media (max-width: 920px) { .bar-share span { display: none; } .bar-share { width: 32px; padding: 4px; border-color: transparent; } }
+@media (max-width: 920px) { :where(:root:not(.ui-zoomed)) .bar-share span { display: none; } :where(:root:not(.ui-zoomed)) .bar-share { width: 32px; padding: 4px; border-color: transparent; } }
+:where(:root.bar-le-920) .bar-share span { display: none; }
+:where(:root.bar-le-920) .bar-share { width: 32px; padding: 4px; border-color: transparent; }
 @media (max-width: 700px) {
   .collab-chip:not(.me) ~ .collab-chip:nth-child(n+3) { display: none; }
   /* Phones: the update offer is its version and one button (Later and Skip stay in Help). */
@@ -5186,9 +5191,12 @@ header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-read
    compact-bar rules that hide them, so they are hidden again here. Left shown, "Ask AI",
    "Commands" and "Ctrl K" spilled out of their 30-px buttons past the screen's edge. */
 body.bar-compact .bar-end-actions .palette-trigger :is(span, kbd) { display: none; }
-@media (max-width: 1080px) { .bar-end-actions .palette-trigger kbd { display: none; } }
-@media (max-width: 960px) { .bar-end-actions .palette-trigger :is(span, kbd) { display: none; } }
-@media (max-width: 920px) { .bar-end-actions .bar-ai span { display: none; } }
+@media (max-width: 1080px) { :where(:root:not(.ui-zoomed)) .bar-end-actions .palette-trigger kbd { display: none; } }
+:where(:root.bar-le-1080) .bar-end-actions .palette-trigger kbd { display: none; }
+@media (max-width: 960px) { :where(:root:not(.ui-zoomed)) .bar-end-actions .palette-trigger :is(span, kbd) { display: none; } }
+:where(:root.bar-le-960) .bar-end-actions .palette-trigger :is(span, kbd) { display: none; }
+@media (max-width: 920px) { :where(:root:not(.ui-zoomed)) .bar-end-actions .bar-ai span { display: none; } }
+:where(:root.bar-le-920) .bar-end-actions .bar-ai span { display: none; }
 /* The compact bar (scrolled down) folds Ask AI to its icon as it does Commands: left with its
    label, border and 10-px padding it stayed a 76-px pill beside a 30-px Commands icon. Narrow
    screens give it the same 30-px width as Commands; the compact bar's 0 8px padding used to
@@ -5196,7 +5204,8 @@ body.bar-compact .bar-end-actions .palette-trigger :is(span, kbd) { display: non
 body.bar-compact .bar-end-actions .bar-ai { width: 30px; min-width: 30px; padding: 0; gap: 0; border-color: transparent; background: transparent; }
 body.bar-compact .bar-end-actions .bar-ai:not(:disabled):hover { background: var(--accent-soft); }
 body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
-@media (max-width: 920px) { .bar-end-actions .bar-ai { width: 30px; padding: 0; gap: 0; } }
+@media (max-width: 920px) { :where(:root:not(.ui-zoomed)) .bar-end-actions .bar-ai { width: 30px; padding: 0; gap: 0; } }
+:where(:root.bar-le-920) .bar-end-actions .bar-ai { width: 30px; padding: 0; gap: 0; }
 
 /* Global bar MP3 player (accent-colored controls, headset icon, seek bar, speed, close) */
 .global-audio-bar {
@@ -5334,9 +5343,8 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
 .global-audio-bar .ga-close { color: var(--muted); }
 .global-audio-bar .ga-close:hover { background: var(--danger-soft, color-mix(in srgb, #d13b2f 14%, transparent)); color: #d13b2f; }
 
-@media (max-width: 1080px) {
-  .global-audio-bar .ga-title { display: none; }
-}
+@media (max-width: 1080px) { :where(:root:not(.ui-zoomed)) .global-audio-bar .ga-title { display: none; } }
+:where(:root.bar-le-1080) .global-audio-bar .ga-title { display: none; }
 @media (max-width: 700px) {
   .global-audio-bar { flex: 1 1 180px; gap: 2px; padding: 0 4px; }
   .global-audio-bar .ga-time { display: none; }

@@ -7726,7 +7726,17 @@ function syncWebUiZoom(z) {
   document.documentElement.style.zoom = z === 1 ? "" : String(z);
   if (z === 1) document.documentElement.style.removeProperty("--ui-zoom");
   else document.documentElement.style.setProperty("--ui-zoom", String(z));
+  syncBarWidth();
 }
+// The bar's width steps with the web's interface size (style.css bar-le-*): media queries see
+// the window, but a zoomed page has the window's width over the zoom to lay the bar out in.
+// The desktop's interface size is the browser's own zoom, which media queries already follow.
+function syncBarWidth() {
+  const root = document.documentElement, z = uiZoom(), zoomed = z !== 1, room = innerWidth / z;
+  root.classList.toggle("ui-zoomed", zoomed);
+  for (const step of [1080, 960, 920]) root.classList.toggle(`bar-le-${step}`, zoomed && room <= step);
+}
+addEventListener("resize", syncBarWidth);
 if (!windows?.zoom && webUiZoom !== 1) syncWebUiZoom(webUiZoom);
 function applyUiSize(step) {
   if (windows?.zoom) {
