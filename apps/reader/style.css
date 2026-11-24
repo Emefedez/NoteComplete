@@ -4338,6 +4338,15 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
    inline between the tools and the right-hand actions instead of a floating card. */
 #toolbar > .segmented { order: 1; }
 #toolbar > .toolbar-actions { order: 3; }
+/* A bar along the top or bottom is one row: names give way to icons first (fitTools), and
+   when even the icons do not fit the tools scroll sideways (sideScroll) instead of pushing the
+   actions onto a second line. */
+@media not ((max-width: 700px) or ((orientation: landscape) and (max-height: 500px))) {
+  body:not([data-landscape-dock="left"], [data-landscape-dock="right"]) #toolbar { flex-wrap: nowrap; }
+  body:not([data-landscape-dock="left"], [data-landscape-dock="right"]) #toolbar > .segmented { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  body:not([data-landscape-dock="left"], [data-landscape-dock="right"]) #toolbar > .segmented > button { flex: none; }
+  body:not([data-landscape-dock="left"], [data-landscape-dock="right"]) #toolbar > .toolbar-actions { flex: none; }
+}
 :is(#toolOptions, #toolOptionsMirror).inline { order: 2; position: static; flex: 1 1 0; min-width: 0; width: auto; max-width: none; padding: 0 0 0 10px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: none; box-shadow: none; display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; }
 :is(#toolOptions, #toolOptionsMirror).inline[hidden] { display: none; }
 /* No room beside the tools: the strip is a row of its own under them, over the page's top
