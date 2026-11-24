@@ -1058,11 +1058,18 @@ async function addBlankPage(after, before = false) {
   await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
 }
 // The right-click entries for a blank page before or after page `index`.
-function blankPageEntries(index) {
+function blankPageEntries(index, { scroll = false } = {}) {
+  // The page's size, as Pages → Page size does it, for this page: only where pages can change
+  // size (not a canvas, which grows by itself; not a view-only note or a read-only guest).
+  const resizable = !doc?.canvas && !$("resizePage").disabled;
+  const onThisPage = (run) => () => { if (scroll) jump(index); else setPage(index); run(); };
   return [
     { label: "Insert blank page before", icon: "plus", run: () => addBlankPage(index, true) },
     { label: "Insert blank page after", icon: "plus", run: () => addBlankPage(index) },
-  ];
+    resizable && "-",
+    resizable && { label: "Page size…", icon: "fit", run: onThisPage(() => $("resizePage").click()) },
+    resizable && { label: "Resize by dragging the borders", icon: "maximize", run: onThisPage(startResizeDrag) },
+  ].filter(Boolean);
 }
 // Below the last page: scrolling past the end offers a new blank page of the same size.
 function addPageButton() {
@@ -1308,7 +1315,7 @@ function buildPageList() {
     item.append(button, meta);
     if (!doc?.canvas) item.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      openContextMenu(e.clientX, e.clientY, blankPageEntries(panel.index), { title: `Page ${panel.index + 1}` });
+      openContextMenu(e.clientX, e.clientY, blankPageEntries(panel.index, { scroll: true }), { title: `Page ${panel.index + 1}` });
     });
     panel.pageButton = item;
     fragment.append(item);
