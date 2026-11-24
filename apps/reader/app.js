@@ -75,6 +75,7 @@ import { TranscriptController } from "./transcript.js";
 import { AudioProcessing } from "./audio-processing.js";
 import { Engine } from "./engine.js";
 import { applyDrawPatch, placeDrawnItem } from "./draw-patch.js";
+import { tapeStripes, stripeTapes } from "./tape-stripes.js";
 import { indexTimedInk } from "./ink-timeline.js";
 import { shapePoints, CLOSED_SHAPES } from "./shapes.js";
 import { recognizeShape } from "./shape-recognize.js";
@@ -1537,12 +1538,15 @@ function tapeOpen(p, tape) {
 // its own pattern id and the copies get it as plain attributes, which every browser
 // resolves; the style rule goes, so no page's copy depends on another page's pattern.
 function paintTapes(render, key) {
+  // A strip of tape gets its stripes as shapes (tape-stripes.js): Safari on iPad painted the
+  // pattern as a solid white box. The pattern stays for anything else striped.
+  if (render) stripeTapes(render);
   const pattern = render?.querySelector('pattern[id^="ncTape"]');
   if (!pattern) return;
   const id = `ncTape-p${key}`;
   pattern.id = id;
   for (const style of render.querySelectorAll("defs > style")) if (style.textContent.includes("nc-tape-pattern")) style.remove();
-  for (const el of render.querySelectorAll(".nc-tape-pattern :is(path, rect, circle, polygon, polyline)")) {
+  for (const el of render.querySelectorAll(".nc-tape-pattern :is(path, rect, circle, polygon, polyline):not(.tape-stripes)")) {
     if (el.localName === "polyline") el.setAttribute("stroke", `url(#${id})`);
     else { el.setAttribute("fill", `url(#${id})`); el.setAttribute("stroke", "none"); }
   }
@@ -2779,6 +2783,13 @@ function pointerDown(e, p) {
     el.style.display = "none";
     p.overlay.append(gesture.ink);
   }
+  // Tape shows its stripes while it is laid, as it will on the page.
+  if (tool === "tape" && !box) {
+    gesture.stripes = document.createElementNS(ns, "path");
+    gesture.stripes.setAttribute("fill", "#fff");
+    gesture.stripes.setAttribute("fill-opacity", "0.42");
+    p.overlay.append(gesture.stripes);
+  }
   if (tool === "highlight" && $("highlightMode").value === "text") startTextHighlight(gesture);
   p.el.setPointerCapture(e.pointerId);
   preview();
@@ -2863,6 +2874,7 @@ function preview() {
     return;
   }
   showPoints(g);
+  if (g.stripes) g.stripes.setAttribute("d", tapeStripes(g.points, g.width));
   if (g.ink && showInk(g)) return;
   // A filled shape shows its inside while it is drawn.
   if (g.tool === "shape") {
@@ -3173,6 +3185,7 @@ function pointerUp(e) {
     if (tapeTap) {
       g.el.remove();
       g.dot.remove();
+      g.stripes?.remove();
       const tape = [...(g.panel.view?.tapes || [])].reverse().find(({ bounds: [x, y, w, h] }) => a[0] >= x && a[0] <= x + w && a[1] >= y && a[1] <= y + h);
       if (tape) toggleTape(g.panel, tape);
       else status("Drag across what you want to cover with tape.");
@@ -3214,7 +3227,7 @@ function pointerUp(e) {
     // smoothed line replaces the one drawn meanwhile.
     if (g.tool !== "shape") g.el.setAttribute("points", g.points.map((q) => q.join(",")).join(" "));
     if (g.ink) showInk(g);
-    const hold = holdInk(g.panel, g.el, g.dot, ...(g.ink ? [g.ink] : []));
+    const hold = holdInk(g.panel, g.el, g.dot, ...[g.ink, g.stripes].filter(Boolean));
     action("draw", {
       page: g.panel.index,
       line: {
