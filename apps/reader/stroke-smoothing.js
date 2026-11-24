@@ -34,6 +34,15 @@ export function extentOf(points) {
   return points.length ? Math.hypot(x1 - x0, y1 - y0) : 0;
 }
 
+// The pen's usual pressure, learnt from its strokes: `previous` (none at first) moves a tenth
+// of the way to each stroke's median, so one light or heavy stroke changes little.
+export function nextPressureBase(previous, pressures) {
+  const firm = pressures.filter((p) => Number.isFinite(p) && p > 0).sort((a, b) => a - b);
+  if (firm.length < 5) return previous;
+  const median = firm[firm.length >> 1];
+  const next = Number.isFinite(previous) ? previous + (median - previous) * 0.1 : median;
+  return Math.min(0.9, Math.max(0.05, next));
+}
 // One pass of Chaikin: each segment becomes points at ¼ and ¾; the ends are kept and the
 // pressure follows. Small marks and dots stay as they are, and so do very long ones.
 export function smoothStroke(points, pressures, limit = 8192) {
@@ -57,8 +66,11 @@ export function smoothStroke(points, pressures, limit = 8192) {
 // pressure to look like anything but a needle with a swollen middle: the smaller the stroke,
 // the closer to the pen's plain width, and a word-long stroke gets all of it. The pressure
 // samples are also smoothed a little: they jitter from point to point and make the edge bumpy.
+// `base`: the pressure this pen writes with at rest (penPressureBase), drawn at the pen's own
+// width. Measured against a fixed 0.5, an Apple Pencil (which writes nearer 0.2–0.3) came out
+// at the pen's width while a stroke was small and thinner and thinner as it grew.
 export const SMALL_STROKE = 14, LARGE_STROKE = 80;
-export function pressureRadii(pressures, points, half) {
+export function pressureRadii(pressures, points, half, base = 0.5) {
   const level = (p) => (Number.isFinite(p) ? Math.min(1, Math.max(0, p)) : 0.5);
   const raw = pressures.map(level);
   const soft = raw.map((v, i) => (i === 0 || i === raw.length - 1 ? v : 0.25 * raw[i - 1] + 0.5 * v + 0.25 * raw[i + 1]));
@@ -66,7 +78,8 @@ export function pressureRadii(pressures, points, half) {
   for (const [x, y] of points) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   const size = points.length ? Math.hypot(x1 - x0, y1 - y0) : 0;
   const share = Math.min(1, Math.max(0, (size - SMALL_STROKE) / (LARGE_STROKE - SMALL_STROKE)));
-  return soft.map((v) => Math.min(50, Math.max(0.05, half * (1 + share * (0.3 + 1.4 * v - 1)))));
+  const factor = (v) => Math.min(1.7, Math.max(0.3, 1 + 1.4 * (v - base)));
+  return soft.map((v) => Math.min(50, Math.max(0.05, half * (1 + share * (factor(v) - 1)))));
 }
 
 // A stroke with a radius at each point as one SVG path, as the core draws it (scene.rs

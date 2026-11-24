@@ -1,5 +1,5 @@
 import { touchGestures, palmPointer } from "./touch.js";
-import { followPoint, smoothStroke, pressureRadii, runOutline } from "./stroke-smoothing.js";
+import { followPoint, smoothStroke, pressureRadii, runOutline, nextPressureBase } from "./stroke-smoothing.js";
 import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
@@ -2905,6 +2905,9 @@ function appendPoint(e) {
     const samples = e.getCoalescedEvents?.() || [];
     const box = g.panel.el.getBoundingClientRect();
     for (const sample of samples.length ? samples : [e]) {
+      // A stylus sample with no pressure is the pen off the glass: the lift (pointerup and the
+      // last coalesced samples) or hovering. Drawing it left a tail where the pen came away.
+      if (g.pen && !(sample.pressure > 0)) continue;
       const raw = point(sample, g.panel, box),
         last = g.points.at(-1);
       g.raw = raw;
@@ -2919,7 +2922,7 @@ function appendPoint(e) {
         g.points.length < 8192
       ) {
         g.points.push(p);
-        g.pressures.push(g.pen && !(sample.pressure > 0) ? g.pressures.at(-1) : sample.pressure);
+        g.pressures.push(sample.pressure);
         if (g.extent) grow(g.extent, p);
       }
     }
@@ -3024,11 +3027,33 @@ function commitSnapped(g) {
     line: { points: shapePoints(s.kind, s.start, s.end), width: g.width, rgba: [...rgba, 1], tool: 0, layer: g.layer, shape: { kind: s.kind, start: s.start, end: s.end } },
   }, hold);
 }
+function trimLiftTail(g) {
+  const peak = Math.max(0, ...g.pressures.filter(Number.isFinite));
+  if (peak < 0.2) return;
+  let end = g.pressures.length;
+  while (end > 2 && g.pressures[end - 1] < 0.05) end--;
+  if (end === g.pressures.length) return;
+  g.points.length = g.pressures.length = end;
+  g.raw = g.points.at(-1);
+}
 // Pen pressure from a stylus, as the core stores it: the drawn radius at each point
 // (editor.rs). Light pressure draws about a third of the width, a firm press about 1.7×.
+// The pressure this pen usually writes with is drawn at the pen's width (remembered on this
+// device); harder is wider, lighter thinner. The same for the whole stroke, so its width
+// follows the pressure only, not how long it has been going.
+let penPressureBase = (() => { try { const v = Number(localStorage.getItem("notecomplete-pen-pressure-base")); return v > 0 ? v : NaN; } catch { return NaN; } })();
+function learnPenPressure(g) {
+  if (!g.pen || g.tool !== "draw") return;
+  const next = nextPressureBase(penPressureBase, g.pressures);
+  if (next === penPressureBase || !Number.isFinite(next)) return;
+  penPressureBase = next;
+  try { localStorage.setItem("notecomplete-pen-pressure-base", String(Math.round(next * 1000) / 1000)); } catch { /* Kept for this session only. */ }
+}
 function stylusPressure(g) {
   if (!g.pen || !pressureOn() || g.pressures.length !== g.points.length) return {};
-  const radii = pressureRadii(g.pressures, g.points, g.width / 2);
+  // A pen not learnt yet takes this stroke's own first pressures as its usual one.
+  g.base ??= Number.isFinite(penPressureBase) ? penPressureBase : (g.pressures.length >= 5 ? nextPressureBase(NaN, g.pressures) : undefined);
+  const radii = pressureRadii(g.pressures, g.points, g.width / 2, g.base ?? 0.5);
   return { pressure: radii.map((r) => Math.round(r * 1000) / 1000) };
 }
 // Mouse wheel click (middle button) drags the pages with any tool, as Pan does; text
@@ -3179,6 +3204,10 @@ function pointerUp(e) {
       return;
     }
   }
+  // As an Apple Pencil comes away its pressure fades and its tip slides: a stroke written
+  // with some force loses those last feather-light samples, which drew a hook at its end.
+  if (g.pen && g.tool === "draw") trimLiftTail(g);
+  learnPenPressure(g);
   // A smoothed stroke ends where the pen lifted, and its corners are rounded once.
   if (g.smooth && g.raw) {
     const last = g.points.at(-1);
