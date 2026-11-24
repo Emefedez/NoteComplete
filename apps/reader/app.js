@@ -1,5 +1,5 @@
 import { touchGestures, palmPointer } from "./touch.js";
-import { followPoint, smoothStroke, pressureRadii } from "./stroke-smoothing.js";
+import { followPoint, smoothStroke, pressureRadii, runOutline } from "./stroke-smoothing.js";
 import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
@@ -2749,9 +2749,18 @@ function pointerDown(e, p) {
     // Strokes are smoothed: most for a stylus or a finger, a little for a mouse.
     smooth: smoothingOn && (tool === "draw" || (tool === "highlight" && $("highlightMode").value === "free")) ? (e.pointerType === "mouse" ? 0.6 : 0.35) : 0,
     pressures: [e.pressure],
+    sampledAt: e.timeStamp,
     // The Shapes tool's kind when the drag started (a graph or table opens its editor at the end).
     kind: tool === "shape" ? $("shape").value : null,
   };
+  // A stylus stroke with pressure is drawn meanwhile as the page will draw it (runOutline):
+  // the same widths along it, so nothing changes shape when the pen lifts.
+  if (gesture.pen && tool === "draw" && pressureOn()) {
+    gesture.ink = document.createElementNS(ns, "path");
+    gesture.ink.setAttribute("fill", color);
+    el.style.display = "none";
+    p.overlay.append(gesture.ink);
+  }
   if (tool === "highlight" && $("highlightMode").value === "text") startTextHighlight(gesture);
   p.el.setPointerCapture(e.pointerId);
   preview();
@@ -2814,6 +2823,19 @@ function showPoints(g) {
   }
   g.shown = { of: g.points, count: g.points.length };
 }
+// The pressure stroke's outline; false when there is none to show (the plain line shows).
+function showInk(g) {
+  const { pressure } = stylusPressure(g);
+  if (!pressure?.length) {
+    g.el.style.display = "";
+    g.ink.removeAttribute("d");
+    return false;
+  }
+  g.el.style.display = "none";
+  g.ink.setAttribute("d", runOutline(g.points, pressure));
+  g.dot.style.display = "none";
+  return true;
+}
 function preview() {
   const g = gesture;
   if (!g || g.tool === "pan" || g.textMode) return;
@@ -2823,6 +2845,7 @@ function preview() {
     return;
   }
   showPoints(g);
+  if (g.ink && showInk(g)) return;
   // A filled shape shows its inside while it is drawn.
   if (g.tool === "shape") {
     const { fill } = fillFor($("shape").value, g.color);
@@ -2867,19 +2890,24 @@ function appendPoint(e) {
       const raw = point(sample, g.panel, box),
         last = g.points.at(-1);
       g.raw = raw;
-      const p = followPoint(last, raw, g.smooth, g.smooth ? extentSoFar(g) : Infinity);
+      // An Apple Pencil's first touch often reports no pressure yet: the stroke would start as
+      // a needle. It takes the first pressure the pen reports instead.
+      if (g.pen && !(g.pressures[0] > 0) && sample.pressure > 0) g.pressures[0] = sample.pressure;
+      const dt = g.sampledAt === undefined ? undefined : sample.timeStamp - g.sampledAt;
+      g.sampledAt = sample.timeStamp;
+      const p = followPoint(last, raw, g.smooth, g.smooth ? extentSoFar(g) : Infinity, dt);
       if (
         Math.hypot(p[0] - last[0], p[1] - last[1]) >= 0.3 &&
         g.points.length < 8192
       ) {
         g.points.push(p);
-        g.pressures.push(sample.pressure);
+        g.pressures.push(g.pen && !(sample.pressure > 0) ? g.pressures.at(-1) : sample.pressure);
         if (g.extent) grow(g.extent, p);
       }
     }
     // A stylus stroke is saved with its pressure: the line drawn meanwhile takes the
     // same average width, so it does not get thinner when it is finished.
-    if (g.pen && g.tool === "draw") {
+    if (g.pen && g.tool === "draw" && !g.ink) {
       const { pressure } = stylusPressure(g);
       if (pressure?.length) g.el.setAttribute("stroke-width", (2 * pressure.reduce((s, r) => s + r, 0)) / pressure.length);
     }
@@ -2940,6 +2968,7 @@ function snapTo(g, shape, lifted = false) {
   const [x0, y0] = shape.start, [x1, y1] = shape.end;
   const square = ["rectangle", "ellipse"].includes(shape.kind) && Math.abs(Math.abs(x1 - x0) - Math.abs(y1 - y0)) < 1e-6;
   g.snapped = { ...shape, from: g.raw || g.points.at(-1), end0: shape.end };
+  if (g.ink) { g.ink.remove(); g.ink = null; g.el.style.display = ""; }
   // A stylus stroke drawn meanwhile took its pressure's average width; the shape has the pen's.
   g.el.setAttribute("stroke-width", g.width);
   showSnapped(g);
@@ -3166,7 +3195,8 @@ function pointerUp(e) {
     // The stroke stays on screen as drawn until the page's render has it (holdInk); the
     // smoothed line replaces the one drawn meanwhile.
     if (g.tool !== "shape") g.el.setAttribute("points", g.points.map((q) => q.join(",")).join(" "));
-    const hold = holdInk(g.panel, g.el, g.dot);
+    if (g.ink) showInk(g);
+    const hold = holdInk(g.panel, g.el, g.dot, ...(g.ink ? [g.ink] : []));
     action("draw", {
       page: g.panel.index,
       line: {
