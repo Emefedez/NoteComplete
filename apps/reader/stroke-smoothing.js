@@ -13,12 +13,18 @@ export const DETAIL = 24;
 const small = (extent) => Math.min(1, Math.max(0, 1 - extent / DETAIL));
 
 // The next point of the line toward `raw`; `smooth` 0 means no smoothing. `extent`: how big
-// the stroke is so far (the diagonal of its box).
-export function followPoint(last, raw, smooth, extent = Infinity) {
+// the stroke is so far (the diagonal of its box). `dt`: milliseconds since the last sample.
+// The smoothing was tuned for one sample every STEP_MS; an Apple Pencil sends one every ~4 ms,
+// which pulled each point back twice as often and left the line lagging and flattened in
+// small handwriting. With `dt` the pull and the speed are per unit of time, so a stroke comes
+// out the same at 240 samples a second as at 120 or 60.
+export const STEP_MS = 1000 / 120;
+export function followPoint(last, raw, smooth, extent = Infinity, dt) {
   if (!smooth) return raw;
-  const gap = Math.hypot(raw[0] - last[0], raw[1] - last[1]);
+  const steps = Number.isFinite(dt) && dt > 0 ? Math.min(4, Math.max(0.25, dt / STEP_MS)) : 1;
+  const gap = Math.hypot(raw[0] - last[0], raw[1] - last[1]) / steps;
   const ease = Math.min(0.85, smooth + gap / 60);
-  const follow = ease + (0.9 - ease) * small(extent);
+  const follow = 1 - (1 - (ease + (0.9 - ease) * small(extent))) ** steps;
   return [last[0] + (raw[0] - last[0]) * follow, last[1] + (raw[1] - last[1]) * follow];
 }
 // The diagonal of the box around some points.
@@ -61,4 +67,29 @@ export function pressureRadii(pressures, points, half) {
   const size = points.length ? Math.hypot(x1 - x0, y1 - y0) : 0;
   const share = Math.min(1, Math.max(0, (size - SMALL_STROKE) / (LARGE_STROKE - SMALL_STROKE)));
   return soft.map((v) => Math.min(50, Math.max(0.05, half * (1 + share * (0.3 + 1.4 * v - 1)))));
+}
+
+// A stroke with a radius at each point as one SVG path, as the core draws it (scene.rs
+// run_outline, kept identical): a disc at each point and the band between neighbouring discs,
+// all wound the same way so that filled they are their union, antialiased once along the edge.
+export function runOutline(points, radii) {
+  const f = (v) => Math.round(v * 1000) / 1000;
+  let d = "";
+  for (let i = 0; i < points.length; i++) {
+    const [x, y] = points[i], r = f(radii[i]);
+    d += `M${f(x + r)} ${f(y)}A${r} ${r} 0 1 1 ${f(x - r)} ${f(y)}A${r} ${r} 0 1 1 ${f(x + r)} ${f(y)}Z`;
+  }
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [a, b] = [points[i], points[i + 1]], [ra, rb] = [radii[i], radii[i + 1]];
+    const dx = b[0] - a[0], dy = b[1] - a[1], dist = Math.hypot(dx, dy);
+    if (dist < 1e-9 || dist <= Math.abs(rb - ra)) continue;
+    const ux = dx / dist, uy = dy / dist, k = (ra - rb) / dist, q = Math.sqrt(Math.max(0, 1 - k * k));
+    const [ax, ay, bx, by] = [k * ux - q * uy, k * uy + q * ux, k * ux + q * uy, k * uy - q * ux];
+    const quad = [[a[0] + ra * ax, a[1] + ra * ay], [b[0] + rb * ax, b[1] + rb * ay], [b[0] + rb * bx, b[1] + rb * by], [a[0] + ra * bx, a[1] + ra * by]];
+    let area = 0;
+    for (let j = 0; j < 4; j++) area += quad[j][0] * quad[(j + 1) % 4][1] - quad[(j + 1) % 4][0] * quad[j][1];
+    if (area < 0) quad.reverse();
+    d += `M${f(quad[0][0])} ${f(quad[0][1])}L${f(quad[1][0])} ${f(quad[1][1])}L${f(quad[2][0])} ${f(quad[2][1])}L${f(quad[3][0])} ${f(quad[3][1])}Z`;
+  }
+  return d;
 }

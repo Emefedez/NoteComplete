@@ -116,6 +116,34 @@ export function penSetup({ $, closeMenus, fields, status, app }) {
           : "";
         note(`${type}${state ? ` · ${state}` : ""} · ${e.pointerType} · button ${e.button} · buttons ${e.buttons} · pressure ${e.pressure.toFixed(2)}${e.shiftKey ? " · Shift" : ""}`);
       });
+    // One line per stroke on what the drawing gets from this browser: how many samples a
+    // second (with the coalesced ones), whether positions come in whole pixels (a staircase in
+    // small handwriting) or fractions, repeated positions, and the pressure at the first touch.
+    let stroke = null;
+    const whole = (v) => Number.isInteger(v);
+    pad.addEventListener("pointerdown", (e) => {
+      stroke = { id: e.pointerId, t0: e.timeStamp, t1: e.timeStamp, n: 0, moves: 0, whole: 0, same: 0, last: null, down: e.pressure, first: null, coalesced: typeof e.getCoalescedEvents === "function" };
+    });
+    pad.addEventListener("pointermove", (e) => {
+      if (!stroke || stroke.id !== e.pointerId || !(e.buttons || e.pressure > 0)) return;
+      stroke.moves++;
+      const samples = e.getCoalescedEvents?.() || [];
+      for (const s of samples.length ? samples : [e]) {
+        stroke.n++;
+        stroke.t1 = s.timeStamp;
+        if (whole(s.clientX) && whole(s.clientY)) stroke.whole++;
+        if (stroke.last && stroke.last[0] === s.clientX && stroke.last[1] === s.clientY) stroke.same++;
+        stroke.last = [s.clientX, s.clientY];
+        stroke.first ??= s.pressure;
+      }
+    });
+    pad.addEventListener("pointerup", (e) => {
+      if (!stroke || stroke.id !== e.pointerId) return;
+      const s = stroke, seconds = Math.max(1e-3, (s.t1 - s.t0) / 1000);
+      stroke = null;
+      if (!s.n) return;
+      note(`stroke · ${e.pointerType} · ${s.n} samples in ${s.moves} moves (${Math.round(s.n / seconds)}/s${s.coalesced ? "" : ", no coalesced events"}) · whole-pixel positions ${Math.round(100 * s.whole / s.n)}% · repeated ${s.same} · pressure at down ${s.down.toFixed(2)}, first move ${(s.first ?? 0).toFixed(2)} · ${devicePixelRatio}× screen`);
+    });
     pad.addEventListener("contextmenu", (e) => { e.preventDefault(); note(`contextmenu · ${e.pointerType || "?"} · button ${e.button}`); });
     pad.addEventListener("touchstart", (e) => note(`touchstart · ${[...e.changedTouches].map((t) => t.touchType || "direct").join(", ")}`), { passive: true });
     $("penTestDialog").addEventListener("keydown", (e) => { if (e.key !== "Escape") note(`key · ${e.key} (${e.code})`); });

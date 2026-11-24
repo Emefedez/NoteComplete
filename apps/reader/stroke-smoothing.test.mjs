@@ -78,3 +78,20 @@ test('a small mark keeps its shape: the line follows the pen closely and is not 
   assert.equal(smoothStroke(long, long.map(() => 0.5)).points.length, long.length * 2);
   assert.equal(extentOf([]), 0);
 });
+
+test('sample timing: 240 samples a second come out as 120 do, and a pressure stroke is one outline', async () => {
+  const { followPoint, runOutline } = await import('./stroke-smoothing.js');
+  // The same pen motion (a 10-unit jump per 8.3 ms), sampled at 120/s and at 240/s.
+  const run = (rate) => {
+    let at = [0, 0];
+    const dt = 1000 / rate;
+    for (let t = dt; t <= 200 + 1e-9; t += dt) at = followPoint(at, [Math.min(t, 100), 0], 0.35, 500, dt);
+    return at[0];
+  };
+  assert.ok(Math.abs(run(120) - run(240)) < 1, `120/s ${run(120)} vs 240/s ${run(240)}`);
+  // Without a time it is as before.
+  assert.deepEqual(followPoint([0, 0], [10, 0], 0.35, 500, undefined), followPoint([0, 0], [10, 0], 0.35, 500));
+  const d = runOutline([[0, 0], [10, 0], [10, 10]], [1, 2, 1]);
+  assert.equal((d.match(/M/g) || []).length, 5);
+  assert.ok(!d.includes('NaN'));
+});

@@ -161,42 +161,79 @@ pub(crate) fn run_svg(points: &[[f64; 2]], radii: &[f64], radius: f64, rgba: &[f
     if radii.is_empty() {
         line_svg(points, radius, rgba)
     } else {
-        let mut parts = String::new();
-        for (p, r) in points.iter().zip(radii) {
-            parts.push_str(&format!(
-                "<circle cx=\"{}\" cy=\"{}\" r=\"{r}\"/>",
-                p[0], p[1]
-            ));
-        }
-        for (pp, rr) in points.windows(2).zip(radii.windows(2)) {
-            let dx = pp[1][0] - pp[0][0];
-            let dy = pp[1][1] - pp[0][1];
-            let d = dx.hypot(dy);
-            if d < 1e-9 || d <= (rr[1] - rr[0]).abs() {
-                continue;
-            }
-            let (ux, uy, k) = (dx / d, dy / d, (rr[0] - rr[1]) / d);
-            let q = (1. - k * k).max(0.).sqrt();
-            let (ax, ay, bx, by) = (
-                k * ux - q * uy,
-                k * uy + q * ux,
-                k * ux + q * uy,
-                k * uy - q * ux,
-            );
-            parts.push_str(&format!(
-                "<polygon points=\"{},{} {},{} {},{} {},{}\"/>",
-                pp[0][0] + rr[0] * ax,
-                pp[0][1] + rr[0] * ay,
-                pp[1][0] + rr[1] * ax,
-                pp[1][1] + rr[1] * ay,
-                pp[1][0] + rr[1] * bx,
-                pp[1][1] + rr[1] * by,
-                pp[0][0] + rr[0] * bx,
-                pp[0][1] + rr[0] * by
-            ));
-        }
-        format!("<g fill=\"{}\">{parts}</g>", color(rgba))
+        format!(
+            "<path d=\"{}\" fill=\"{}\"/>",
+            run_outline(points, radii),
+            color(rgba)
+        )
     }
+}
+/// A stroke with a radius at each point, as one path: a disc at each point and the band
+/// between each pair of neighbouring discs, all wound the same way so that, filled
+/// (nonzero), they are their union. One path is antialiased once along its outline; drawn
+/// as separate circles and polygons, every piece blended its own edge and the line showed
+/// seams and a beaded edge (most of all in Safari on an iPad), and a page of handwriting
+/// was tens of thousands of elements.
+pub(crate) fn run_outline(points: &[[f64; 2]], radii: &[f64]) -> String {
+    use std::fmt::Write;
+    let mut d = String::new();
+    let f = |v: f64| (v * 1000.).round() / 1000.;
+    for (p, r) in points.iter().zip(radii) {
+        let (x, y, r) = (p[0], p[1], f(*r));
+        let _ = write!(
+            d,
+            "M{} {}A{r} {r} 0 1 1 {} {}A{r} {r} 0 1 1 {} {}Z",
+            f(x + r),
+            f(y),
+            f(x - r),
+            f(y),
+            f(x + r),
+            f(y)
+        );
+    }
+    for (pp, rr) in points.windows(2).zip(radii.windows(2)) {
+        let dx = pp[1][0] - pp[0][0];
+        let dy = pp[1][1] - pp[0][1];
+        let dist = dx.hypot(dy);
+        // One disc inside the other: the larger one is already the union.
+        if dist < 1e-9 || dist <= (rr[1] - rr[0]).abs() {
+            continue;
+        }
+        let (ux, uy, k) = (dx / dist, dy / dist, (rr[0] - rr[1]) / dist);
+        let q = (1. - k * k).max(0.).sqrt();
+        let (ax, ay, bx, by) = (
+            k * ux - q * uy,
+            k * uy + q * ux,
+            k * ux + q * uy,
+            k * uy - q * ux,
+        );
+        let mut quad = [
+            [pp[0][0] + rr[0] * ax, pp[0][1] + rr[0] * ay],
+            [pp[1][0] + rr[1] * ax, pp[1][1] + rr[1] * ay],
+            [pp[1][0] + rr[1] * bx, pp[1][1] + rr[1] * by],
+            [pp[0][0] + rr[0] * bx, pp[0][1] + rr[0] * by],
+        ];
+        // The discs above turn positively (shoelace > 0 with y down); the bands turn the same way.
+        let area: f64 = (0..4)
+            .map(|i| quad[i][0] * quad[(i + 1) % 4][1] - quad[(i + 1) % 4][0] * quad[i][1])
+            .sum();
+        if area < 0. {
+            quad.reverse();
+        }
+        let _ = write!(
+            d,
+            "M{} {}L{} {}L{} {}L{} {}Z",
+            f(quad[0][0]),
+            f(quad[0][1]),
+            f(quad[1][0]),
+            f(quad[1][1]),
+            f(quad[2][0]),
+            f(quad[2][1]),
+            f(quad[3][0]),
+            f(quad[3][1])
+        );
+    }
+    d
 }
 /// Opacity of tape that has been tapped open.
 pub const TAPE_OPEN: f64 = 0.18;
@@ -737,6 +774,32 @@ impl Scene {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_pressure_run_is_one_path_wound_one_way() {
+        let points = [[0., 0.], [10., 0.], [10., 10.], [0., 12.], [0.2, 12.]];
+        let radii = [0.5, 1.5, 1., 2., 0.3];
+        let svg = super::run_svg(&points, &radii, 1., &[0., 0., 0., 1.]);
+        assert_eq!(svg.matches("<path").count(), 1);
+        assert!(!svg.contains("<circle") && !svg.contains("<polygon"));
+        // Every band (four points, no arcs) turns the same way as the discs.
+        let d = super::run_outline(&points, &radii);
+        let bands: Vec<&str> = d
+            .split('M')
+            .filter(|s| !s.is_empty() && !s.contains('A'))
+            .collect();
+        assert_eq!(bands.len(), 3, "{d}");
+        for band in bands {
+            let n: Vec<f64> = band
+                .trim_end_matches('Z')
+                .split(['L', ' '])
+                .map(|v| v.parse().unwrap())
+                .collect();
+            let area: f64 = (0..4)
+                .map(|i| n[2 * i] * n[2 * ((i + 1) % 4) + 1] - n[2 * ((i + 1) % 4)] * n[2 * i + 1])
+                .sum();
+            assert!(area > 0., "{band}");
+        }
+    }
     #[test]
     fn image_crops_fill_the_placement_and_clip_to_the_outline() {
         // Exercise 13 in the ACII exam: a 546 × 632 image cropped to rows 183–391.
