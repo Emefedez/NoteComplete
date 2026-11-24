@@ -15,6 +15,7 @@ const busy = new Map(); // activity → count in flight
 const calls = new Map(); // id → { op, at }
 let callIds = 0, fetches = 0, events = [], on = false, frame = 0, last = 0, stroke = false, lastStrokeAt = -1e9;
 const recentCalls = []; // last finished engine calls: { op, ms, end }
+const recentMarks = []; // what just happened on screen: { text, at } (a page shown…)
 
 function read() { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch { return []; } }
 function save() { try { localStorage.setItem(LOG_KEY, JSON.stringify(events.slice(-KEPT))); } catch { /* Full: kept in memory. */ } }
@@ -34,6 +35,8 @@ function context() {
   if (done.length) out.engineJustDone = done;
   const doing = [...busy.entries()].filter(([, n]) => n > 0).map(([k]) => k);
   if (doing.length) out.doing = doing;
+  const marks = recentMarks.filter((m) => t - m.at < 1000).map((m) => `${m.text} ${t - m.at}ms ago`);
+  if (marks.length) out.justShown = marks;
   if (stroke || t - lastStrokeAt < 300) out.writing = true;
   if (fetches) out.network = fetches;
   if (performance.memory) out.jsHeapMB = Math.round(performance.memory.usedJSHeapSize / 1048576);
@@ -91,6 +94,12 @@ export const lagLog = {
     if (!on) return () => {};
     busy.set(name, (busy.get(name) || 0) + 1);
     return () => busy.set(name, Math.max(0, (busy.get(name) || 1) - 1));
+  },
+  // Something that just changed on screen (a page shown), named in the freezes that follow it.
+  mark(text) {
+    if (!on) return;
+    recentMarks.push({ text, at: now() });
+    if (recentMarks.length > 12) recentMarks.shift();
   },
   pointer(down) { if (down) stroke = true; else { stroke = false; lastStrokeAt = now(); } },
   // Plain text, to copy or save and send.
