@@ -5458,9 +5458,12 @@ const downloadQueue = createDownloadQueue({
   },
   onUpdate: (stats) => {
     queueView.update(stats);
-    // Desktop: a tab with downloads running is not throttled while another tab is shown.
-    if (stats.isBusy !== downloadsBusy) {
-      downloadsBusy = stats.isBusy;
+    // Desktop: a tab with downloads running is not throttled while another tab is shown. Only
+    // while one is actually downloading: a paused or finished queue gives the throttling back,
+    // so hidden tabs cost no more than before.
+    const running = !!stats.activeItem || (stats.pending > 0 && !stats.isPaused);
+    if (running !== downloadsBusy) {
+      downloadsBusy = running;
       window.notecompleteTabs?.busy?.(downloadsBusy)?.catch?.(() => {});
     }
   },
