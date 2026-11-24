@@ -5478,6 +5478,7 @@ window.addEventListener("beforeunload", (e) => { if (addedStore.recording) { e.p
 let notePath = "", noteEntryKey = "";
 
 const queueView = queueWindow({ queue: () => downloadQueue, $ });
+let downloadsBusy = false;
 const downloadQueue = createDownloadQueue({
   library,
   onItemDone: (item) => {
@@ -5485,7 +5486,17 @@ const downloadQueue = createDownloadQueue({
     dropbox?.onQueueItemDone?.(item);
     archive?.onQueueItemDone?.(item);
   },
-  onUpdate: (stats) => queueView.update(stats),
+  onUpdate: (stats) => {
+    queueView.update(stats);
+    // Desktop: a tab with downloads running is not throttled while another tab is shown. Only
+    // while one is actually downloading: a paused or finished queue gives the throttling back,
+    // so hidden tabs cost no more than before.
+    const running = !!stats.activeItem || (stats.pending > 0 && !stats.isPaused);
+    if (running !== downloadsBusy) {
+      downloadsBusy = running;
+      window.notecompleteTabs?.busy?.(downloadsBusy)?.catch?.(() => {});
+    }
+  },
 });
 
 const drive = driveBrowser({

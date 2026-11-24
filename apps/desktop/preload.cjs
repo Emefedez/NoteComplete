@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('notecompleteTabs', {
   update: state => ipcRenderer.invoke('tabs:update', { title: String(state?.title ?? ''), dirty: state?.dirty === true }),
   onList: callback => ipcRenderer.on('tabs:list', (_event, list) => callback(list)),
   onCloseRequest: callback => ipcRenderer.on('tabs:close-request', () => callback()),
+  // Downloads running in this tab: it keeps full speed while another tab is shown.
+  busy: busy => ipcRenderer.invoke('tabs:busy', busy === true),
 });
 contextBridge.exposeInMainWorld('notecompleteTranscribe', {
   backends: () => ipcRenderer.invoke('asr:backends'),

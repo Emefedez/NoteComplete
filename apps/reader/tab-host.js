@@ -92,6 +92,8 @@ export function tabHost({ container, reader = './index.html', documentTitle = 'N
       update: async (state) => { list.update(id, state || {}); const f = frames.get(id); if (f) f.title = list.get(id)?.title || ''; broadcast(); },
       onList: (callback) => { listeners.set(id, callback); },
       onCloseRequest: (callback) => { closers.set(id, callback); },
+      // Frames in one page are not throttled like the desktop's hidden tabs: nothing to do.
+      busy: async () => {},
     };
   }
   return { open, close, bridge, list };
