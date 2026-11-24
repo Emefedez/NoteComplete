@@ -1878,9 +1878,7 @@ async function renderPage(p, provided) {
     p.el.replaceChildren(render, overlay, lockMarks(result));
     // The lag log names the page that just came in, with what it holds.
     if (lagLog.on) lagLog.mark(`page ${p.index + 1}: ${inkItems ?? inkCount(result.svg)} items, ${render.querySelectorAll("image").length} pictures, ${Math.round(result.svg.length / 1024)} KB`);
-    // An iPhone photo (HEIC): decoded into a picture Chromium shows (heic.js); Safari shows it as
-    // it is (heic.js finds that out with the first photo and then leaves them alone).
-    if (result.svg.includes('data-format="heic"')) import("./heic.js").then((m) => m.showHeicPictures(render)).catch(() => { /* The labelled box stays. */ });
+    showHeic(render, result.svg);
     // What the page now shows, for a line added to it without a redraw (addDrawn).
     p.shown = result;
     p.inkItems = inkItems;
@@ -5060,6 +5058,12 @@ if ("serviceWorker" in navigator) {
 function shapeHandles(p) {
   selection.render(p);
 }
+// An iPhone photo (HEIC) in what was just put in `root` (a page, or one item drawn again):
+// decoded into a picture Chromium shows (heic.js); Safari shows it as it is (heic.js finds that
+// out with the first photo and then leaves them alone).
+function showHeic(root, svg) {
+  if (typeof svg === "string" && svg.includes('data-format="heic"')) import("./heic.js").then((m) => m.showHeicPictures(root)).catch(() => { /* The labelled box stays. */ });
+}
 async function patchItem(item, adjustment, crop = null) {
   if (busy() || !doc) return null;
   editing = true;
@@ -5081,6 +5085,8 @@ async function patchItem(item, adjustment, crop = null) {
     if (el) {
       el.innerHTML = result.svg;
       el.removeAttribute("transform");
+      // A moved or resized photo comes back as the engine draws it: HEIC again, converted anew.
+      showHeic(el, result.svg);
       paintTapes(p.render, p.index);
       typesetMath(p.render, p.view?.texts);
       const svgEl = p.render.querySelector(":scope > svg");
