@@ -1,4 +1,9 @@
-## What's new in 1.2.80
+## What's new in 1.2.81
+
+- **No tail when the pen lifts.** As an Apple Pencil comes away from the glass it still sends a few samples with almost no pressure while its tip slides; those drew a little hook at the end of letters. They are no longer drawn.
+- **Pen width follows your pressure, not the stroke's length.** Pressure was measured against a fixed middle value, so a pen that writes lightly (the Apple Pencil) started at the pen's width and got thinner as a stroke grew. NoteComplete now learns the pressure you usually write with (kept on the device) and draws it at the pen's width: press harder for wider, lighter for thinner.
+- **Tape shows its stripes on iPad.** Safari on iPad painted the tape's stripes as a solid white box, and the tape vanished from the page thumbnails. The stripes are now drawn as plain shapes, the same in every browser, and they show while you lay the tape too.
+- **Smoother scrolling past prefabs.** Pictures on a page (prefabs, photos) are decoded before the page comes into view, so Safari no longer stops the scrolling to decode them. The Lag log (View) now also names the page that just came in, with its items and pictures, next to each freeze.
 
 - **Smoother pen ink, above all on iPad.** A stroke drawn with pressure is now one shape instead of hundreds of small circles and pieces, so its edge is drawn once: no seams, no beaded or jagged outline, and pages of handwriting are much lighter. The line you see while writing is the same shape as the finished one, so nothing changes when the pen lifts. Smoothing now follows time rather than the number of samples, so an Apple Pencil (240 samples a second) is no longer smoothed twice as hard as other pens, and a stroke no longer starts or ends as a thin needle when the pen reports no pressure yet.
 - **Test pen and stylus shows each stroke's input** (Help): samples per second, how many positions came in whole pixels, repeated points and the pressure at the first touch, to tell what a pen and browser send.
