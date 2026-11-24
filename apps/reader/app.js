@@ -1621,6 +1621,17 @@ function placeToolbarActions() {
   fitTools();
 }
 let fitFrame = 0;
+// The bar is fitted again whenever its width changes: a note opening (the bar was hidden on
+// Home and measured nothing), the side panels, the window. Height changes are its own doing.
+{
+  let fittedWidth = -1;
+  new ResizeObserver(([entry]) => {
+    const width = Math.round(entry.contentRect.width);
+    if (width === fittedWidth) return;
+    fittedWidth = width;
+    fitTools();
+  }).observe($("toolbar"));
+}
 function fitTools() {
   cancelAnimationFrame(fitFrame);
   fitFrame = requestAnimationFrame(() => {
@@ -1631,7 +1642,7 @@ function fitTools() {
     bar.classList.remove("tools-icons");
     const overflowing = phoneLayout.matches
       ? tools.scrollWidth > tools.clientWidth + 1
-      : bar.scrollWidth > bar.clientWidth + 1 || tools.getBoundingClientRect().right > bar.getBoundingClientRect().right || actions.offsetTop > tools.offsetTop + 4;
+      : tools.scrollWidth > tools.clientWidth + 1 || bar.scrollWidth > bar.clientWidth + 1 || tools.getBoundingClientRect().right > bar.getBoundingClientRect().right || actions.offsetTop > tools.offsetTop + 4;
     bar.classList.toggle("tools-icons", !toolNamesOn() || overflowing);
     toolOptions();
   });
