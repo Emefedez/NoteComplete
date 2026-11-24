@@ -56,9 +56,25 @@ export function heicUrl(href) {
   return done.get(key);
 }
 
+// Whether this browser shows HEIC itself (Safari on iPad, iPhone and the Mac): asked once, with
+// the first photo. There the conversion is skipped: it cost the iPad a decoder download, the
+// photo copied out of its text on the main thread (a stall while scrolling) and a second
+// decode, for a picture Safari was already showing.
+let native = null;
+function showsHeic(href) {
+  native ??= (async () => {
+    const image = new Image();
+    image.src = href;
+    try { await image.decode(); return image.naturalWidth > 0; } catch { return false; }
+  })();
+  return native;
+}
+
 // Puts the decoded photo in place of every HEIC picture in `root` (a drawn page).
 export async function showHeicPictures(root) {
   const pictures = [...root.querySelectorAll('image[data-format="heic"]')];
+  const first = pictures.map((image) => image.getAttribute('href') || '').find((href) => href.startsWith('data:image/heic'));
+  if (!first || await showsHeic(first)) return;
   await Promise.all(pictures.map(async (image) => {
     const href = image.getAttribute('href') || '';
     if (!href.startsWith('data:image/heic')) return;
