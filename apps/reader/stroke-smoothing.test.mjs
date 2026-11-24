@@ -95,3 +95,20 @@ test('sample timing: 240 samples a second come out as 120 do, and a pressure str
   assert.equal((d.match(/M/g) || []).length, 5);
   assert.ok(!d.includes('NaN'));
 });
+
+test("a pen's usual pressure is its plain width, however long the stroke grows", async () => {
+  const { pressureRadii, nextPressureBase } = await import('./stroke-smoothing.js');
+  // An Apple Pencil writing steadily at 0.25: the width no longer shrinks as the stroke grows.
+  const along = (n, length) => Array.from({ length: n }, (_, i) => [i / (n - 1) * length, 0]);
+  const steady = (n, length) => pressureRadii(Array(n).fill(0.25), along(n, length), 1, 0.25);
+  for (const [n, length] of [[8, 10], [20, 45], [60, 200]]) assert.ok(steady(n, length).every((r) => Math.abs(r - 1) < 1e-9), `${length}`);
+  // Measured against 0.5 (the old way) the same stroke thinned as it grew.
+  assert.ok(pressureRadii(Array(60).fill(0.25), along(60, 200), 1)[30] < 0.7);
+  // Harder than usual is wider, lighter thinner.
+  assert.ok(pressureRadii(Array(60).fill(0.5), along(60, 200), 1, 0.25)[30] > 1.3);
+  assert.ok(pressureRadii(Array(60).fill(0.1), along(60, 200), 1, 0.25)[30] < 0.85);
+  // The usual pressure is learnt slowly: the first stroke sets it, later ones move it a tenth.
+  assert.equal(nextPressureBase(NaN, [0.2, 0.3, 0.25, 0.25, 0.3]), 0.25);
+  assert.ok(Math.abs(nextPressureBase(0.25, Array(10).fill(0.75)) - 0.3) < 1e-9);
+  assert.equal(nextPressureBase(0.25, [0.9, 0.9]), 0.25);
+});
