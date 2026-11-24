@@ -1768,6 +1768,15 @@ function resize() {
   for (const p of reraster) renderPage(p, p.view);
   scheduleDetail(ZOOM_DETAIL_PAUSE_MS);
 }
+// Decodes a page's embedded pictures (Image.decode, off the main thread) before the page goes
+// in; at most a moment, so a slow picture never holds the page back. True when there were some.
+async function decodePictures(render) {
+  const hrefs = [...render.querySelectorAll('image[href^="data:image/"]')].map((el) => el.getAttribute("href"));
+  if (!hrefs.length) return false;
+  const decoding = hrefs.map((href) => { const image = new Image(); image.src = href; return image.decode(); });
+  await Promise.race([Promise.allSettled(decoding), new Promise((done) => setTimeout(done, 300))]);
+  return true;
+}
 async function renderPage(p, provided) {
   clearTimeout(p.renderTimer);
   // A page from before the pages were rebuilt (restructure) draws nothing more.
@@ -1807,6 +1816,13 @@ async function renderPage(p, provided) {
       parsedPages.set(p.index, parsed);
     } else render.innerHTML = result.svg;
     paintTapes(render, p.index);
+    // Pictures on the page (prefabs, photos) are decoded before it is shown, off the main
+    // thread: Safari decoded them while painting the page coming into view, and a page with
+    // a prefab held the scrolling for a third of a second each time it came back.
+    if (await decodePictures(render) && (note !== epoch || token !== p.token || version !== revision || gesture?.panel === p)) {
+      if (gesture?.panel === p) p.stale = true;
+      return;
+    }
     // An edit redraws the page's ink; the PDF raster under it stays the same,
     // so the existing image moves over at once instead of blinking out while
     // the background cache answers.
@@ -1860,6 +1876,8 @@ async function renderPage(p, provided) {
     keepHeld(p, shows, true);
     const typing = textBox.isTypingOn(p);
     p.el.replaceChildren(render, overlay, lockMarks(result));
+    // The lag log names the page that just came in, with what it holds.
+    if (lagLog.on) lagLog.mark(`page ${p.index + 1}: ${inkItems ?? inkCount(result.svg)} items, ${render.querySelectorAll("image").length} pictures, ${Math.round(result.svg.length / 1024)} KB`);
     // An iPhone photo (HEIC): decoded into a picture Chromium shows (heic.js), on Safari as is.
     if (result.svg.includes('data-format="heic"')) import("./heic.js").then((m) => m.showHeicPictures(render)).catch(() => { /* The labelled box stays. */ });
     // What the page now shows, for a line added to it without a redraw (addDrawn).
