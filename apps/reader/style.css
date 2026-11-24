@@ -5144,6 +5144,7 @@ html.nc-native-app .math-keypad { padding-bottom: 6px; }
   max-width: 110px;
   opacity: 1;
   overflow: hidden;
+  white-space: nowrap;
   transition: max-width .24s cubic-bezier(.22, 1, .36, 1), opacity .16s ease, margin .2s ease, padding .2s ease;
 }
 header.command-bar:is(.has-global-audio, :has(.job-chip:not([hidden]), .job-ready:not([hidden]))) .bar-end-actions {
@@ -5179,6 +5180,14 @@ body.bar-compact .bar-end-actions .palette-trigger :is(span, kbd) { display: non
 @media (max-width: 1080px) { .bar-end-actions .palette-trigger kbd { display: none; } }
 @media (max-width: 960px) { .bar-end-actions .palette-trigger :is(span, kbd) { display: none; } }
 @media (max-width: 920px) { .bar-end-actions .bar-ai span { display: none; } }
+/* The compact bar (scrolled down) folds Ask AI to its icon as it does Commands: left with its
+   label, border and 10-px padding it stayed a 76-px pill beside a 30-px Commands icon. Narrow
+   screens give it the same 30-px width as Commands; the compact bar's 0 8px padding used to
+   leave the 15-px icon only 14 px inside the 32-px button. */
+body.bar-compact .bar-end-actions .bar-ai { width: 30px; min-width: 30px; padding: 0; gap: 0; border-color: transparent; background: transparent; }
+body.bar-compact .bar-end-actions .bar-ai:not(:disabled):hover { background: var(--accent-soft); }
+body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
+@media (max-width: 920px) { .bar-end-actions .bar-ai { width: 30px; padding: 0; gap: 0; } }
 
 /* Global bar MP3 player (accent-colored controls, headset icon, seek bar, speed, close) */
 .global-audio-bar {
