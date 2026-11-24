@@ -1,3 +1,8 @@
+## What's new in 1.2.82
+
+- **A moved iPhone photo stays shown.** In the desktop app and in Chrome, moving, resizing or turning a HEIC photo put the labelled box back where the photo was until the page was drawn again. The photo is now shown again as soon as you let go.
+- **iPhone photos are lighter on iPad.** Safari shows HEIC photos itself, but a page with one still downloaded the photo decoder and decoded it a second time, which could stall the scrolling. NoteComplete now checks whether the browser shows HEIC and converts photos only where it does not (Chrome, the desktop app).
+
 ## What's new in 1.2.81
 
 - **No tail when the pen lifts.** As an Apple Pencil comes away from the glass it still sends a few samples with almost no pressure while its tip slides; those drew a little hook at the end of letters. They are no longer drawn.
