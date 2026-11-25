@@ -7,8 +7,9 @@ import { rgbaOf } from "./text-box.js";
 import { graphItems } from "./graph.js";
 import { tableItems, tableNaturalSize } from "./table.js";
 import { editorOf, moduleOf } from "./prefab-registry.js";
+import { missingPackFor } from "./prefab-packs.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
-import { choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
+import { askReinstallPack, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
 import { icon } from "./icons.js";
 import { editorKind } from "./chart-model.js";
 import { fileKind } from "./media-import.js";
@@ -403,6 +404,8 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
   async function insertUml(p, box = null, diagram = "class") {
     const startedEmpty = !app.doc;
     if (app.editing || (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer()))) return false;
+    const missing = missingPackFor({ type: "uml" });
+    if (missing && !(await oneFigure(() => askReinstallPack(missing)))) return false;
     const { starterModel } = await import("./uml.js");
     const note = app.epoch;
     const spec = await umlEditor(starterModel(diagram));
@@ -443,6 +446,8 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     let spec = {};
     try { spec = JSON.parse(c.spec || "{}"); } catch { /* Drawn again from the defaults. */ }
     if (c.kind === "prefab") {
+      const missing = missingPackFor(spec);
+      if (missing && !(await oneFigure(() => askReinstallPack(missing)))) return;
       // Filling in: the page the exercise is on, to read its statement beside the canvas.
       let references = [];
       if (mode === "answer") {
@@ -481,6 +486,13 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (!c || !p || !app.doc) return false;
     let spec = {};
     try { spec = JSON.parse(c.spec || "{}"); } catch { return false; }
+    if (c.kind === "prefab") {
+      const missing = missingPackFor(spec);
+      if (missing) {
+        status(`Install the ${missing.label} pack to redraw this figure sharply when resizing.`);
+        return false;
+      }
+    }
     try {
       const [fx, fy, fw, fh] = await compoundFrame(item), [bx, by, bw, bh] = item.bounds;
       const cx = bx + bw / 2, cy = by + bh / 2, [sx, sy] = adjustment.scale, [tx, ty] = adjustment.translation;
