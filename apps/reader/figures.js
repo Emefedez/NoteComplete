@@ -487,7 +487,12 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (!part && parts?.length && Number.isFinite(args.x) && Number.isFinite(args.y)) {
       // A click beside the drawn parts but inside a figure's frame: the frames asked for together
       // (one round trip's wait, not one per figure), the topmost hit wins.
-      const frames = parts.filter((q) => q.spec);
+      // A figure drawn under the item found (a photo laid over a graph) is not it: the item wins.
+      const render = app.panels[args.page]?.render;
+      const el = (id) => render?.querySelector(`[data-item="${CSS.escape(String(id))}"]`);
+      const found = item && el(item.id);
+      const under = (f) => { const frameEl = found && el(f.item); return Boolean(frameEl && found.compareDocumentPosition(frameEl) & Node.DOCUMENT_POSITION_PRECEDING); };
+      const frames = parts.filter((q) => q.spec && !under(q));
       const infos = await Promise.all(frames.map((f) => call("selection", { page: args.page, itemId: f.item }).catch(() => null)));
       for (let i = frames.length - 1; i >= 0; i--) {
         const f = frames[i], info = infos[i];
