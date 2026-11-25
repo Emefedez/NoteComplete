@@ -2,6 +2,8 @@ import { DriveClient, DRIVE_SCOPE, FOLDER_MIME, folderReference, supportedDriveF
 import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { attachOpenWithMenu } from './open-with-ui.js';
+import { onlyEuroOffice } from './open-with.js';
 import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 // The Drive section of the home screen. show()/hide() follow the home screen:
@@ -249,7 +251,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       const allowed = supported && (isFolder || file.capabilities?.canDownload !== false);
       button.dataset.unavailable = String(!allowed);
       const loc = folder?.name ? `Drive / ${folder.name}` : 'Google Drive';
-      detail.textContent = isFolder ? `${loc} · Folder` : !supported ? 'Unsupported format' : !allowed ? 'Download restricted' : [loc, file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? megabytes(file.size) : ''].filter(Boolean).join(' · ');
+      detail.textContent = isFolder ? `${loc} · Folder` : !supported ? (onlyEuroOffice(file.name) ? 'Needs the Office suite module' : 'Unsupported format') : !allowed ? 'Download restricted' : [loc, file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? megabytes(file.size) : ''].filter(Boolean).join(' · ');
       const entry = document.createElement('div');
       entry.className = 'note-meta';
       entry.append(name, detail);
@@ -287,6 +289,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
         return isFolder ? enter(file) : choose(file);
       };
       item.append(button);
+      if (!isFolder && allowed) attachOpenWithMenu(button, file.name, () => choose(file));
       if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `drive:${file.id}` }); choose(file); } });
 
       if (!isFolder && allowed && queue) {

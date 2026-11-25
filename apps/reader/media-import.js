@@ -1,5 +1,6 @@
 import { openPdf } from "./pdf-background.js";
 import { TEXT_EXTENSIONS, hasExtension, looksLikeText, decodeText, isOfficeName, isTableName, isImageName } from "./text-types.js";
+import { onlyEuroOffice, needsOfficeMessage } from "./open-with.js";
 const TEXT_EXT = new RegExp(`\\.(${TEXT_EXTENSIONS.join("|")})$`, "i");
 
 // A v13 .nfedit: a tar whose first member, manifest.json, names the project format. A file may
@@ -65,6 +66,9 @@ export function fileKind(name, bytes) {
   if (!hasExtension(name) && looksLikeText(bytes)) return "text";
   // A zip without a name that says what it is: maybe a notebook (the engine checks).
   if (!hasExtension(name) && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 3 && bytes[3] === 4) return "notebook";
+  // .ppsx, .xltx, .djvu, .vsdx…: only the Office suite module opens them (it is not installed,
+  // or the file would have gone to it before this).
+  if (onlyEuroOffice(name)) throw Error(needsOfficeMessage(name));
   throw Error(
     "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Office document (Word, OpenDocument, Excel, PowerPoint, RTF), EPUB, Jupyter notebook, image, audio or video file.",
   );

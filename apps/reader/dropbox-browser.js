@@ -3,6 +3,8 @@ import { FOLDER_MIME } from './drive-client.js';
 import { dropboxIdentity, redirectUri, validAppKey, webSignIn, refreshAccess } from './dropbox-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { attachOpenWithMenu } from './open-with-ui.js';
+import { onlyEuroOffice } from './open-with.js';
 import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 // The Dropbox tab of the home screen's Cloud section (docs/DROPBOX.md): sign in, browse or
@@ -180,7 +182,7 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
       const supported = isFolder || supportedDropboxFile(file);
       const allowed = supported && (isFolder || file.capabilities?.canDownload !== false);
       button.dataset.unavailable = String(!allowed);
-      detail.textContent = isFolder ? `${label()} · Folder` : !supported ? 'Unsupported format' : !allowed ? 'Download restricted'
+      detail.textContent = isFolder ? `${label()} · Folder` : !supported ? (onlyEuroOffice(file.name) ? 'Needs the Office suite module' : 'Unsupported format') : !allowed ? 'Download restricted'
         : [label(), file.modifiedTime ? new Date(file.modifiedTime).toLocaleDateString() : '', file.size ? megabytes(file.size) : ''].filter(Boolean).join(' · ');
       const entry = document.createElement('div');
       entry.className = 'note-meta';
@@ -207,6 +209,7 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
         return isFolder ? enter(file) : choose(file);
       };
       item.append(button);
+      if (!isFolder && allowed) attachOpenWithMenu(button, file.name, () => choose(file));
       if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: kind => { Object.assign(exportRequest, { kind, key: `dropbox:${file.id}` }); choose(file); } });
       if (!isFolder && allowed && queue) item.append(queueButton({ queue, id: `dropbox:${file.id}`, item: () => queueItem(file), kept: library?.cached(file) }));
       fragment.append(item);

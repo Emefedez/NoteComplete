@@ -43,6 +43,9 @@ import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
+import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
+import { euroOfficeMode, openOnceWith } from "./open-with.js";
+import { officeModule } from "./office-module.js";
 import { sharedAI as setupAI } from "./local-ai.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
@@ -831,6 +834,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   $("htmlBackToNote").hidden = $("htmlExportCopy").hidden = true;
   $("htmlNotes").hidden = false;
   converted = false;
+  officeFile = null;
   sharedText = false;
   releaseImages();
   $("textEdit").hidden = false;
@@ -845,6 +849,8 @@ function reset({ opening = false, keepSession = false } = {}) {
 let saveAs = null;
 // A Word, OpenDocument, Excel or CSV file shown as Markdown: read-only, Save writes a .md.
 let converted = false;
+// That file itself, for "Open in Euro-Office" in the text view's bar.
+let officeFile = null;
 // The pictures of a converted document (files the Markdown links to, "<name>_files/…"), their
 // folder name, and the copy this session already saved (a later Save updates it).
 let convertedImages = [], convertedFolder = "", copyTarget = null;
@@ -882,6 +888,20 @@ async function load(file, preparedDocument = null) {
     status("Wait for the current operation to finish.", true);
     return;
   }
+  // Office files open in the text view or in Euro-Office: the kind's default, a choice made in an
+  // "Open with" menu, or the chooser when the default is "Ask each time" (open-with-ui.js).
+  if (!preparedDocument && file?.name) {
+    const way = await chooseOpener(file.name);
+    if (way.cancelled) {
+      status("Not opened.");
+      throw new DOMException("Not opened: no way to open it was chosen.", "AbortError");
+    }
+    if (way.opener === "euro-office") {
+      try { await officeModule.open(file, { mode: way.mode }); }
+      catch (e) { status("Could not open in Euro-Office: " + e.message, true); throw e; }
+      return;
+    }
+  }
   editing = true;
   status("Opening document…");
   try {
@@ -896,7 +916,7 @@ async function load(file, preparedDocument = null) {
       reset({ opening: true });
       activeFileName = nextFileName;
       activeDocKind = nextDocKind;
-      if (prepared.converted) { convertedImages = prepared.images || []; convertedFolder = prepared.imageFolder || ""; converted = true; }
+      if (prepared.converted) { convertedImages = prepared.images || []; convertedFolder = prepared.imageFolder || ""; converted = true; officeFile = file; }
       sideFp = await fingerprint;
       const sideTitle = prepared.title || file.name || "Document";
       $("title").textContent = sideTitle;
@@ -4829,6 +4849,34 @@ const launchNewRDialog = () => {
 };
 if ($("newRStudioDoc")) $("newRStudioDoc").onclick = launchNewRDialog;
 if ($("homeMenuRStudio")) $("homeMenuRStudio").onclick = launchNewRDialog;
+// "Open in Euro-Office" in the bar of an office file shown as text: dimmed, with how to install
+// it, while the module is not installed. The way back ("Open as text") belongs to the Euro-Office
+// tab (Sprint 6), which calls reopenWith(file, "text") (open-with-ui.js).
+function officeButton() {
+  const b = $("textOpenOffice");
+  if (!b) return;
+  b.hidden = !(textView.hasDocument && officeFile && euroOfficeMode(officeFile.name));
+  if (b.hidden) return;
+  const shown = officeFile;
+  void moduleState().then(({ installed }) => {
+    if (officeFile !== shown) return;
+    b.setAttribute("aria-disabled", String(!installed));
+    b.title = installed ? "Open this file in Euro-Office, the office suite" : "Euro-Office is not installed: install it from Help ▸ Setup wizard ▸ Modules";
+  });
+}
+if ($("textOpenOffice")) $("textOpenOffice").onclick = () => {
+  const b = $("textOpenOffice");
+  if (!officeFile) return;
+  if (b.getAttribute("aria-disabled") === "true") return notInstalledMenu(b);
+  void reopenWith(officeFile, "euro-office");
+};
+// Opening the same file again another way (the bar button above, and Sprint 6's "Open as text").
+setReopenWith(async (file, opener) => {
+  if (!file || busy() || !canReplace()) return false;
+  openOnceWith(file.name, opener);
+  await load(file).catch(() => {});
+  return true;
+});
 if ($("textOpenRStudio")) {
   $("textOpenRStudio").onclick = async () => {
     const filePath = docMember?.source === "local" ? docMember.path : "";
@@ -6666,6 +6714,7 @@ function documentControls() {
   $("findOpen").disabled = !open && !textView.hasDocument;
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
   if ($("textOpenRStudio")) $("textOpenRStudio").hidden = !(textView.hasDocument && isRScriptName(docMember?.name || textView.key || textView.name));
+  officeButton();
   for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
@@ -7886,6 +7935,8 @@ $("uiReset").onclick = () => applyUiSize(0);
     },
   });
   $("setupWizardOpen").onclick = () => { closeMenus(); wizard.open(); };
+  // "Install from Setup ▸ Modules…" in the Open with menus and chooser.
+  setOpenSetupModules(() => { closeMenus(); wizard.open("modules"); });
   // The desktop app's own Help menu asks the tab in front.
   window.notecompleteWindows?.onSetupWizard?.(() => wizard.open());
   // ?setup=1 (or =<step>) opens it at once: for checking it, and for links from the docs.

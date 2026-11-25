@@ -5672,3 +5672,20 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
   height: auto;
   display: block;
 }
+
+/* Open with (open-with-ui.js): the chooser shown when a kind's default is "Ask each time". */
+.open-with-dialog { width: min(440px, calc(100vw - 24px)); }
+.open-with-dialog .open-with-name { margin: -4px 0 12px; overflow-wrap: anywhere; }
+.open-with-choices { display: grid; gap: 6px; margin-bottom: 12px; }
+.open-with-choice { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+.open-with-choice:hover:not(:disabled), .open-with-choice:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
+.open-with-choice:disabled { opacity: .55; cursor: default; }
+.open-with-choice > svg { width: 20px; height: 20px; flex: none; margin-top: 1px; color: var(--accent); }
+.open-with-choice-text { display: grid; gap: 2px; min-width: 0; }
+.open-with-choice-text strong { font-size: 13px; }
+.open-with-choice-text span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.open-with-dialog .open-with-install { margin: -4px 0 12px; font-size: 12px; }
+.open-with-remember { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.open-with-dialog .ocr-actions { align-items: center; }
+/* The text view's "Open in Euro-Office" while the module is not installed: shown, dimmed. */
+#textOpenOffice[aria-disabled="true"] { opacity: .55; }

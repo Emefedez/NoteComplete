@@ -14,6 +14,7 @@ import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
 import { CLOUD_PROVIDERS, CLOUD_CONFIG_KEYS } from './cloud-collab.js';
 import { selectionCheck } from './queue-controls.js';
+import { attachOpenWithMenu } from './open-with-ui.js';
 import { setupBatchTranscribe } from './batch-transcribe.js';
 import { setupBatchOcr, indexNotes } from './batch-ocr.js';
 import { setupBatchShare } from './batch-share.js';
@@ -323,7 +324,11 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
-      button.oncontextmenu = event => { event.preventDefault(); confirmRemove(entry, remove); };
+      // Office files: Open ▸ / Open with ▸ / More… (the ⋯ popup); others open the popup directly.
+      attachOpenWithMenu(button, entry.name || '', () => openEntry(entry), {
+        extra: [{ label: 'More…', icon: 'menu', run: () => confirmRemove(entry, remove) }],
+        fallback: () => confirmRemove(entry, remove),
+      });
       button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, opened: entry.openedAt || 0, favourite: favourites.has(entry.key), size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
       if (!quick) {
         cover.onerror = () => {

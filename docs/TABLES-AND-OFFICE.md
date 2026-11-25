@@ -110,12 +110,35 @@ The Euro-Office list is not hard-coded: the installed module declares the format
 edits (its manifest), and the menus are built from it, so a newer Euro-Office adds formats
 without a NoteComplete release.
 
-- [ ] Context menus (Library, Home recents, Drive, Dropbox, archive browser): **Open with ▸
-      Text view (Markdown) / Euro-Office**.
-- [ ] Settings ▸ Files: default per group (documents, spreadsheets, presentations, e-books) and
-      per extension, plus "Ask each time". Default stays the text view; when the module is not
-      installed (or not reachable) everything opens natively, with no error.
-- [ ] A tab opened one way offers the other in its bar ("Open in Euro-Office" / "Open as text").
+- [!] Context menus (Home recents, Drive, Dropbox, GitHub, WebDAV, Internet Archive): right-click
+      an office file for **Open / Open with ▸ Text view (Markdown) / Euro-Office** (Home adds
+      More… for its ⋯ popup). Euro-Office shows disabled, "(not installed)", with **Install from
+      Setup ▸ Modules…** (opens the wizard at Modules). `open-with-ui.js` `attachOpenWithMenu`;
+      the choice applies to that one opening (`openOnceWith`). Checked headless on a harness list,
+      not on real Drive/Dropbox listings.
+- [!] Every way in (Library/Home, Drive, Dropbox, archive browser, drag and drop, file pickers,
+      files from the OS) goes through `load()` in app.js, which asks `chooseOpener` first: the
+      kind's default from `openWith(kind)` (Setup ▸ Modules ▸ Office suite: documents,
+      spreadsheets, presentations; Text view / Euro-Office / Ask each time), falling back to the
+      text view when Euro-Office is not installed or cannot open the file, with no error. "Ask
+      each time" shows a chooser with **Remember for <kind>**; Cancel leaves the open document.
+      The side-by-side document panel (`side-document.js`) stays text only.
+- [ ] Per-extension defaults and an e-books group (Settings ▸ Files): not done; kinds only.
+- [!] The text tab of an office file has **Open in Euro-Office** in its bar (dimmed while not
+      installed; a click says so and offers Install from Setup ▸ Modules…). The way back,
+      "Open as text", is for Sprint 6's editor tab: it calls `reopenWith(file, 'text')`
+      (`open-with-ui.js`).
+- [D] `open-with.js` (+ tests): kind by extension, openers per file (text = exactly what
+      `office.js` converts; Euro-Office = edit / lossy-edit / convert on open / view from the
+      format list), the default with fallback, "ask". Formats: `office-formats.js`, a trimmed copy
+      of the module's manifest (75 rows: extension, editor type, open actions, MIME; source noted),
+      the built-in fallback until the installed module gives its own. PDF, txt, md, xml and html
+      are never sent to Euro-Office. The module hook is `office-module.js` (`status()` says not
+      installed; Sprint 6 fills it and `open()`).
+- [D] Files only Euro-Office opens (.ppsx .potx .xltx .djvu .xps .vsdx …) stay unsupported while
+      it is not installed (not added to `isOfficeName`); the message says they open in the
+      Office suite module (Help ▸ Setup wizard ▸ Modules), and Drive/Dropbox cards say "Needs the
+      Office suite module" instead of "Unsupported format".
 - [ ] Saving: the text view stays read-only (with its "save as Markdown"). Euro-Office saves
       OOXML and ODF back to the same file; legacy binary formats (.doc .xls .ppt) and the
       e-book/viewer formats save as a new .docx/.xlsx/.pptx beside the original, never over it.
