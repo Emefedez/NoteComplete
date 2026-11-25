@@ -1,3 +1,7 @@
+## What's new in 1.2.86
+
+- **Fix reader startup error.** Removed a duplicate `isMarkdownName` import in `app.js` that prevented the reader from loading, and added a syntax-check test covering every reader JS module.
+
 ## What's new in 1.2.85
 
 - **Euro-Office editor loads reliably in the desktop app.** Local Euro-Office loopback responses now send the cross-origin headers required by Electron's `COEP: credentialless` isolation, fixing the blank white screen after startup, and the editor tab now appears immediately with a first-launch font-building hint.

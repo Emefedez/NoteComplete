@@ -43,7 +43,7 @@ import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
-import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState, isMarkdownName } from "./open-with-ui.js";
+import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
 import { euroOfficeMode, openOnceWith } from "./open-with.js";
 import { officeModule, setOfficeOpener } from "./office-module.js";
 import { officeViewer } from "./office-view.js";
