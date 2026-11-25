@@ -148,6 +148,8 @@ function toPage(table) {
   return { ...pageTable(rows.map(rowCells), head), head, filtered, filter: table.tfFocus || null };
 }
 
+// The bar's words and marks are drawn by CSS (data-label), not text in the document: Find, a
+// selection or a copy of the table never meets them.
 function tableBar(table, { onToPage }) {
   const doc = table.ownerDocument, body = table.tBodies[0];
   const original = [...body.rows], scroller = table.closest('.text-doc');
@@ -176,14 +178,16 @@ function tableBar(table, { onToPage }) {
   const clear = doc.createElement('button');
   clear.type = 'button';
   clear.className = 'tf-clear';
-  clear.textContent = 'Clear';
+  clear.dataset.label = 'Clear';
+  clear.setAttribute('aria-label', 'Clear');
   clear.title = 'Show every row in the order written';
   bar.append(search, count, clear);
   if (onToPage) {
     const put = doc.createElement('button');
     put.type = 'button';
     put.className = 'tf-put';
-    put.textContent = 'Put on page';
+    put.dataset.label = 'Put on page';
+    put.setAttribute('aria-label', 'Put on page');
     put.title = 'Put the rows shown on a page of a note, as a table you can edit';
     put.onclick = () => { const r = put.getBoundingClientRect(); onToPage({ ...toPage(table), x: r.left, y: r.bottom + 4 }); };
     bar.append(put);
@@ -217,7 +221,7 @@ function tableBar(table, { onToPage }) {
     const values = doc.createElement('button');
     values.type = 'button';
     values.className = 'tf-values';
-    values.textContent = '▾';
+    values.dataset.label = '▾';
     values.title = `Show only some values of ${name}`;
     values.setAttribute('aria-label', `Filter by the values of ${name}`);
     values.onclick = (event) => { event.stopPropagation(); valueMenu(values, column, name); };
@@ -248,11 +252,11 @@ function tableBar(table, { onToPage }) {
     }
     body.append(...sequence);
     const active = Boolean(state.query.trim() || state.values.size || state.dir);
-    count.textContent = rows < original.length ? `${rows} of ${original.length} rows` : `${original.length} rows`;
+    count.dataset.label = rows < original.length ? `${rows} of ${original.length} rows` : `${original.length} rows`;
     clear.hidden = !active;
     for (const { th, column } of headers) {
       th.setAttribute('aria-sort', state.column === column ? (state.dir === 1 ? 'ascending' : 'descending') : 'none');
-      th.querySelector('.tf-sort').textContent = state.column === column ? (state.dir === 1 ? '▲' : '▼') : '';
+      th.querySelector('.tf-sort').dataset.label = state.column === column ? (state.dir === 1 ? '▲' : '▼') : '';
       th.querySelector('.tf-values').classList.toggle('active', state.values.has(column));
     }
     wrap.classList.toggle('tf-active', active);
@@ -265,7 +269,7 @@ function tableBar(table, { onToPage }) {
     Object.assign(state, { query: '', values: new Map(), column: -1, dir: 0 });
     apply();
   };
-  count.textContent = `${original.length} rows`;
+  count.dataset.label = `${original.length} rows`;
   clear.hidden = true;
 
   // The values of one column, each with a check box; the filter follows every change.

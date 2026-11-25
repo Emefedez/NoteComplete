@@ -2573,6 +2573,7 @@ body.bar-compact .tab { height: 22px; }
    a ▾ for their values, and the values' menu. View only. */
 .notes-render .tf-wrap { margin: 1em 0; }
 .notes-render .tf-wrap > table { margin: 0; }
+.tf-bar [data-label]::before, .notes-render th :is(.tf-values, .tf-sort)[data-label]::before { content: attr(data-label); }
 .tf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; line-height: 1.3; }
 .tf-bar .tf-search { flex: 0 1 220px; min-width: 120px; height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
 .tf-bar .tf-count { color: var(--muted); font-variant-numeric: tabular-nums; }
