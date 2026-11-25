@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { numberOf, compareCells, folded, placeCells, visibleGroups, sortedGroups, distinctValues, pageTable } from './table-filter.js';
+import { numberOf, compareCells, folded, placeCells, visibleGroups, sortedGroups, distinctValues, pageTable, gridTsv, gridCsv, gridMarkdown } from './table-filter.js';
 
 const cells = (rows) => rows.map((r) => r.map((c) => (typeof c === 'string' ? { text: c } : c)));
 
@@ -63,4 +63,13 @@ test('a page table from the rows shown, cut to what a page holds, merges kept', 
   assert.deepEqual(cut.value.merges, [[0, 0, 2, 1]]);
   const big = pageTable(Array.from({ length: 1001 }, (_, r) => Array.from({ length: 50 }, (_, c) => ({ text: `${r}:${c}` }))), 1);
   assert.deepEqual([big.total, big.kept, big.value.cells.length, big.value.cells[0].length], [{ rows: 1001, columns: 50 }, { rows: 30, columns: 12 }, 30, 12]);
+});
+
+test('copies: TSV for spreadsheets, CSV, and Markdown as NoteComplete writes tables', () => {
+  const grid = [['Name', 'Note'], ['Ana, B', 'say "hi"\tnow'], ['x|y', '*7*']];
+  assert.equal(gridTsv(grid), 'Name\tNote\nAna, B\tsay "hi" now\nx|y\t*7*');
+  assert.equal(gridCsv(grid), 'Name,Note\r\n"Ana, B","say ""hi""\tnow"\r\nx|y,*7*\r\n');
+  assert.equal(gridMarkdown(grid), '| Name | Note |\n| --- | --- |\n| Ana, B | say "hi"\tnow |\n| x\\|y | \\*7\\* |');
+  assert.equal(gridMarkdown([['A', ''], ['1', '2']], [[0, 0, 1, 2]]), '<table>\n<thead>\n<tr><th colspan="2">A</th></tr>\n</thead>\n<tbody>\n<tr><td>1</td><td>2</td></tr>\n</tbody>\n</table>');
+  assert.equal(gridMarkdown([]), '');
 });
