@@ -93,9 +93,10 @@ export const needsOfficeMessage = (name) =>
 // A choice made in an "Open with" menu, for the next opening of that file name only (the file
 // goes through the same download and open path as a click; load() takes the choice).
 const once = new Map();
-export function openOnceWith(name, opener, now = Date.now()) { once.set(String(name || ''), { opener, at: now }); }
+const onceKey = (name) => String(name || '').split(/[\\/]/).pop().toLowerCase();
+export function openOnceWith(name, opener, now = Date.now()) { once.set(onceKey(name), { opener, at: now }); }
 export function takeOpenOnce(name, now = Date.now()) {
-  const key = String(name || ''), hit = once.get(key);
+  const key = onceKey(name), hit = once.get(key);
   once.delete(key);
   // Stale after ten minutes (a download that never finished): the default applies again.
   return hit && now - hit.at < 600000 ? hit.opener : null;

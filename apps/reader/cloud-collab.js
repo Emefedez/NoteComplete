@@ -9,6 +9,7 @@ import {
   decryptInvite,
 } from './chunked-note.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { attachOpenWithMenu } from './open-with-ui.js';
 import { fileCoverSvg } from './file-covers.js';
 
 // Where each cloud keeps its connection (what the Home screen checks to show a connected cloud).
@@ -166,6 +167,7 @@ export function githubBrowser({
         meta.append(title, sub, badge);
         btn.append(img, meta);
         btn.onclick = () => void openItem(it);
+        attachOpenWithMenu(btn, it.name, () => void openItem(it));
         if (exportRequest && exportable(it.name)) {
           addExportMenu(li, it.name, () => {
             exportRequest(`github:${it.id}`);
@@ -408,6 +410,7 @@ export function webdavBrowser({
         meta.append(title, sub, badge);
         btn.append(img, meta);
         btn.onclick = () => void openItem(it);
+        attachOpenWithMenu(btn, it.name, () => void openItem(it));
         if (exportRequest && exportable(it.name)) {
           addExportMenu(li, it.name, () => {
             exportRequest(`webdav:${it.id}`);

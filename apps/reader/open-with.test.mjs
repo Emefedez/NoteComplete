@@ -121,3 +121,30 @@ test('the module hook reports not installed', async () => {
   assert.equal(await officeInstalled({ status: async () => { throw Error('down'); } }), false);
   await assert.rejects(officeModule.open(new Uint8Array()), /not installed/);
 });
+
+test('the open path: defaults, menu choices, the chooser and Remember', async () => {
+  const { chooseOpener, openWithEntries } = await import('./open-with-ui.js');
+  const installed = { status: async () => ({ installed: true }) };
+  const store = prefs({ documents: 'ask', spreadsheets: 'euro-office', presentations: 'text' });
+  const never = () => { throw Error('should not ask'); };
+  assert.deepEqual(await chooseOpener('a.noteful', { storage: store, ask: never }), { opener: 'native' });
+  assert.deepEqual(await chooseOpener('a.ppsx', { storage: store, ask: never }), { opener: 'native' });
+  assert.deepEqual(await chooseOpener('a.xlsx', { storage: store, ask: never }), { opener: 'text', mode: undefined });
+  assert.deepEqual(await chooseOpener('a.xlsx', { storage: store, ask: never, module: installed }), { opener: 'euro-office', mode: 'edit' });
+  // A menu choice for this file wins; one Euro-Office cannot take falls back to the default.
+  W.openOnceWith('Folder/A.XLSX', 'text');
+  assert.equal((await chooseOpener('a.xlsx', { storage: store, ask: never, module: installed })).opener, 'text');
+  W.openOnceWith('a.xlsx', 'euro-office');
+  assert.equal((await chooseOpener('a.xlsx', { storage: store, ask: never })).opener, 'text');
+  // Ask: cancelled, then chosen and remembered.
+  assert.deepEqual(await chooseOpener('a.docx', { storage: store, ask: async () => null }), { cancelled: true });
+  assert.deepEqual(await chooseOpener('a.docx', { storage: store, ask: async () => ({ opener: 'euro-office' }) }), { cancelled: true });
+  assert.deepEqual(await chooseOpener('a.doc', { storage: store, module: installed, ask: async () => ({ opener: 'euro-office', remember: true }) }), { opener: 'euro-office', mode: 'convert' });
+  assert.equal(JSON.parse(store.getItem('notecomplete-open-with')).documents, 'euro-office');
+  // Menu entries: Euro-Office disabled with the install hint while not installed.
+  const [entry] = openWithEntries('a.docx', { storage: memory(), open: () => {} });
+  assert.equal(entry.label, 'Open with');
+  assert.deepEqual(entry.submenu.map((e) => (e === '-' ? '-' : [e.label, !!e.disabled, !!e.checked])), [['Text view (Markdown)', false, true], ['Euro-Office (not installed)', true, false], '-', ['Install from Setup ▸ Modules…', false, false]]);
+  assert.equal(openWithEntries('a.docx', { installed: true, storage: memory(), open: () => {} })[0].submenu.length, 2);
+  assert.deepEqual(openWithEntries('a.pdf', { open: () => {} }), []);
+});

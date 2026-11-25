@@ -17,6 +17,12 @@ test('Goodnotes and Notability notebooks are imported, by name or as an unnamed 
  assert.equal(fileKind('shared-file',zip),'notebook');
  assert.throws(()=>fileKind('archive.zip',zip));
 });
+test('files only the Office suite module opens say so; others keep the usual message',()=>{
+ const zip=new Uint8Array([0x50,0x4b,3,4,0,0]);
+ for(const name of ['Show.ppsx','Plan.xltx','Scan.djvu','Flow.vsdx','Deck.potx'])assert.throws(()=>fileKind(name,zip),/Office suite \(Euro-Office\).*Modules/,name);
+ assert.throws(()=>fileKind('archive.zip',zip),/Choose a Noteful note/);
+ assert.equal(fileKind('Report.docx',zip),'office');
+});
 test('imported images preserve aspect ratio, fit the page and never upscale',()=>{
  assert.deepEqual(imageBounds([1200,600],[600,800]),[60,280,480,240]);
  assert.deepEqual(imageBounds([100,50],[600,800]),[250,375,100,50]);

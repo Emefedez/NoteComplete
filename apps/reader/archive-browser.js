@@ -1,6 +1,7 @@
 import { ArchiveClient, PRELOADED_ARCHIVE, archiveId, archiveListing } from './archive-client.js';
 import { TYPES } from './note-facts.js';
 import { addExportMenu, exportable } from './download-queue.js';
+import { attachOpenWithMenu } from './open-with-ui.js';
 import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 function documentCoverSvg(name) {
@@ -197,6 +198,7 @@ export function archiveBrowser({ open, client = new ArchiveClient(), library = n
         }
       };
       li.append(b);
+      attachOpenWithMenu(b, doc.name, () => chooseDoc(doc));
       if (exportRequest && exportable(doc.name)) addExportMenu(li, { label: doc.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `archive:${currentRepo}:${doc.path || doc.name}` }); chooseDoc(doc); } });
 
       if (queue) {
