@@ -6,14 +6,14 @@ Two GitHub Actions workflows generate downloadable artifacts. Both support **Act
 
 ## Desktop packages
 
-Run **Desktop packages** (`.github/workflows/desktop.yml`). A hosted reader is not required. Google Drive credentials can be bundled using the configuration below, or imported by the desktop user.
+Run **Desktop packages** (`.github/workflows/desktop.yml`). Releases build Linux x64 and ARM64, macOS Apple Silicon and Windows x64; Intel Macs are built only on request (a manual run with *Also build for Intel Mac* ticked), and their in-app update check finds no installer in releases without one. Windows on ARM is not built. A hosted reader is not required. Google Drive credentials can be bundled using the configuration below, or imported by the desktop user.
 
 | Platform | Architecture | Artifact |
 |---|---|---|
 | Linux | x86-64 | AppImage |
 | Linux | ARM64 | AppImage |
 | macOS | Apple Silicon / ARM64 | DMG and ZIP containing NoteComplete.app |
-| macOS | Intel / x86-64 | DMG and ZIP containing NoteComplete.app |
+| macOS | Intel / x86-64 (optional) | DMG and ZIP containing NoteComplete.app; only when a manual run ticks *Also build for Intel Mac* |
 | Windows | x86-64 | NSIS .exe installer |
 
 Linux AppImages are recompressed with zstd behind AppImage's own type2 runtime (`tools/repack_appimage.py`, a pinned runtime release checked against its SHA-256): electron-builder's runtime only reads gzip, and decompressing Electron through it cost about 0.8 s per launch (first paint 1.35 s against 0.52 s unpacked). `tools/update_appimage.py` and the desktop workflow both run it; it needs squashfs-tools 4.4 or newer.
@@ -22,7 +22,7 @@ The reader/WASM is built and tested once on Linux. Separate runners package the 
 
 The desktop shell uses a private, stable `notecomplete://reader/` origin so local settings and transcript caches survive restarts. Renderer Node integration is disabled, context isolation and sandboxing are enabled, navigation is restricted to the packaged reader, and new windows/permission requests are denied. Web links open in `<webview>`s that may only load http(s) addresses, without the preload, sandboxed, in their own session (`persist:notecomplete-web`). Files also arrive from the system; see [Opening files from the system](#opening-files-from-the-system).
 
-These are **preview distributions without publisher certificates**, without Developer ID/notarization or Windows Authenticode certificates. OS trust prompts may apply. Production signing requires configuring the appropriate certificates and changing the current unsigned build settings; credentials are never committed. Both macOS architectures are explicitly ad-hoc signed with hardened runtime disabled. CI extracts the ZIP and verifies all bundle signatures before uploading artifacts. Ad-hoc signing fixes bundle integrity; it does not provide Developer ID trust or notarization. Downloaded apps may still need approval in System Settings → Privacy & Security. For a trusted preview that macOS refuses to approve, remove quarantine from that app only with `xattr -dr com.apple.quarantine /Applications/NoteComplete.app`.
+These are **preview distributions without publisher certificates**, without Developer ID/notarization or Windows Authenticode certificates. OS trust prompts may apply. Production signing requires configuring the appropriate certificates and changing the current unsigned build settings; credentials are never committed. macOS builds (both architectures, when Intel is built) are explicitly ad-hoc signed with hardened runtime disabled. CI extracts the ZIP and verifies all bundle signatures before uploading artifacts. Ad-hoc signing fixes bundle integrity; it does not provide Developer ID trust or notarization. Downloaded apps may still need approval in System Settings → Privacy & Security. For a trusted preview that macOS refuses to approve, remove quarantine from that app only with `xattr -dr com.apple.quarantine /Applications/NoteComplete.app`.
 
 Local build (Rust/WASM build prerequisites are described in README):
 
