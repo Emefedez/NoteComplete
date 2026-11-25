@@ -167,6 +167,52 @@ there is one source for each setting, and each choice applies at once):
 - [D] Tests: step list and availability, state persistence, module states, done screen
       (`setup-wizard.test.mjs`); headless screenshots of every step and the end screen.
 
+## Phase 6: Euro-Office on every desktop platform (sprint 6 design, owner 2026-11-25)
+
+Licence caveats accepted (NoteComplete stays open source; the module is downloaded unmodified).
+One install path per platform, all driven from the Office module card:
+
+- **Linux x64 / arm64**: the rootless runner proven in the spike (`unshare --map-auto` + `pasta`,
+  official image unpacked to a rootfs); podman/docker used instead when present. Ubuntu's AppArmor
+  userns restriction → fall back to podman/docker or explain the one-line fix.
+- **Windows x64**: an install script NoteComplete runs (PowerShell): checks/enables WSL2 (asks for
+  admin once, may need a reboot), downloads the image layers, `wsl --import NoteComplete-EuroOffice`,
+  then NoteComplete starts it with `wsl -d … /entrypoint.sh`. No Docker Desktop needed.
+- **macOS arm64**: a script that uses the container runtime found (Apple `container`, Podman,
+  Docker, OrbStack, Colima) to pull the pinned image and run it on 127.0.0.1; if none is installed,
+  the card offers to install Podman (or explains Apple `container` on macOS 26+).
+- Shared: pinned tag + digest, start on demand, stop when idle (~10 min) and on quit, one converter
+  worker, `data/` kept across updates, uninstall removes everything (inside the user namespace on
+  Linux). Nothing of the module runs while no document is open in it.
+
+## Phase 7: prefabs as packs you choose
+
+Owner's idea (2026-11-25): prefab groups are no longer all preinstalled.
+
+- [ ] The prefab menu shows every pack; packs not installed have a cloud icon to download them, an
+      eye button hides the ones not installed, and installed packs can be removed (their figures
+      already on pages keep showing — they are drawn items — and editing them asks to reinstall).
+- [ ] Setup wizard: a "Prefabs" choice with a tree view: a check for Everything, then one per group
+      (charts, UML, maths, algorithms, Chinese, textual analysis …), then individual prefabs.
+- [ ] Where packs come from: the release's assets (or the repo) by version, checked by hash, cached
+      for offline use; the core set (sticky note, table, graph) always installed.
+- [ ] `add_prefab` (MCP) and AI features say when a pack is missing instead of failing.
+
+## Phase 8: Model Explorer and connectivity across the project
+
+Owner's request (2026-11-25): like Visual Paradigm, "la conectividad punta a punta del proyecto es
+importante".
+
+- [ ] A project model: model elements (classes, actors, use cases, activities, states, candidates …)
+      with stable ids, shared by every UML prefab and Textual Analysis in a note (or a folder of
+      notes), so the same class can appear in several diagrams.
+- [ ] Model Explorer panel: tree of elements by kind/package (like VP's "Candidate Items",
+      "Clases" › "Cliente"), with where each one appears.
+- [ ] Right-click an element in any diagram → "Show in…" lists the other diagrams/prefabs where it
+      appears (class diagram, activity, use case, textual analysis) and jumps there; rename once,
+      updated everywhere (or asks).
+- [ ] Textual Analysis candidates link to the elements they became.
+
 ## Phase 5: Textual Analysis prefab
 
 Owner's request (2026-11-25): a prefab like Visual Paradigm's *Textual Analysis*: a problem
@@ -196,8 +242,15 @@ than writing new ones.
    page table.
 4. **Open with** (phase 3a): menus, per-type defaults, switch button in the tab bar.
 5. **Euro-Office spike** (phase 3b): done, see the phase 3 checklist and REPORT.md.
-6. **Euro-Office module** (phase 3c): install from the wizard and the modules UI, launcher,
-   editor tab, save-back.
+6. **Euro-Office module** (phases 3c and 6): install scripts per platform, launcher, editor tab,
+   save-back.
 7. **Textual Analysis** (phase 5): Markdown highlighting first, then the mode and the prefab.
 
-Sprints 2, 3, 5 and 7 run in parallel (subagents, one worktree each); 4 follows 2; 6 follows 5.
+8. **Prefab packs** (phase 7): download / hide / remove, wizard tree.
+9. **Model Explorer** (phase 8), after Textual Analysis and the UML additions.
+
+Side work on their own branches from main: UML italic + direction arrow + end texts
+(`feat/uml-italic`), pictures over text selection fix + bring to front / send to back
+(`fix/image-select-zorder`), CI default targets (`ci/default-desktop-targets`).
+
+Sprints run as subagents, one worktree each; 4 follows 2; 6 follows 5.
