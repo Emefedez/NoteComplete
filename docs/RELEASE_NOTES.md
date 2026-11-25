@@ -1,3 +1,7 @@
+## What's new in 1.2.91
+
+- **Remember last reading position.** Notes, PDFs, and text/Markdown documents now remember their last page and scroll position on this device and restore it when reopened from Recents.
+
 ## What's new in 1.2.90
 
 - **Euro-Office Start menu launcher.** Launching **Euro-Office (NoteComplete)** from the Linux app menu now opens a quick launcher to create a new `.docx`, `.xlsx`, or `.pptx` (from Euro-Office's built-in templates) or open an existing Office file directly.

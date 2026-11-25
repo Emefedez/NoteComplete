@@ -44,6 +44,7 @@ import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
 import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
+import { readPosition, savePosition } from "./reading-position.js";
 import { euroOfficeMode, openOnceWith } from "./open-with.js";
 import { officeModule, setOfficeOpener } from "./office-module.js";
 import { officeViewer } from "./office-view.js";
@@ -2084,6 +2085,7 @@ $("viewport").onscroll = () => {
   lastScrollAt = performance.now();
   document.body.classList.toggle("bar-compact", barState.observe($("viewport").scrollTop));
   scheduleDetail();
+  scheduleSavePosition();
   cancelAnimationFrame(scrollFrame);
   scrollFrame = requestAnimationFrame(() => {
     if (!doc) return;
@@ -5917,8 +5919,56 @@ async function restoreAfterUpdate() {
   }
   return true;
 }
+let posSaveTimer = 0;
+function currentPositionKey(entry = null) {
+  return entry?.key || noteEntryKey || notePath || docMember?.key || find.fingerprint || sideFp || "";
+}
+function saveReadingPosition() {
+  clearTimeout(posSaveTimer);
+  posSaveTimer = 0;
+  const key = currentPositionKey();
+  if (!key) return;
+  if (doc) {
+    savePosition(key, { page, scrollTop: $("viewport")?.scrollTop || 0 });
+  } else if (textView?.hasDocument) {
+    const pane = $("textBody")?.parentElement;
+    if (pane) savePosition(key, { textScroll: pane.scrollTop || 0 });
+  }
+}
+function scheduleSavePosition() {
+  clearTimeout(posSaveTimer);
+  posSaveTimer = setTimeout(saveReadingPosition, 400);
+}
+$("textBody")?.parentElement?.addEventListener("scroll", scheduleSavePosition, { passive: true });
+window.addEventListener("pagehide", saveReadingPosition);
+function restoreReadingPosition(entry = null) {
+  const key = currentPositionKey(entry);
+  const pos = readPosition(key);
+  if (!pos) return;
+  if (doc) {
+    requestAnimationFrame(() => {
+      if (!doc) return;
+      if (Number.isInteger(pos.page) && pos.page > 0 && pos.page < doc.pages) {
+        if (pos.scrollTop > 0) {
+          setPage(pos.page);
+          $("viewport").scrollTop = pos.scrollTop;
+        } else {
+          jump(pos.page);
+        }
+      } else if (pos.scrollTop > 0) {
+        $("viewport").scrollTop = pos.scrollTop;
+      }
+    });
+  } else if (textView?.hasDocument && pos.textScroll > 0) {
+    requestAnimationFrame(() => {
+      const pane = $("textBody")?.parentElement;
+      if (pane) pane.scrollTop = pos.textScroll;
+    });
+  }
+}
 async function openFromLibrary(file, entry) {
   if (await openArchiveFile(file, { key: entry?.key || "", entry })) return false;
+  saveReadingPosition();
   const opened = await openChosen(file, entry);
   if (opened) {
     notePath = await library.pathOf(entry).catch(() => ""); noteEntryKey = entry?.key || ""; rememberDocument(noteEntryKey);
@@ -5930,6 +5980,7 @@ async function openFromLibrary(file, entry) {
         ? library.coverKey(entry)
         : (entry?.key || "");
     setDocMember(entry?.source === "local" ? localMember(entry.path, entry.name) : entry?.key ? { key: entry.key, name: entry.name, source: entry.source || "drive" } : null);
+    restoreReadingPosition(entry);
     void ensureDocumentCover({ skipExisting: true });
   }
   return opened;
@@ -6743,6 +6794,7 @@ function showDocument() {
   }
 }
 function showHome() {
+  saveReadingPosition();
   if (!home?.visible && (doc || sideView()))
     navHistory.record(currentStop(), { view: "home", folderId: home?.folder?.id || null });
   if (!$("editor").hidden && doc) $("editor").hidden = true;
