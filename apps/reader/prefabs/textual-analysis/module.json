@@ -2,7 +2,7 @@
   "id": "textual-analysis",
   "api": 1,
   "version": "1.0.0",
-  "order": 45,
+  "order": 46,
   "label": "Textual analysis",
   "kind": "custom",
   "output": "picture",
