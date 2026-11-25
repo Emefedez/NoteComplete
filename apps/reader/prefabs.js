@@ -84,9 +84,11 @@ export function choosePrefab() {
     search.setAttribute('aria-label', 'Search prefabs');
     let hiding = hideMissing();
     const eyeBtn = make('button', { type: 'button', className: 'prefab-eye-btn', title: 'Hide prefabs whose pack is not installed' });
+    eyeBtn.setAttribute('aria-label', 'Hide not installed');
     const syncEye = () => {
       eyeBtn.setAttribute('aria-pressed', String(hiding));
-      eyeBtn.replaceChildren(icon(hiding ? 'eyeOff' : 'eye'), make('span', { textContent: 'Hide not installed' }));
+      eyeBtn.title = hiding ? 'Show prefabs whose pack is not installed' : 'Hide prefabs whose pack is not installed';
+      eyeBtn.replaceChildren(icon(hiding ? 'eyeOff' : 'eye'));
     };
     syncEye();
     const pills = make('div', { className: 'expand-mode-pills', role: 'group' });

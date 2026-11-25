@@ -219,13 +219,14 @@ export function editTable({ spec = {}, editing = false } = {}) {
     const sortUp = iconButton('sortAsc', 'Sort rows by this column, A to Z and 1 to 9 (the header row stays)', () => change(sortRows(value, at[1], 1), at));
     const sortDown = iconButton('sortDesc', 'Sort rows by this column, Z to A and 9 to 1', () => change(sortRows(value, at[1], -1), at));
     const undoButton = iconButton('undo', 'Undo (Ctrl+Z)', undo), redoButton = iconButton('redo', 'Redo (Ctrl+Shift+Z)', redo);
-    let previewOn = true;
-    try { previewOn = localStorage.getItem(PREVIEW_KEY) !== 'off'; } catch { /* Shown. */ }
-    const previewButton = iconButton('eye', 'Preview: the table as it will look on the page', () => {
+    let previewOn = false;
+    try { previewOn = localStorage.getItem(PREVIEW_KEY) === 'on'; } catch { /* Folded by default, like process timeline. */ }
+    const togglePreview = () => {
       previewOn = !previewOn;
       try { localStorage.setItem(PREVIEW_KEY, previewOn ? 'on' : 'off'); } catch { /* For this window only. */ }
       showPreview();
-    });
+    };
+    const previewButton = iconButton('eye', 'Show or hide the table as it will look on the page', togglePreview);
     const tools = make('div', { className: 'table-tools' },
       iconButton('rowAbove', 'Row above', () => add(0, at[0], at)),
       iconButton('rowBelow', 'Row below', () => { const below = at[0] + span()[0]; add(0, below, [below, at[1]]); }),
@@ -324,10 +325,12 @@ export function editTable({ spec = {}, editing = false } = {}) {
       make('label', {}, header, ' Header row'), make('label', {}, headerColumn, ' Header column'),
       make('label', {}, 'Background ', background), make('span', { className: 'table-swatches' }, ...swatches),
       make('label', {}, 'Borders ', borders), make('label', {}, 'Text ', sizes), make('label', {}, 'Rows ', rowsLook));
+    const previewFold = make('button', { type: 'button', className: 'table-preview-fold', title: 'Show or hide the table as it will look on the page', onclick: togglePreview }, icon('chevronDown'), make('span', { textContent: 'On the page' }));
     const preview = make('div', { className: 'compound-preview-box table-preview' });
     preview.setAttribute('aria-label', 'Preview');
+    const previewBox = make('div', { className: 'table-preview-box' }, previewFold, preview);
     const hint = make('p', { className: 'muted', textContent: 'Tab and the arrow keys move between cells; Tab in the last cell adds a row. Shift + click, Shift + arrows or a drag choose cells; Delete clears them. Paste a range from a spreadsheet. Drag the edges of the column letters or row numbers to size them (double-click: all equal). $…$ in a cell is math.' });
-    body.append(tools, format, look, grid, preview, hint);
+    body.append(tools, format, look, grid, previewBox, hint);
 
     // `next`: the table after a change (table.js insertLines, sortRows…), as one undo step.
     function change(next, focus) {
@@ -568,7 +571,10 @@ export function editTable({ spec = {}, editing = false } = {}) {
     let previewQueued = false;
     function showPreview() {
       preview.hidden = !previewOn;
+      previewBox.classList.toggle('folded', !previewOn);
       previewButton.setAttribute('aria-pressed', String(previewOn));
+      previewFold.setAttribute('aria-expanded', String(previewOn));
+      previewFold.replaceChildren(icon(previewOn ? 'chevronDown' : 'chevronRight'), make('span', { textContent: 'On the page' }));
       if (!previewOn) return;
       const [w, h] = tableNaturalSize(value), box = [0, 0, w, h];
       const svg = previewSvg(tableItems(box, value, { id: 'preview' }), box, [w, h], 8);

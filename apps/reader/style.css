@@ -2463,6 +2463,10 @@ body.bar-compact .tab { height: 22px; }
 .table-swatches { display: inline-flex; gap: 4px; }
 .table-swatch { width: 22px; height: 22px; min-height: 0; padding: 0; border: 1px solid var(--line); border-radius: 50%; cursor: pointer; }
 .table-swatch[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+.table-preview-box { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--line); padding-top: 6px; }
+.table-preview-fold { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px; min-height: 0; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; cursor: pointer; }
+.table-preview-fold:hover { color: var(--ink); background: var(--fill); }
+.table-preview-fold svg { width: 14px; height: 14px; }
 /* Text from part of a recording (audio-trim.js): a band over the position bar with a handle at
    each end, and a row of times and icon buttons under it. */
 .audio-seek { position: relative; }
@@ -4266,7 +4270,7 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .prefab-picker .prefab-split .prefab-grid { max-height: none; }
 /* Prefab packs (prefabs.js, prefab-modules-ui.js): cloud badge on not-installed cards,
    eye toggle to hide them, pack status/remove bar and download progress. */
-.prefab-eye-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.prefab-eye-btn { display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; flex: none; }
 .prefab-eye-btn:hover { color: var(--ink); border-color: var(--accent); }
 .prefab-eye-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .prefab-eye-btn svg { width: 15px; height: 15px; flex: none; }

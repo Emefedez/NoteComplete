@@ -43,7 +43,7 @@ import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
-import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
+import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState, isMarkdownName } from "./open-with-ui.js";
 import { euroOfficeMode, openOnceWith } from "./open-with.js";
 import { officeModule, setOfficeOpener } from "./office-module.js";
 import { officeViewer } from "./office-view.js";
@@ -4350,6 +4350,26 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if ($("qualityDialog").open || $("paletteDialog").open) return;
+  // Ctrl A in any text input, textarea, or contenteditable selects its text reliably
+  // (including inside graph/table/prefab dialogs and Electron WebContentsView on Linux).
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyA") {
+    const t = e.target;
+    if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && !["checkbox", "radio", "range", "color", "button", "submit", "reset", "file", "hidden"].includes(t.type))) {
+      e.preventDefault();
+      t.select();
+      return;
+    }
+    const ce = t instanceof Element ? t.closest('[contenteditable="true"]') : null;
+    if (ce) {
+      e.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(ce);
+      const sel = getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+  }
   // Ctrl A in a text document selects its text, not the whole window (toolbars, tabs…).
   // Inside a field or the editor the field's own select-all applies.
   if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === "KeyA" && !typingIn(e.target)
@@ -4871,20 +4891,32 @@ if ($("homeMenuRStudio")) $("homeMenuRStudio").onclick = launchNewRDialog;
 function officeButton() {
   const b = $("textOpenOffice");
   if (!b) return;
-  b.hidden = !(textView.hasDocument && officeFile && euroOfficeMode(officeFile.name));
+  const isOffice = Boolean(officeFile && euroOfficeMode(officeFile.name));
+  const mdName = textView.name || activeFileName || "";
+  const isMd = !isOffice && isMarkdownName(mdName);
+  b.hidden = !(textView.hasDocument && (isOffice || isMd));
   if (b.hidden) return;
-  const shown = officeFile;
+  const shown = isOffice ? officeFile : mdName;
   void moduleState().then(({ installed }) => {
-    if (officeFile !== shown) return;
+    if ((isOffice ? officeFile : (textView.name || activeFileName || "")) !== shown) return;
     b.setAttribute("aria-disabled", String(!installed));
-    b.title = installed ? "Open this file in Euro-Office, the office suite" : "Euro-Office is not installed: install it from Help ▸ Setup wizard ▸ Modules";
+    b.title = installed
+      ? (isMd ? "Turn this Markdown file into a Euro-Office document (.docx)" : "Open this file in Euro-Office, the office suite")
+      : "Euro-Office is not installed: install it from Help ▸ Setup wizard ▸ Modules";
   });
 }
 if ($("textOpenOffice")) $("textOpenOffice").onclick = () => {
   const b = $("textOpenOffice");
-  if (!officeFile) return;
   if (b.getAttribute("aria-disabled") === "true") return notInstalledMenu(b);
-  void reopenWith(officeFile, "euro-office");
+  if (officeFile && euroOfficeMode(officeFile.name)) {
+    void reopenWith(officeFile, "euro-office");
+    return;
+  }
+  const mdName = textView.name || activeFileName || "";
+  if (textView.hasDocument && isMarkdownName(mdName)) {
+    const file = new File([textView.text || ""], mdName, { type: "text/markdown" });
+    void reopenWith(file, "euro-office");
+  }
 };
 // Opening the same file again another way (the bar button above, and Sprint 6's "Open as text").
 setReopenWith(async (file, opener) => {
@@ -4972,9 +5004,9 @@ setOfficeOpener(async (file, { mode = "edit" } = {}) => {
   $("title").textContent = activeFileName;
   document.title = `${activeFileName} — NoteComplete`;
   tabBar.update({ title: activeFileName, dirty: false });
+  showDocument();
   const opened = await officeView.open(file, { mode });
   if (opened === false) { reset(); return false; }
-  showDocument();
   rememberDocument();
   documentControls();
   status(`Opened ${activeFileName} in Euro-Office.`);

@@ -404,6 +404,7 @@ export function setupWizard(env = {}) {
     els = {
       title: make('h2', { id: 'wizardTitle', className: 'wizard-title', textContent: 'Welcome to NoteComplete' }),
       sub: make('div', { className: 'wizard-sub', textContent: 'A quick setup to get you started. Everything can be changed later in the menus.' }),
+      closeBtn: make('button', { type: 'button', className: 'dlg-close wizard-close', title: 'Close' }, icon('close')),
       steps: make('nav', { className: 'wizard-steps' }),
       body: make('div', { className: 'wizard-body' }),
       skip: make('button', { type: 'button', className: 'wizard-skip', textContent: 'Skip setup' }),
@@ -411,9 +412,11 @@ export function setupWizard(env = {}) {
       back: make('button', { type: 'button', textContent: 'Back' }),
       next: make('button', { type: 'button', className: 'primary', textContent: 'Next' }),
     };
+    els.closeBtn.setAttribute('aria-label', 'Close');
+    els.closeBtn.onclick = () => (done ? close() : skip());
     els.steps.setAttribute('aria-label', 'Setup steps');
     dialog.append(
-      make('div', { className: 'wizard-head' }, els.title, els.sub, els.steps),
+      make('div', { className: 'wizard-head' }, els.closeBtn, els.title, els.sub, els.steps),
       els.body,
       make('div', { className: 'wizard-foot' }, els.skip, make('span', { className: 'spacer' }), els.counter, els.back, els.next));
     els.skip.onclick = () => skip();

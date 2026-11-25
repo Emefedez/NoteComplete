@@ -25,7 +25,8 @@ const CATEGORY_ICONS = { types: 'note', period: 'clock', sources: 'cloud', sizes
 // the card's width (long words broken) and stopped where the page ends. `TEXT_COVER` marks
 // covers made this way; older ones (lines cut off past the edge) are drawn again.
 export const TEXT_COVER = 'data-cover="text2"';
-export function textCoverSvg(text) {
+const OFFICE_PREVIEW_RE = /\.(docx|doc|docm|dotx|odt|fodt|rtf)$/i;
+export function textCoverSvg(text, badge = '') {
   const W = 240, H = 320, X = 20, usable = W - 2 * X;
   const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
   const wrap = (line, chars) => {
@@ -56,7 +57,8 @@ export function textCoverSvg(text) {
     y += i === 0 ? 4 : 1.5;
     return false;
   });
-  return `<svg xmlns="http://www.w3.org/2000/svg" ${TEXT_COVER} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#ffffff"/><g font-family="system-ui, sans-serif">${rows.join('')}</g></svg>`;
+  const badgeSvg = badge ? `<rect x="${W - 58}" y="${H - 28}" width="46" height="18" rx="4" fill="#2563eb"/><text x="${W - 35}" y="${H - 15.5}" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9.5" font-weight="700" fill="#ffffff">${esc(badge.toUpperCase())}</text>` : '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" ${TEXT_COVER} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#ffffff"/><g font-family="system-ui, sans-serif">${rows.join('')}</g>${badgeSvg}</svg>`;
 }
 
 export function shouldSkipCoverFile({ name = '', kind = '' } = {}) {
@@ -1118,8 +1120,8 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       if (!key || !file) return;
       const name = file.name || '';
       const kept = await library.cover(key);
-      // A text cover from before wrapping is drawn again; any other kept cover stays.
-      if (kept && !(isTextName(name) && !String(kept).includes(encodeURIComponent(TEXT_COVER)))) return;
+      // A text cover from before wrapping (or an old static Word icon) is drawn again; any other kept cover stays.
+      if (kept && !((isTextName(name) || OFFICE_PREVIEW_RE.test(name)) && !String(kept).includes(encodeURIComponent(TEXT_COVER)))) return;
       if (/\.nfedit$/i.test(name)) return;
       if (isImageName(name) || file.type?.startsWith('image/')) {
         const url = await shrink(file);
@@ -1146,6 +1148,22 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
           await pdf.loadingTask.destroy();
         }
         return;
+      }
+      // Word / ODF / RTF documents: extract the opening text for a real page preview, falling
+      // back to the static format icon if the file is huge or empty.
+      if (OFFICE_PREVIEW_RE.test(name) && (file.size || 0) <= 15 * 1024 * 1024) {
+        try {
+          const { officeDocument } = await import('./office.js');
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const { markdown } = await officeDocument(bytes, name);
+          const clean = String(markdown || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, ' ').trim();
+          if (clean) {
+            const ext = name.split('.').pop() || 'DOC';
+            const svg = textCoverSvg(clean.slice(0, 4000), ext.slice(0, 5));
+            await library.saveCover(key, `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+            return;
+          }
+        } catch { /* Fall through to the static icon cover. */ }
       }
       // HTML, audio, video, Office documents, e-books and notebooks get crisp icon covers.
       if (hasStaticFileCover(name) || file.type === 'text/html') {

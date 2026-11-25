@@ -13,7 +13,8 @@
 }
 .setup-wizard[open] { display: flex; flex-direction: column; }
 .setup-wizard::backdrop { background: #0006; }
-.wizard-head { padding: 18px 22px 0; border-bottom: 1px solid var(--line); background: var(--chrome); }
+.wizard-head { position: relative; padding: 18px 48px 0 22px; border-bottom: 1px solid var(--line); background: var(--chrome); }
+.wizard-close { position: absolute; top: 12px; right: 12px; }
 .wizard-title { margin: 0; font-size: 18px; font-weight: 600; }
 .wizard-sub { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
 .wizard-steps { position: relative; display: flex; gap: 2px; margin-top: 14px; overflow-x: auto; scrollbar-width: none; }

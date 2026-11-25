@@ -485,6 +485,18 @@ app.whenReady().then(async () => {
     responseHeaders['cross-origin-resource-policy'] = ['cross-origin'];
     callback({ responseHeaders });
   });
+  // Local Euro-Office DocumentServer runs on 127.0.0.1 and is framed inside the reader
+  // (which sends COEP: credentialless for WASM threads). Mark loopback responses embeddable
+  // so Chromium does not block the DocsAPI editor iframe with ERR_BLOCKED_BY_RESPONSE.
+  session.defaultSession.webRequest.onHeadersReceived({ urls: ['http://127.0.0.1:*/*'] }, (details, callback) => {
+    const responseHeaders = { ...details.responseHeaders };
+    delete responseHeaders['x-frame-options'];
+    delete responseHeaders['X-Frame-Options'];
+    responseHeaders['cross-origin-resource-policy'] = ['cross-origin'];
+    responseHeaders['cross-origin-embedder-policy'] = ['credentialless'];
+    responseHeaders['access-control-allow-origin'] = ['*'];
+    callback({ responseHeaders });
+  });
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, { openPage, openSetup })));
   // Web pages may sign in (pop-ups in their own sandboxed windows) and copy text; nothing else.
   const web = session.fromPartition(WEB_SESSION);

@@ -342,7 +342,12 @@ export function open(root, { spec, editing, host }) {
   // Alt and a number classifies (the bar's order), Alt Backspace removes, Ctrl F finds. Caught
   // before the editor so the text does not get the key.
   const keys = (e) => {
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f' && view === 'text') { e.preventDefault(); e.stopPropagation(); finder.open(); return; }
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'f' && view === 'text') { e.preventDefault(); e.stopPropagation(); finder.open(); return; }
+      if (k === 'z') { e.preventDefault(); e.stopPropagation(); step(e.shiftKey ? future : past, e.shiftKey ? past : future); return; }
+      if (k === 'y' && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); step(future, past); return; }
+    }
     if (e.ctrlKey || e.metaKey || !e.altKey) return;
     const digit = /^Digit(\d)$/.exec(e.code)?.[1];
     if (digit != null) {

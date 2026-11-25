@@ -110,13 +110,23 @@ export function officeViewer({
     }
     if (root) root.hidden = false;
 
-    const session = await bridge.open({
-      bytes,
-      name: file.name,
-      mode,
-      theme: getTheme(),
-      lang: getLang(),
-    });
+    const slowHint = setTimeout(() => {
+      if (stateEl?.textContent === 'Starting Euro-Office…') {
+        setState('Starting Euro-Office… (first launch builds fonts, ~45 s)');
+      }
+    }, 4000);
+    let session;
+    try {
+      session = await bridge.open({
+        bytes,
+        name: file.name,
+        mode,
+        theme: getTheme(),
+        lang: getLang(),
+      });
+    } finally {
+      clearTimeout(slowHint);
+    }
 
     const mountId = `eoMount_${Date.now()}`;
     if (host) {

@@ -10,6 +10,7 @@ import { OFFICE_KINDS, setOpenWith } from './open-with-pref.js';
 import { officeModule } from './office-module.js';
 
 const INSTALL_HINT = 'Install from Setup ▸ Modules…';
+export const isMarkdownName = (name) => /\.(md|markdown|mdown)$/i.test(String(name || ''));
 
 // Opening the setup wizard at its Modules step: app.js gives the wizard's own open(); without
 // it (a page without the wizard) the address that opens it is used.
@@ -96,6 +97,9 @@ export function askOpener(name, decision, { installed = false, doc = globalThis.
 export async function chooseOpener(name, { module = officeModule, storage, ask = askOpener } = {}) {
   const { installed, formats } = await moduleState(module);
   const forced = takeOpenOnce(name);
+  if (forced === 'euro-office' && isMarkdownName(name) && installed) {
+    return { opener: 'euro-office', mode: 'convert' };
+  }
   if (!hasOpenWith(name, formats)) return { opener: 'native' };
   const decision = decideOpener(name, { installed, formats, storage });
   const mode = (id) => decision.openers.find((o) => o.id === id)?.mode;
@@ -130,12 +134,23 @@ export function openWithEntries(name, { open, installed = false, formats = OFFIC
 // entries (Home's "More…"). `choose()` opens it the usual way (the card's click); the menu sets
 // the opener for that one opening first. Other files keep `fallback` (their own menu), if any.
 export function attachOpenWithMenu(button, name, choose, { extra = [], fallback = null, module = officeModule } = {}) {
-  if (!hasOpenWith(name)) { if (fallback) button.oncontextmenu = (e) => { e.preventDefault(); fallback(e); }; return; }
+  const isMd = isMarkdownName(name);
+  if (!hasOpenWith(name) && !isMd) { if (fallback) button.oncontextmenu = (e) => { e.preventDefault(); fallback(e); }; return; }
   button.oncontextmenu = async (event) => {
     event.preventDefault();
     event.stopPropagation();
     const { installed, formats } = await moduleState(module);
-    const entries = openWithEntries(name, { installed, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
+    const entries = isMd
+      ? [
+          {
+            label: installed ? 'Turn into Euro-Office document (.docx)' : 'Turn into Euro-Office document (not installed)',
+            icon: 'office',
+            disabled: !installed,
+            run: () => { openOnceWith(name, 'euro-office'); choose(); },
+          },
+          ...(!installed ? [{ label: INSTALL_HINT, icon: 'settings', run: () => openSetupModules() }] : []),
+        ]
+      : openWithEntries(name, { installed, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
     openContextMenu(event.clientX, event.clientY, [{ label: 'Open', icon: 'open', run: () => choose() }, ...entries, ...(extra.length ? ['-', ...extra] : [])], { title: name });
   };
 }

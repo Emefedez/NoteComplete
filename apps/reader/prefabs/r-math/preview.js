@@ -158,8 +158,14 @@ export function presetPreview(s, box, col = '#245dc4') {
     }
     return svg;
   }
-  // custom: the first lines of its R code, as a code card.
-  const code = String(s.rCode || 'plot(1:10, main = "Custom R Plot")').split('\n').filter((l) => l.trim()).slice(0, Math.max(1, Math.floor((y1 - y0) / 15)));
-  return `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx="6" fill="#f5f7fa" stroke="#dce0e5"/>`
-    + code.map((line, i) => `<text x="${x0 + 10}" y="${f(y0 + 18 + i * 15)}" font-family="monospace" font-size="11" fill="#33415c">${escapeHtml(line.length > 70 ? `${line.slice(0, 69)}…` : line)}</text>`).join('');
+  // custom: the first lines of its R code, as a code card clipped to the box.
+  const maxLines = Math.max(1, Math.floor((y1 - y0 - 16) / 15));
+  const maxChars = Math.max(12, Math.floor((x1 - x0 - 20) / 6.8));
+  const code = String(s.rCode || 'plot(1:10, main = "Custom R Plot")').split('\n').filter((l) => l.trim()).slice(0, maxLines);
+  const clipId = `rc_${Math.round(x0)}_${Math.round(y0)}_${Math.round(x1 - x0)}`;
+  return `<defs><clipPath id="${clipId}"><rect x="${x0 + 4}" y="${y0 + 4}" width="${Math.max(0, x1 - x0 - 8)}" height="${Math.max(0, y1 - y0 - 8)}" rx="4"/></clipPath></defs>`
+    + `<rect x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}" rx="6" fill="#f5f7fa" stroke="#dce0e5"/>`
+    + `<g clip-path="url(#${clipId})">`
+    + code.map((line, i) => `<text x="${x0 + 10}" y="${f(y0 + 18 + i * 15)}" font-family="monospace" font-size="11" fill="#33415c">${escapeHtml(line.length > maxChars ? `${line.slice(0, maxChars - 1)}…` : line)}</text>`).join('')
+    + '</g>';
 }

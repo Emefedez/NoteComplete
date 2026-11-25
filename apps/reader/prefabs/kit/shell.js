@@ -71,6 +71,7 @@ export function editorShell(root, { id = 'module', title = '', applyLabel = 'Ins
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); return onApply?.(); }
     if (typing(e.target)) return;
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return (e.shiftKey ? redo : undo)?.(); }
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo?.(); }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo?.(); }
     if (e.key === '?' && help) { e.preventDefault(); toggleHelp(); }
   };
