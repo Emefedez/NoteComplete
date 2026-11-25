@@ -5,7 +5,7 @@
   <a href="https://github.com/Emefedez/NoteComplete/releases"><img src="https://img.shields.io/github/v/release/Emefedez/NoteComplete?include_prereleases&style=flat-square&color=245dc4" alt="Latest Release"></a>
   <img src="https://img.shields.io/badge/Linux-x64%20%7C%20ARM64-2b7a78?style=flat-square&logo=linux&logoColor=white" alt="Linux">
   <img src="https://img.shields.io/badge/Windows-x64-0078d4?style=flat-square&logo=windows&logoColor=white" alt="Windows">
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-333333?style=flat-square&logo=apple&logoColor=white" alt="macOS">
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-333333?style=flat-square&logo=apple&logoColor=white" alt="macOS">
   <img src="https://img.shields.io/badge/Android-APK%20%7C%20PWA-3ddc84?style=flat-square&logo=android&logoColor=white" alt="Android">
   <a href="https://emefedez.github.io/NoteComplete/"><img src="https://img.shields.io/badge/Web%20%2F%20iOS%20%2F%20iPadOS-Offline%20PWA-245dc4?style=flat-square&logo=safari&logoColor=white" alt="Web and iOS/iPadOS"></a>
 </p>

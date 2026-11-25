@@ -1,7 +1,18 @@
 name: Desktop packages
 on:
+  # Default targets: Linux x64 and arm64, macOS Apple Silicon, Windows x64. Intel Macs are no
+  # longer built by default (releases skip them); tick the box on a manual run to build one.
   workflow_dispatch:
+    inputs:
+      intel_mac:
+        description: Also build for Intel Mac (macOS x64)
+        type: boolean
+        default: false
   workflow_call:
+    inputs:
+      intel_mac:
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -38,27 +49,25 @@ jobs:
           path: apps/desktop/reader/
           if-no-files-found: error
           retention-days: 7
+  # The package matrix: the default targets, plus the optional ones asked for.
+  targets:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          INTEL_MAC: ${{ inputs.intel_mac }}
+        run: |
+          set -euo pipefail
+          targets='{"os":"ubuntu-24.04","platform":"linux","arch":"x64"},{"os":"ubuntu-24.04-arm","platform":"linux","arch":"arm64"},{"os":"macos-15","platform":"mac","arch":"arm64"},{"os":"windows-2022","platform":"win","arch":"x64"}'
+          if [ "$INTEL_MAC" = true ]; then targets="$targets"',{"os":"macos-15","platform":"mac","arch":"x64"}'; fi
+          echo "matrix={\"include\":[$targets]}" >> "$GITHUB_OUTPUT"
   package:
-    needs: reader
+    needs: [reader, targets]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            platform: linux
-            arch: x64
-          - os: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
-          - os: macos-15
-            platform: mac
-            arch: arm64
-          - os: macos-15
-            platform: mac
-            arch: x64
-          - os: windows-2022
-            platform: win
-            arch: x64
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
