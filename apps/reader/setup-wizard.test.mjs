@@ -18,13 +18,14 @@ const setting = (value) => ({ get: () => value, set: (v) => { value = v; } });
 test('the steps, in order, and only those with something to set here', () => {
   const all = { theme: setting('system'), darkPages: setting(false), quality: setting({}), pressure: setting(true), menuBarAutoHide: setting(false) };
   const steps = W.buildSteps({ settings: all, modules: [{ id: 'x' }] });
-  assert.deepEqual(steps.map((s) => s.id), ['look', 'performance', 'writing', 'ai', 'modules', 'prefs']);
-  assert.deepEqual(steps.map((s) => s.label), ['Look', 'Performance', 'Writing', 'AI', 'Modules', 'Preferences']);
-  assert.deepEqual(steps.filter((s) => s.optional).map((s) => s.id), ['ai']);
+  assert.deepEqual(steps.map((s) => s.id), ['look', 'performance', 'writing', 'ai', 'modules', 'prefabs', 'prefs']);
+  assert.deepEqual(steps.map((s) => s.label), ['Look', 'Performance', 'Writing', 'AI', 'Modules', 'Prefabs', 'Preferences']);
+  assert.deepEqual(steps.filter((s) => s.optional).map((s) => s.id), ['ai', 'prefabs']);
   for (const s of steps) assert.equal(typeof s.render, 'function');
-  assert.deepEqual(steps.filter((s) => s.available()).map((s) => s.id), ['look', 'performance', 'writing', 'ai', 'modules', 'prefs']);
-  // Nothing from the app: only AI is left (Modules needs a module).
-  assert.deepEqual(W.buildSteps({ settings: {}, modules: [] }).filter((s) => s.available()).map((s) => s.id), ['ai']);
+  assert.deepEqual(steps.filter((s) => s.available()).map((s) => s.id), ['look', 'performance', 'writing', 'ai', 'modules', 'prefabs', 'prefs']);
+  // Nothing from the app: only AI and Prefabs are left (Modules needs a module).
+  assert.deepEqual(W.buildSteps({ settings: {}, modules: [] }).filter((s) => s.available()).map((s) => s.id), ['ai', 'prefabs']);
+  assert.deepEqual(W.buildSteps({ settings: {}, modules: [], prefabs: false }).filter((s) => s.available()).map((s) => s.id), ['ai']);
   // A setting that is not offered here (the website's welcome note, desktop update checks).
   const prefs = (extra) => W.buildSteps({ settings: extra, modules: [] }).find((s) => s.id === 'prefs').available();
   assert.equal(prefs({ welcome: { ...setting(true), available: () => false } }), false);
@@ -187,4 +188,34 @@ test('module buttons by state', () => {
   assert.deepEqual(M.moduleButton({ state: 'installed', action: 'Open' }), { label: 'Open', disabled: false });
   assert.equal(M.moduleButton({ state: 'installed' }), null);
   assert.deepEqual(M.moduleButton({ state: 'error' }), { label: 'Check again', disabled: false, recheck: true });
+});
+
+test('prefabs wizard step: draft tracks tree changes and applies on Finish', async () => {
+  const { initPrefabDraft, hasPrefabChanges, applyPrefabDraft } = await import('./setup-prefabs.js');
+  const { toggleNode } = await import('./prefab-pack-state.js');
+  const store = memory();
+  const applied = [];
+  const draft = {};
+  const pf = initPrefabDraft(draft, {
+    storage: store,
+    prefabs: {
+      packs: () => [
+        { id: 'core', label: 'Essentials', core: true, requires: [] },
+        { id: 'charts', label: 'Charts', core: false, requires: [] },
+      ],
+      cards: () => [
+        { id: 'graph', pack: 'core', label: 'Graph', hint: '' },
+        { id: 'histogram', pack: 'charts', label: 'Histogram', hint: '' },
+      ],
+      applyPlan: async (plan) => { applied.push(plan); return []; },
+    },
+  });
+  assert.equal(hasPrefabChanges(draft), false);
+  pf.selected = toggleNode(pf.tree, pf.selected, 'charts', false);
+  pf.touched = true;
+  assert.equal(hasPrefabChanges(draft), true);
+  assert.deepEqual(await applyPrefabDraft(draft), []);
+  assert.equal(applied.length, 1);
+  assert.deepEqual(applied[0].remove, ['charts']);
+  assert.deepEqual(applied[0].install, []);
 });
