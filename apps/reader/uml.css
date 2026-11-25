@@ -156,7 +156,7 @@ html.uml-page, .uml-page body { height: 100%; margin: 0; }
 .uml-palette .uml-hint { margin: 8px 4px 0; }
 
 /* The full editor's notice (uml-editor.js buildPalette). */
-.uml-palette .uml-warn { margin: 6px 4px 2px; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, #d97706 14%, transparent); color: var(--u-ink); font-size: 11.5px; line-height: 1.35; }
+.uml-palette.uml-palette-warn { background: color-mix(in srgb, #eab308 9%, transparent); }
 
 
 /* Text styles (uml-editor.js styleToggles): B / I / U beside a name, a label or each line. */
