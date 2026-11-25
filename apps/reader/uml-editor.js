@@ -309,9 +309,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     sel.onclick = () => setTool({ kind: 'select' });
     const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
     sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-    // The full editor says what it gives up, above its long list.
-    const warn = DIAGRAMS[model.diagram].notRecommended && make('p', { className: 'uml-hint uml-warn', textContent: 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.' });
-    palette.replaceChildren(...[sel, warn, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
+    // The full editor says what it gives up with a faint yellow tint on the palette, and a tooltip, not a box.
+    const notRecommended = !!DIAGRAMS[model.diagram].notRecommended;
+    palette.classList.toggle('uml-palette-warn', notRecommended);
+    if (notRecommended) palette.title = 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.';
+    else palette.removeAttribute('title');
+    palette.replaceChildren(...[sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
