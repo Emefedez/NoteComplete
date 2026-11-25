@@ -123,7 +123,7 @@ export function cellSource(cell) {
 const rowCells = (tr) => [...tr.cells].map((td) => ({ text: cellSource(td), rs: td.rowSpan || 1, cs: td.colSpan || 1 }));
 
 // Bars on the tables of `root` (a rendered document). minRows: tables with fewer body rows get
-// no bar. onToPage({ value, total, kept, filtered, x, y }): Put on page (also a right-click on
+// no bar. onToPage({ value, total, kept, head, filtered, filter, x, y }): Put on page (also a right-click on
 // any table); without it, no such button.
 export function attachTableFilters(root, { minRows = 4, onToPage = null } = {}) {
   for (const table of root.querySelectorAll('table')) {
@@ -144,7 +144,8 @@ function toPage(table) {
   const head = table.tHead ? table.tHead.rows.length : 0;
   const rows = [...table.rows].filter((tr) => !tr.hidden);
   const filtered = rows.length < table.rows.length;
-  return { ...pageTable(rows.map(rowCells), head), filtered };
+  // With a bar, the app can offer to choose the rows with its filter.
+  return { ...pageTable(rows.map(rowCells), head), head, filtered, filter: table.tfFocus || null };
 }
 
 function tableBar(table, { onToPage }) {
@@ -187,6 +188,7 @@ function tableBar(table, { onToPage }) {
     put.onclick = () => { const r = put.getBoundingClientRect(); onToPage({ ...toPage(table), x: r.left, y: r.bottom + 4 }); };
     bar.append(put);
   }
+  table.tfFocus = () => { search.focus(); search.select(); };
   const wrap = doc.createElement('div');
   wrap.className = 'tf-wrap';
   table.before(wrap);
