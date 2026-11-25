@@ -1,3 +1,15 @@
+## What's new in 1.2.83
+
+- **Richer page tables and table editor.** Cells can now span multiple rows and columns (Merge / Split, range selection), rows grow to fit their text, and cells support per-cell bold, italic, alignment, fill colour, header column, border styles, and text size. The editor adds a format bar, paste from spreadsheets (HTML/TSV/CSV), draggable column widths and row heights, undo/redo, live preview, row sorting, and tables up to 50 × 20.
+- **Tables in Markdown and Office documents.** Imported Word, Excel, PowerPoint, and ODF documents keep merged cells; tables with 4+ rows get a filter and sort bar in the text view, right-click table actions, and **Put on page as table**.
+- **Open with NoteComplete or Euro-Office.** Office files can open in the native text view or in the optional **Euro-Office** desktop module (installed separately from Setup ▸ Modules, with local DocsAPI editing, save-back, and **Open as text** switching). Right-click menus add **Open with ▸**, and the chooser supports number keys (`1`/`2`), `R` to remember, and `I` to install.
+- **Setup wizard and Prefab packs.** A first-run setup wizard (also under Help ▸ Setup wizard…) walks through Look, Performance, Writing, AI, Modules, Prefabs, and Preferences. Prefab groups can now be downloaded on demand (cloud icon), hidden when not installed (eye toggle), or removed, with a tri-state tree in the wizard.
+- **Textual Analysis prefab and Markdown highlighting.** Extended Markdown highlighting (`==text==`, `=={colour}text==`, `=={_colour}text==`, `=={.colour}text==`) and a Visual Paradigm-style **Textual Analysis** prefab with automatic occurrence highlighting, candidate table, and **Create UML diagrams**.
+- **Model Explorer and cross-diagram connectivity.** A **Model Explorer** panel (View ▸ Model Explorer) indexes UML elements and Textual Analysis candidates across the note, with right-click **Show in…** jumping and **Rename everywhere…** propagation across linked diagrams.
+- **UML text styles and association details.** Bold, italic, and underline work on any UML text, plus reading-direction triangles (`▶`) and start/end association labels.
+- **Pictures over text and stacking order.** Clicking a photo placed over handwriting or text now selects the photo instead of what is underneath, and the right-click / Grab menus add **Bring to front**, **Bring forward**, **Send backward**, and **Send to back** (`Ctrl ]` / `Ctrl [` and `Ctrl Shift ]` / `Ctrl Shift [`).
+- **Desktop CI targets.** Intel Mac builds are now on-request only in CI so default releases build faster.
+
 ## What's new in 1.2.82
 
 - **A moved iPhone photo stays shown.** In the desktop app and in Chrome, moving, resizing or turning a HEIC photo put the labelled box back where the photo was until the page was drawn again. The photo is now shown again as soon as you let go.
