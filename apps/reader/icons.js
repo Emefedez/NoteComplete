@@ -131,7 +131,10 @@ export const paths = {
  speaker:'M4 9.5h3.5L12 5.5v13l-4.5-4H4v-5ZM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
  video:'M3 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6Zm14 4 4-2.5v9L17 14',
  translate:'M3 5h9M7.5 3v2M5 5c.9 3 3 5.4 6 7M10 5c-.9 3.3-3 6-6.5 8M12.5 21l4.25-10L21 21M14 17.5h5.5',
- language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.5 5.6-3.5 9s1.1 6.4 3.5 9c2.4-2.6 3.5-5.6 3.5-9S14.4 5.6 12 3Z'
+ language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.5 5.6-3.5 9s1.1 6.4 3.5 9c2.4-2.6 3.5-5.6 3.5-9S14.4 5.6 12 3Z',
+ // A generic office file (a page with text lines over a small sheet grid): not any suite's logo.
+ office:'M6 2h9l5 5v15H6zM15 2v5h5M9 9h3M9 12h8M9 15h8v4H9zM13 15v4',
+ github:'M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21'
 };
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');

@@ -579,6 +579,8 @@ export function chineseField(el, name = el.id || el.getAttribute('aria-label') |
   return ime;
 }
 const fields = new Set();
+// Turned on from the setup wizard: the fields already on screen get their buttons too.
+globalThis.addEventListener?.('zh-settings', () => showSmallButtons());
 function showSmallButtons() {
   if (!zhEverUsed()) return;
   for (const el of fields) {

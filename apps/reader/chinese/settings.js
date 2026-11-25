@@ -50,6 +50,11 @@ export function setFieldMode(field, mode) {
 }
 // Chinese mode was turned on once: the small 中 buttons appear in the other fields.
 export const zhEverUsed = () => { try { return store()?.getItem(KEY('used')) === '1'; } catch { return false; } };
+// Setup wizard ▸ Modules ▸ Chinese: turned on there before it was ever used (or off again).
+export function setZhEverUsed(on) {
+  try { if (on) store()?.setItem(KEY('used'), '1'); else store()?.removeItem(KEY('used')); } catch { /* Not kept. */ }
+  globalThis.dispatchEvent?.(new CustomEvent('zh-settings', { detail: zhSettings() }));
+}
 
 const MODES = [['off', 'Off'], ['hanzi', 'Hanzi (characters)']];
 
