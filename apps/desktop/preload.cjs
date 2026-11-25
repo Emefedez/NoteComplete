@@ -1,4 +1,60 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webFrame } = require('electron');
+// Euro-Office's editors (Word, Slides, Visio in sdkjs) repaint from a paint loop that runs at
+// most every 40 ms on desktop, 25 frames a second, whatever the screen's refresh rate:
+// scrolling and the caret move in visible steps while the toolbar (plain DOM) feels quick.
+// Their mobile version already paints on every animation frame. Before the editor's scripts
+// run, this lifts the 40 ms gate in the frames of the local DocumentServer while the user
+// scrolls, types, clicks or drags (and for a second after), so the editor follows the screen's
+// refresh rate then; idle, it keeps its 25 frames a second, so an open document costs no more
+// CPU than before. requestAnimationFrame still pauses in hidden tabs.
+// Runs in the page's own world; it must stay self-contained (it is passed as a function).
+function officePaintHook(activeMs = 1000) {
+  try {
+    if (window.__ncOfficePaint) return;
+    window.__ncOfficePaint = true;
+    let lastInput = -Infinity;
+    const now = () => (typeof performance === 'object' ? performance.now() : Date.now());
+    const mark = (e) => { if (e?.type !== 'pointermove' || e.buttons) lastInput = now(); };
+    for (const type of ['wheel', 'keydown', 'pointerdown', 'pointermove', 'touchmove']) {
+      window.addEventListener?.(type, mark, { capture: true, passive: true });
+    }
+    const patch = (loop) => {
+      if (typeof loop !== 'function' || !loop.prototype || loop.__ncPatched) return;
+      loop.__ncPatched = true;
+      // The constructor assigns this.isUseInterval (true on desktop); an accessor on the
+      // prototype takes it, and _animation reads it on every frame.
+      Object.defineProperty(loop.prototype, 'isUseInterval', {
+        configurable: true,
+        get() { return this.__ncInterval !== false && now() - lastInput > activeMs; },
+        set(value) { this.__ncInterval = Boolean(value); },
+      });
+    };
+    const hook = (common) => {
+      if (!common || (typeof common !== 'object' && typeof common !== 'function')) return;
+      if (common.PaintMessageLoop) { patch(common.PaintMessageLoop); return; }
+      let loop;
+      Object.defineProperty(common, 'PaintMessageLoop', { configurable: true, enumerable: true, get() { return loop; }, set(value) { loop = value; patch(value); } });
+    };
+    let common = window.AscCommon;
+    if (common) hook(common);
+    else Object.defineProperty(window, 'AscCommon', { configurable: true, enumerable: true, get() { return common; }, set(value) { common = value; hook(value); } });
+  } catch { /* The editor keeps its own timing. */ }
+}
+// The DocumentServer runs on 127.0.0.1 at a random port (office-bridge.js).
+const isOfficeFrame = (origin) => /^http:\/\/127\.0\.0\.1:\d+$/.test(String(origin || ''));
+const isMainFrame = typeof process?.isMainFrame === 'boolean' ? process.isMainFrame : globalThis.top === globalThis;
+if (!isMainFrame) {
+  // Sub-frames get this script only for the hook above (nodeIntegrationInSubFrames in
+  // main.js): no bridge is exposed to them, whatever their origin.
+  if (isOfficeFrame(globalThis.location?.origin)) {
+    try {
+      if (typeof contextBridge.executeInMainWorld === 'function') contextBridge.executeInMainWorld({ func: officePaintHook });
+      else webFrame.executeJavaScript(`(${officePaintHook})()`);
+    } catch { /* The editor keeps its own timing. */ }
+  }
+} else exposeReaderBridges();
+if (typeof module === 'object' && module) module.exports = { officePaintHook, isOfficeFrame };
+function exposeReaderBridges() {
 contextBridge.exposeInMainWorld('notecompleteFiles', {
   folder: () => ipcRenderer.invoke('files:folder'),
   choose: () => ipcRenderer.invoke('files:choose'),
@@ -199,3 +255,4 @@ contextBridge.exposeInMainWorld('notecompleteOffice', {
     return () => ipcRenderer.removeListener('office:saved', listener);
   },
 });
+}

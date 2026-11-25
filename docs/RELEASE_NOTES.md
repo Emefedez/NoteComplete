@@ -1,3 +1,7 @@
+## What's new in 1.2.93
+
+- **Smooth Euro-Office scrolling and typing.** Euro-Office's Word, Slides and Visio editors repaint from a loop that waits at least 40 ms between frames on desktop, so scrolling and the caret moved at 20 to 25 frames a second whatever the screen. NoteComplete now lifts that wait while you scroll, type, click or drag (and for a second after), so the editor follows the screen's refresh rate; idle, it keeps its old pace, so an open document costs no more CPU or memory than before. Measured against Euro-Office 9.3.8's own paint loop in Electron: 20 → 59 frames a second while scrolling on a 60 Hz screen, idle unchanged. Spreadsheets already painted on every scroll.
+
 ## What's new in 1.2.92
 
 - **Fix Euro-Office background memory leaks.** `stop.sh` now forcefully terminates the `unshare` namespace and `pasta` after a short grace period so Euro-Office never lingers after NoteComplete closes, stale PIDs from crashed runs are cleaned up on startup and before launch, and idle shutdown is shortened to 3 minutes.
