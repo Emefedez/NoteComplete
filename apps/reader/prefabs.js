@@ -4,7 +4,8 @@
 // are drawn by exam-html.js, as in generated exams, and placed as a picture with a frame that
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { imageReady } from './image-ready.js';
-import { cards, groups, onModules, nameOf, renderSpec, stamp, moduleOf } from './prefab-registry.js';
+import { cards, groups, packById, onModules, nameOf, renderSpec, stamp, moduleOf } from './prefab-registry.js';
+import { installPack, removePack, packSizes, formatSize, hideMissing, setHideMissing, packList, missingPackMessage } from './prefab-packs.js';
 import { icon } from './icons.js';
 import { jsonErrorAt, codeBox } from './json-code.js';
 import { CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
@@ -41,6 +42,8 @@ export const prefabName = (spec) => nameOf(spec);
 // The figure as SVG text with its size, or null when the spec draws nothing (or its module
 // is missing).
 export const prefabSvg = (spec) => renderSpec(spec);
+// Plain-English message when a spec's pack or module is not installed, or null when ready.
+export const prefabMissingReason = (spec) => missingPackMessage(spec);
 // The spec with what its module fetches before drawing (a module's async `prepare`, e.g. the
 // hanzi module's stroke data); used by MCP add_prefab, which writes no data into its specs.
 export const prefabPrepare = async (spec) => (await moduleOf(spec)?.code.prepare?.(spec)) || spec;
@@ -68,8 +71,9 @@ const previewOf = (svgText) => {
 };
 
 // The prefab picker, as the other big dialogs (AI exam, quizzes): a search, the groups as
-// pills, the list on the left and a large preview of the one pointed at on the right. The
-// ones used last come first. Resolves with the chosen PREFABS entry, or null.
+// pills, an eye toggle to hide uninstalled packs, the list on the left and a large preview of
+// the one pointed at on the right. Cards from packs not installed show a cloud icon: clicking
+// one downloads its pack with progress and then inserts it. Resolves with the chosen card, or null.
 export function choosePrefab() {
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'ocr-dialog prefab-dialog prefab-picker' });
@@ -78,21 +82,43 @@ export function choosePrefab() {
     close.setAttribute('aria-label', 'Close');
     const search = make('input', { type: 'search', className: 'prefab-search', placeholder: 'Search: table, histogram, CPU, UML class…', spellcheck: false, autocomplete: 'off' });
     search.setAttribute('aria-label', 'Search prefabs');
+    let hiding = hideMissing();
+    const eyeBtn = make('button', { type: 'button', className: 'prefab-eye-btn', title: 'Hide prefabs whose pack is not installed' });
+    const syncEye = () => {
+      eyeBtn.setAttribute('aria-pressed', String(hiding));
+      eyeBtn.replaceChildren(icon(hiding ? 'eyeOff' : 'eye'), make('span', { textContent: 'Hide not installed' }));
+    };
+    syncEye();
     const pills = make('div', { className: 'expand-mode-pills', role: 'group' });
     pills.setAttribute('aria-label', 'Groups');
     let group = '';
-    for (const [id, label] of [['', 'All'], ...PREFAB_GROUPS]) {
-      const b = make('button', { type: 'button', textContent: label });
-      b.dataset.group = id;
-      b.setAttribute('aria-pressed', String(id === group));
-      b.onclick = () => { group = id; for (const q of pills.children) q.setAttribute('aria-pressed', String(q.dataset.group === group)); list(); };
-      pills.append(b);
+    let sizes = {};
+    packSizes().then((s) => { sizes = s || {}; if (dialog.isConnected && active) show(active); }).catch(() => {});
+
+    const visibleCards = () => cards({ all: !hiding }).filter((c) => !c.off);
+    const visibleGroups = () => groups({ all: !hiding });
+    function buildPills() {
+      const gs = visibleGroups();
+      if (group && !gs.some(([id]) => id === group)) group = '';
+      pills.replaceChildren();
+      for (const [id, label] of [['', 'All'], ...gs]) {
+        const b = make('button', { type: 'button', textContent: label });
+        b.dataset.group = id;
+        b.setAttribute('aria-pressed', String(id === group));
+        b.onclick = () => { group = id; for (const q of pills.children) q.setAttribute('aria-pressed', String(q.dataset.group === group)); list(); };
+        pills.append(b);
+      }
     }
+    eyeBtn.onclick = () => { hiding = !hiding; setHideMissing(hiding); syncEye(); buildPills(); list(); };
+
     const grid = make('div', { className: 'prefab-grid', role: 'listbox' });
     grid.setAttribute('aria-label', 'Prefabs');
     const big = make('div', { className: 'prefab-big' });
     const name = make('h3', { className: 'exam-sub' });
     const hint = make('p', { className: 'muted' });
+    // Pack info, download progress, and Remove action for non-core installed packs.
+    const packBar = make('div', { className: 'prefab-pack-bar', hidden: true });
+    const packProgress = make('div', { className: 'prefab-pack-progress', hidden: true });
     // With the next step turned off: which editor a UML diagram opens in, and a way back to the choice.
     const editorChip = make('button', { type: 'button', className: 'prefab-editor-chip', hidden: true });
     const importInput = make('input', { type: 'file', accept: '.puml,.plantuml,.pu,.iuml,.wsd,.xml,.xmi,.uml,.json,application/xml,text/xml,application/json', hidden: true });
@@ -100,10 +126,10 @@ export function choosePrefab() {
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     const apply = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
     // The modules in use, and the folder of modules (prefab-modules-ui.js).
-    const modulesBtn = make('button', { type: 'button', className: 'prefab-modules-open', title: 'Prefab modules: which are in use, and a folder of your own' }, icon('settings'), ' Modules…');
+    const modulesBtn = make('button', { type: 'button', className: 'prefab-modules-open', title: 'Prefab packs and modules: install, remove, or use a folder of your own' }, icon('settings'), ' Packs & modules…');
     modulesBtn.onclick = () => import('./prefab-modules-ui.js').then((m) => m.openModulesDialog({ status: (text) => { hint.textContent = text; } }));
-    const filter = make('div', { className: 'prefab-filter' }, search, pills);
-    const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, editorChip));
+    const filter = make('div', { className: 'prefab-filter' }, search, eyeBtn, pills);
+    const split = make('div', { className: 'prefab-split' }, grid, make('section', { className: 'prefab-side' }, big, name, hint, packBar, packProgress, editorChip));
     const actions = make('div', { className: 'ocr-actions' }, importBtn, importInput, modulesBtn, make('span', { className: 'prefab-step-spacer' }), cancel, apply);
     // The next step for a class or use case diagram: which editor, the two side by side.
     const step = make('div', { className: 'prefab-step', hidden: true });
@@ -114,6 +140,7 @@ export function choosePrefab() {
     document.body.append(dialog);
     const previews = new Map();
     const thumb = (p) => {
+      if (p.missing) return make('div', { className: 'prefab-preview prefab-icon prefab-missing-icon' }, icon(p.icon));
       if (!previews.has(p.id)) previews.set(p.id, (p.spec && prefabSvg(p.spec)?.svg) || null);
       const svg = previews.get(p.id);
       return svg ? previewOf(svg) : make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon));
@@ -132,7 +159,7 @@ export function choosePrefab() {
       if (waiting.length && dialog.open) drawing = setTimeout(drawSome, 16);
     };
     const lazyThumb = (p) => {
-      if (previews.has(p.id)) return thumb(p);
+      if (p.missing || previews.has(p.id)) return thumb(p);
       const slot = make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon));
       waiting.push([p, slot]);
       if (!drawing) drawing = setTimeout(drawSome, 30);
@@ -143,12 +170,25 @@ export function choosePrefab() {
     let bigFor = null;
     const showBig = (p) => {
       bigFor = p;
-      if (!p || previews.has(p.id)) return big.replaceChildren(...(p ? [thumb(p)] : []));
+      if (!p || p.missing || previews.has(p.id)) return big.replaceChildren(...(p ? [thumb(p)] : []));
       big.replaceChildren(make('div', { className: 'prefab-preview prefab-icon' }, icon(p.icon)));
       requestAnimationFrame(() => setTimeout(() => { if (bigFor === p && dialog.isConnected) big.replaceChildren(thumb(p)); }, 0));
     };
     let active = null;
-    const finish = (value) => { if (value?.id && value.kind !== 'uml-import') notePrefabUsed(value.id); dialog.close(); dialog.remove(); resolve(value); };
+    let busy = false;
+    const offModules = onModules(() => {
+      if (!dialog.isConnected) return;
+      previews.clear();
+      buildPills();
+      list();
+    });
+    const finish = (value) => {
+      offModules();
+      if (value?.id && value.kind !== 'uml-import') notePrefabUsed(value.id);
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    };
     importBtn.onclick = () => importInput.click();
     importInput.onchange = async () => {
       const file = importInput.files?.[0];
@@ -162,13 +202,52 @@ export function choosePrefab() {
       split: { icon: 'code', label: 'PlantUML', does: 'Write it as PlantUML text. The drawing follows beside it, and each edits the other.' },
     };
     const editorOf = () => (savedUmlView() === 'visual' ? 'visual' : 'split');
-    // Insert: a class or use case diagram asks for its editor first (unless that step is off).
-    const go = (p) => { if (!p) return; if (codeCapable(p) && askUmlView()) editorStep(p); else finish(p); };
+
+    function showProgress(p) {
+      if (!p) { packProgress.hidden = true; packProgress.replaceChildren(); return; }
+      packProgress.hidden = false;
+      const pct = Number.isFinite(p.fraction) ? Math.max(0, Math.min(100, Math.round(p.fraction * 100))) : null;
+      const bar = make('div', { className: 'prefab-progress-bar' }, make('span', { style: pct != null ? `width:${pct}%` : 'width:35%' }));
+      if (pct != null) bar.classList.add('known');
+      packProgress.replaceChildren(make('div', { className: 'prefab-progress-text', textContent: p.text || 'Installing…' }), bar);
+    }
+
+    async function downloadPack(packId, thenCardId = null) {
+      if (busy) return;
+      busy = true;
+      apply.disabled = true;
+      showProgress({ fraction: 0, text: `Installing ${packById(packId)?.label || packId}…` });
+      try {
+        await installPack(packId, (p) => showProgress(p));
+        showProgress(null);
+        previews.clear();
+        buildPills();
+        list();
+        if (thenCardId) {
+          const fresh = cards().find((c) => c.id === thenCardId);
+          if (fresh) { busy = false; go(fresh); return; }
+        }
+      } catch (e) {
+        showProgress(null);
+        hint.textContent = e.message || 'Could not download pack.';
+      } finally {
+        busy = false;
+        if (dialog.isConnected && active) show(active);
+      }
+    }
+
+    // Insert: missing pack downloads first; class/use-case diagrams ask for their editor.
+    const go = (p) => {
+      if (!p || busy) return;
+      if (p.missing && p.pack) { downloadPack(p.pack, p.id); return; }
+      if (codeCapable(p) && askUmlView()) editorStep(p);
+      else finish(p);
+    };
     function editorStep(p) {
       let chosen = editorOf();
       const never = make('input', { type: 'checkbox' });
       const code = (() => { try { return toPlantUml(p.spec, { layout: false }).trim().split('\n').slice(0, 16).join('\n'); } catch { return ''; } })();
-      const cards = Object.entries(EDITORS).map(([v, e]) => {
+      const cardsEl = Object.entries(EDITORS).map(([v, e]) => {
         const picture = v === 'visual' ? thumb(p) : make('pre', { className: 'prefab-code', textContent: code });
         const card = make('button', { type: 'button', className: 'prefab-editor' }, make('div', { className: 'prefab-editor-picture' }, picture), make('strong', {}, icon(e.icon), ` ${e.label}`), make('span', { textContent: e.does }));
         card.dataset.view = v;
@@ -176,44 +255,87 @@ export function choosePrefab() {
         card.onfocus = () => mark(v);
         return card;
       });
-      const mark = (v) => { chosen = v; for (const c of cards) c.setAttribute('aria-pressed', String(c.dataset.view === v)); };
+      const mark = (v) => { chosen = v; for (const c of cardsEl) c.setAttribute('aria-pressed', String(c.dataset.view === v)); };
       const pick = (v) => { saveUmlView(v); if (never.checked) setAskUmlView(false); finish(p); };
-      const back = make('button', { type: 'button', textContent: 'Back' }, );
+      const back = make('button', { type: 'button', textContent: 'Back' });
       const insert = make('button', { type: 'button', className: 'primary', textContent: 'Insert' });
       back.onclick = () => { step.hidden = true; step.replaceChildren(); filter.hidden = split.hidden = actions.hidden = false; search.focus(); };
       insert.onclick = () => pick(chosen);
       step.replaceChildren(
         make('h3', { className: 'exam-sub' }, icon('uml'), ` ${p.label}: editor`),
-        make('div', { className: 'prefab-editors', role: 'group' }, ...cards),
+        make('div', { className: 'prefab-editors', role: 'group' }, ...cardsEl),
         make('div', { className: 'ocr-actions' }, make('label', { className: 'prefab-never' }, never, ' Don\'t ask again'), make('span', { className: 'prefab-step-spacer' }), back, insert));
       step.onkeydown = (e) => {
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const v = e.key === 'ArrowLeft' ? 'visual' : 'split'; mark(v); cards.find((c) => c.dataset.view === v).focus(); }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const v = e.key === 'ArrowLeft' ? 'visual' : 'split'; mark(v); cardsEl.find((c) => c.dataset.view === v).focus(); }
         else if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') { e.preventDefault(); pick(chosen); }
         else if (e.key === 'Backspace' && e.target.tagName !== 'INPUT') { e.preventDefault(); back.click(); }
       };
       filter.hidden = split.hidden = actions.hidden = true;
       step.hidden = false;
       mark(chosen);
-      cards.find((c) => c.dataset.view === chosen).focus();
+      cardsEl.find((c) => c.dataset.view === chosen).focus();
     }
-    editorChip.onclick = () => { if (active) { setAskUmlView(true); editorStep(active); } };
+    editorChip.onclick = () => { if (active && !active.missing) { setAskUmlView(true); editorStep(active); } };
     function show(p) {
       active = p;
-      editorChip.hidden = !codeCapable(p) || askUmlView();
+      editorChip.hidden = !p || p.missing || !codeCapable(p) || askUmlView();
       if (!editorChip.hidden) { const e = EDITORS[editorOf()]; editorChip.replaceChildren(icon(e.icon), ` ${e.label}`); editorChip.title = 'The editor it opens in: click to choose again'; }
       for (const c of grid.querySelectorAll('.prefab-card')) c.setAttribute('aria-selected', String(c.dataset.id === p?.id));
       showBig(p);
       name.textContent = p?.label || 'Nothing found';
-      hint.textContent = p ? p.hint : 'Try another word, or All.';
-      apply.disabled = !p;
+      hint.textContent = p ? p.hint : (hiding ? 'Nothing installed matches. Show not-installed packs with the eye button, or try All.' : 'Try another word, or All.');
+      const pack = p?.pack ? packList().find((q) => q.id === p.pack) : null;
+      if (p && pack) {
+        const sizeStr = formatSize(sizes[pack.id] || 0);
+        packBar.hidden = false;
+        if (p.missing) {
+          packBar.replaceChildren(
+            make('span', { className: 'prefab-pack-meta' }, icon('cloud'), ` ${pack.label} pack${sizeStr ? ` · ${sizeStr}` : ''} · not installed`),
+          );
+        } else if (!pack.core) {
+          const blocked = pack.neededBy.length > 0;
+          const rmBtn = make('button', {
+            type: 'button',
+            className: 'prefab-pack-rm',
+            disabled: busy || blocked,
+            title: blocked ? `Needed by ${pack.neededBy.map((id) => packById(id)?.label || id).join(', ')}` : `Remove the ${pack.label} pack from this device`,
+          }, icon('trash'), ' Remove pack');
+          rmBtn.onclick = async () => {
+            if (busy) return;
+            try {
+              await removePack(pack.id);
+              previews.clear();
+              buildPills();
+              list();
+            } catch (e) { hint.textContent = e.message; }
+          };
+          packBar.replaceChildren(
+            make('span', { className: 'prefab-pack-meta', textContent: `${pack.label} pack${sizeStr ? ` · ${sizeStr}` : ''}` }),
+            rmBtn,
+          );
+        } else {
+          packBar.replaceChildren(make('span', { className: 'prefab-pack-meta', textContent: `${pack.label} · always installed` }));
+        }
+      } else {
+        packBar.hidden = true;
+        packBar.replaceChildren();
+      }
+      apply.disabled = !p || busy;
+      if (p?.missing) apply.replaceChildren(icon('cloud'), ' Download & Insert');
+      else apply.textContent = 'Insert';
     }
-    const words = (p) => `${p.label} ${p.hint} ${PREFAB_GROUPS.find(([g]) => g === p.group)?.[1] || ''} ${p.id}`.toLowerCase();
+    const words = (p, gs) => `${p.label} ${p.hint} ${gs.find(([g]) => g === p.group)?.[1] || ''} ${packById(p.pack)?.label || ''} ${p.id}`.toLowerCase();
     function list() {
+      const all = visibleCards();
+      const gs = visibleGroups();
       const q = search.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
-      const found = PREFABS.filter((p) => (!group || p.group === group) && q.every((w) => words(p).includes(w)));
+      const found = all.filter((p) => (!group || p.group === group) && q.every((w) => words(p, gs).includes(w)));
       const card = (p) => {
-        const c = make('button', { type: 'button', className: 'prefab-card', title: p.hint, onclick: () => go(p) }, lazyThumb(p), make('strong', { textContent: p.label }), make('span', { textContent: p.hint }));
+        const packLabel = packById(p.pack)?.label || p.pack;
+        const badge = p.missing ? make('span', { className: 'prefab-cloud', title: `Not installed — click to download ${packLabel}` }, icon('cloud')) : null;
+        const c = make('button', { type: 'button', className: `prefab-card${p.missing ? ' missing' : ''}`, title: p.missing ? `${p.hint} (Download ${packLabel} pack)` : p.hint, onclick: () => go(p) }, lazyThumb(p), make('strong', {}, p.label, badge || ''), make('span', { textContent: p.hint }));
         c.dataset.id = p.id;
+        c.dataset.pack = p.pack || '';
         c.setAttribute('role', 'option');
         // A mouse previews on hover. Not a finger or the Pencil: Safari on iPad treats a change
         // made on its emulated hover as "show the hover state" and drops the tap's click.
@@ -224,19 +346,21 @@ export function choosePrefab() {
       const out = [];
       const recent = !q.length && !group ? recentPrefabs(4) : [];
       if (recent.length) out.push(make('h4', { textContent: 'Recently used' }), ...recent.map(card));
-      for (const [g, label] of PREFAB_GROUPS) {
+      for (const [g, label] of gs) {
         const items = found.filter((p) => p.group === g);
         if (items.length) out.push(make('h4', { textContent: label }), ...items.map(card));
       }
       grid.replaceChildren(...out);
-      show(found.includes(active) ? active : recent[0] || found[0] || null);
+      const keep = active && found.find((p) => p.id === active.id);
+      show(keep || recent[0] || found[0] || null);
     }
     // Arrows move through the list from the search; Enter inserts the one shown.
     const move = (d) => {
-      const cards = [...grid.querySelectorAll('.prefab-card')];
-      const at = cards.findIndex((c) => c.dataset.id === active?.id);
-      const next = cards[Math.max(0, Math.min(cards.length - 1, at + d))];
-      if (next) { show(PREFABS.find((p) => p.id === next.dataset.id)); next.scrollIntoView({ block: 'nearest' }); }
+      const cardsEl = [...grid.querySelectorAll('.prefab-card')];
+      const at = cardsEl.findIndex((c) => c.dataset.id === active?.id);
+      const next = cardsEl[Math.max(0, Math.min(cardsEl.length - 1, at + d))];
+      const all = visibleCards();
+      if (next) { show(all.find((p) => p.id === next.dataset.id)); next.scrollIntoView({ block: 'nearest' }); }
     };
     search.addEventListener('input', list);
     search.addEventListener('keydown', (e) => {
@@ -246,9 +370,53 @@ export function choosePrefab() {
     apply.onclick = () => go(active);
     cancel.onclick = close.onclick = () => finish(null);
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(null); });
+    buildPills();
     list();
     dialog.showModal();
     search.focus();
+  });
+}
+
+// Asks to reinstall a removed pack before editing a figure already on a page. Resolves true
+// once the pack is installed, false when cancelled.
+export function askReinstallPack(pack) {
+  if (!pack) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const { dialog, body, error, cancel, apply } = shell(`Install ${pack.label}?`, 'Install & edit');
+    dialog.classList.add('prefab-reinstall-dialog');
+    const msg = make('p', { textContent: `This figure uses the ${pack.label} pack, which is not installed on this device. Figures already on pages keep showing; installing the pack lets you edit it.` });
+    const progress = make('div', { className: 'prefab-pack-progress', hidden: true });
+    body.append(msg, progress);
+    packSizes().then((s) => {
+      const sz = formatSize(s?.[pack.id] || 0);
+      if (sz && dialog.isConnected) msg.textContent = `This figure uses the ${pack.label} pack (${sz}), which is not installed on this device. Figures already on pages keep showing; installing the pack lets you edit it.`;
+    }).catch(() => {});
+    apply.replaceChildren(icon('cloud'), ' Install & edit');
+    const finish = (ok) => { dialog.close(); dialog.remove(); resolve(ok); };
+    cancel.onclick = () => finish(false);
+    dialog.addEventListener('cancel', (e) => { e.preventDefault(); finish(false); });
+    apply.onclick = async () => {
+      apply.disabled = cancel.disabled = true;
+      error.textContent = '';
+      progress.hidden = false;
+      const showP = (p) => {
+        const pct = Number.isFinite(p?.fraction) ? Math.max(0, Math.min(100, Math.round(p.fraction * 100))) : null;
+        const bar = make('div', { className: 'prefab-progress-bar' }, make('span', { style: pct != null ? `width:${pct}%` : 'width:35%' }));
+        if (pct != null) bar.classList.add('known');
+        progress.replaceChildren(make('div', { className: 'prefab-progress-text', textContent: p?.text || `Installing ${pack.label}…` }), bar);
+      };
+      showP({ fraction: 0, text: `Installing ${pack.label}…` });
+      try {
+        await installPack(pack.id, showP);
+        finish(true);
+      } catch (e) {
+        error.textContent = e.message || 'Could not install pack.';
+        progress.hidden = true;
+        apply.disabled = cancel.disabled = false;
+      }
+    };
+    dialog.showModal();
+    apply.focus();
   });
 }
 
@@ -315,7 +483,7 @@ export function editPrefab({ spec, editing = false } = {}) {
 // The figure as a PNG `[w, h]` page units drawn at `scale` pixels per unit, for an image item.
 export async function prefabPng(spec, size, scale = 3) {
   const out = prefabSvg(spec);
-  if (!out) throw Error('Nothing to draw.');
+  if (!out) throw Error(missingPackMessage(spec) || 'Nothing to draw.');
   const targetW = Math.max(1, Math.round(size[0] * scale));
   const targetH = Math.max(1, Math.round(size[1] * scale));
   const img = new Image();

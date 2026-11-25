@@ -4264,6 +4264,38 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .json-goto { margin-right: 4px; padding: 1px 7px; min-height: 0; border: 1px solid #d1453b; border-radius: 6px; background: transparent; color: #b83228; font: inherit; font-weight: 600; cursor: pointer; }
 .prefab-picker .prefab-split { height: min(60dvh, 560px); }
 .prefab-picker .prefab-split .prefab-grid { max-height: none; }
+/* Prefab packs (prefabs.js, prefab-modules-ui.js): cloud badge on not-installed cards,
+   eye toggle to hide them, pack status/remove bar and download progress. */
+.prefab-eye-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; font-size: 12.5px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.prefab-eye-btn:hover { color: var(--ink); border-color: var(--accent); }
+.prefab-eye-btn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.prefab-eye-btn svg { width: 15px; height: 15px; flex: none; }
+.prefab-card.missing { border-style: dashed; opacity: .82; }
+.prefab-card.missing:hover, .prefab-card.missing[aria-selected="true"] { opacity: 1; }
+.prefab-card strong { display: flex; align-items: center; gap: 5px; }
+.prefab-cloud { margin-left: auto; display: inline-flex; align-items: center; color: var(--accent); flex: none; }
+.prefab-cloud svg { width: 15px; height: 15px; }
+.prefab-missing-icon { background: var(--fill); border: 1px dashed var(--line); }
+.prefab-missing-icon svg { stroke: var(--muted); }
+.prefab-pack-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.prefab-pack-meta { display: inline-flex; align-items: center; gap: 5px; }
+.prefab-pack-meta svg { width: 14px; height: 14px; color: var(--accent); flex: none; }
+.prefab-pack-rm { display: inline-flex; align-items: center; gap: 4px; min-height: 0; padding: 3px 8px; font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.prefab-pack-rm:hover:not(:disabled) { border-color: var(--danger, #d1453b); color: var(--danger, #d1453b); }
+.prefab-pack-rm:disabled { opacity: .45; cursor: default; }
+.prefab-pack-rm svg { width: 13px; height: 13px; }
+.prefab-pack-progress { display: grid; gap: 5px; padding: 6px 0; }
+.prefab-progress-text { font-size: 12px; color: var(--muted); }
+.prefab-progress-bar { height: 4px; background: var(--fill); border-radius: 2px; overflow: hidden; }
+.prefab-progress-bar span { display: block; height: 100%; background: var(--accent); transition: width .18s ease-out; }
+.prefab-pack-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.prefab-pack-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.prefab-pack-title > svg { width: 18px; height: 18px; color: var(--accent); flex: none; }
+.prefab-pack-title > span { display: grid; gap: 1px; min-width: 0; }
+.prefab-pack-badge { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.prefab-reinstall-dialog { width: min(440px, calc(100vw - 24px)); }
+.prefab-reinstall-dialog .ocr-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.prefab-reinstall-dialog .ocr-actions button svg { width: 15px; height: 15px; }
 
 /* The menu at the pointer (context-menu.js): right-click, a long press, or a selection's ⋯. */
 .context-menu { position: fixed; z-index: 90; min-width: 190px; max-width: min(300px, calc(100vw - 16px)); padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; -webkit-user-select: none; user-select: none; }

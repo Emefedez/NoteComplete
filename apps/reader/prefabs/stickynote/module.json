@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 15,
+  "pack": "core",
   "label": "Sticky note",
   "kind": "custom",
   "output": "picture",

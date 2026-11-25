@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 20,
+  "pack": "core",
   "label": "Table",
   "kind": "window",
   "output": "items",

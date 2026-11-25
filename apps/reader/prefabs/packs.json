@@ -1,0 +1,46 @@
+{
+  "core": {
+    "order": 0,
+    "label": "Essentials",
+    "summary": "Function graph, table and sticky note: always installed",
+    "icon": "table",
+    "core": true
+  },
+  "charts": {
+    "order": 10,
+    "label": "Charts and exam figures",
+    "summary": "Histograms, bar charts, process states, CPU timelines and exam plots",
+    "icon": "graph"
+  },
+  "diagrams": {
+    "order": 20,
+    "label": "Diagrams",
+    "summary": "UML (class, use case, state, activity …) and node graphs, with PlantUML",
+    "icon": "uml"
+  },
+  "maths": {
+    "order": 30,
+    "label": "Maths and statistics",
+    "summary": "Number lines, truth tables and R statistics figures",
+    "icon": "math"
+  },
+  "textual-analysis": {
+    "order": 40,
+    "label": "Textual analysis",
+    "summary": "A problem statement's words as candidate classes, with the UML made from them",
+    "icon": "text",
+    "requires": ["diagrams"]
+  },
+  "algorithms": {
+    "order": 50,
+    "label": "Algorithms",
+    "summary": "Step-by-step algorithm animations, with a Java interpreter for your own code",
+    "icon": "code"
+  },
+  "chinese": {
+    "order": 60,
+    "label": "Chinese",
+    "summary": "Stroke order sheets to play, step and practise",
+    "icon": "translate"
+  }
+}

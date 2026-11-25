@@ -259,14 +259,38 @@ One install path per platform, all driven from the Office module card:
 
 Owner's idea (2026-11-25): prefab groups are no longer all preinstalled.
 
-- [ ] The prefab menu shows every pack; packs not installed have a cloud icon to download them, an
+- [!] The prefab menu shows every pack; packs not installed have a cloud icon to download them, an
       eye button hides the ones not installed, and installed packs can be removed (their figures
       already on pages keep showing — they are drawn items — and editing them asks to reinstall).
-- [ ] Setup wizard: a "Prefabs" choice with a tree view: a check for Everything, then one per group
+      Implemented in `prefabs.js` (`choosePrefab`, `askReinstallPack`), `prefab-modules-ui.js`
+      (Packs & modules dialog), `figures.js` (edit/insert reinstall prompt, resize fallback),
+      `prefab-pack-state.js`, and `prefab-packs.js`. Checked in headless Chromium (dark mode), not
+      yet tried by hand in the desktop app.
+- [!] Setup wizard: a "Prefabs" choice with a tree view: a check for Everything, then one per group
       (charts, UML, maths, algorithms, Chinese, textual analysis …), then individual prefabs.
-- [ ] Where packs come from: the release's assets (or the repo) by version, checked by hash, cached
+      Implemented in `setup-prefabs.js` + `setup-wizard.js` (optional "Prefabs" step with tri-state
+      checkboxes, pack sizes, dependency handling, applied on Finish with progress). Checked in
+      headless Chromium and unit tests (`setup-wizard.test.mjs`, `prefab-pack-state.test.mjs`).
+- [D] Where packs come from: the release's assets (or the repo) by version, checked by hash, cached
       for offline use; the core set (sticky note, table, graph) always installed.
-- [ ] `add_prefab` (MCP) and AI features say when a pack is missing instead of failing.
+      Today on desktop/Android the shipped packs live inside the app bundle (instant enable/hide);
+      on the web PWA, `tools/build_web.py` + `tools/prefab_packs.mjs` exclude non-core packs from
+      the service worker's install `shell` and record each pack's file list, byte size and SHA-256
+      hash in `precache.json`, so `prefab-packs.js` fetches them on demand into Cache Storage (with
+      progress) and drops them on remove; `app.js` calls `topUp()` on SW ready to keep installed
+      packs cached across updates. Tested in `prefab-packs.test.mjs`.
+      **Future remote release packs (not yet wired):** a release workflow can publish each optional
+      pack as a versioned tarball (`prefab-pack-<id>-v<version>.tar.gz` + manifest with SHA-256
+      hashes) on the GitHub release for that app version; the desktop app downloads and verifies
+      the archive by hash into its writable modules folder (`prefabs-user/`), keeping the installer
+      smaller without changing the pack registry or UI.
+- [D] `add_prefab` (MCP) and AI features say when a pack is missing instead of failing.
+      `missingPackMessage` (`prefab-packs.js`, re-exported as `prefabMissingReason` in `prefabs.js`)
+      names the missing pack/module in `prefabPng`, `placePrefab` (`figures.js`), and MCP
+      `add_prefab` (`crates/noteful-cli/src/ink_tools.rs`). Decision: the desktop CLI runs outside
+      the browser's `localStorage`, so it continues to allow all shipped packs present on disk in
+      `apps/reader/prefabs/`, and reports a clear missing-pack message whenever a pack or module is
+      absent or unknown.
 
 ## Phase 8: Model Explorer and connectivity across the project
 

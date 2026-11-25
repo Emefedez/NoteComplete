@@ -9,6 +9,7 @@ import { icon } from './icons.js';
 import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
+import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
 
 export const SETUP_KEY = 'notecomplete-setup';
 // Raised when steps are added that everyone should see once.
@@ -254,6 +255,14 @@ export function buildSteps(env) {
       },
     },
     {
+      id: 'prefabs', label: 'Prefabs', optional: true,
+      available: () => env.prefabs !== false && (env.prefabs?.packs ? env.prefabs.packs().length > 0 : buildPackTree().length > 0),
+      render(sec, draft, refresh) {
+        const body = section(sec, 'Prefab packs', 'Choose which prefab packs and figures are installed on this device. Essentials stay installed; anything else can be downloaded later from Insert prefab.', true);
+        renderPrefabsStep(body, draft, { ...env, storage }, refresh);
+      },
+    },
+    {
       id: 'prefs', label: 'Preferences', optional: false,
       available: () => has(s, 'menuBarAutoHide', 'dock', 'spread', 'welcome', 'updateChecks'),
       render(sec) {
@@ -452,7 +461,25 @@ export function setupWizard(env = {}) {
     close();
     env.status?.('Setup skipped. Help ▸ Setup wizard… opens it again.');
   }
-  function finish() {
+  async function finish() {
+    if (hasPrefabChanges(draft)) {
+      els.back.disabled = els.next.disabled = els.skip.disabled = true;
+      els.next.textContent = 'Applying…';
+      const statusLine = make('p', { className: 'wizard-hint', textContent: 'Applying prefab packs…' });
+      const barWrap = make('div', { className: 'wizard-prefab-applying' }, statusLine, progressBar(0));
+      els.body.append(barWrap);
+      try {
+        const errors = await applyPrefabDraft(draft, (p) => {
+          statusLine.textContent = p?.text || 'Applying prefab packs…';
+          barWrap.replaceChildren(statusLine, progressBar(p?.fraction));
+        });
+        if (errors.length) env.status?.(`Some prefab packs could not be updated: ${errors.join('; ')}`, true);
+      } catch (e) {
+        env.status?.(e.message || 'Could not apply prefab packs.', true);
+      } finally {
+        els.back.disabled = els.next.disabled = els.skip.disabled = false;
+      }
+    }
     saveSetup({ completed: true, skipped: false, version: SETUP_VERSION, step: '' }, storage);
     done = true;
     render();

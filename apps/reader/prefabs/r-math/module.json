@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 45,
+  "pack": "maths",
   "label": "R Math & Statistics",
   "kind": "custom",
   "output": "picture",

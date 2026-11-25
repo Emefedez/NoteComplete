@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 40,
+  "pack": "diagrams",
   "label": "Diagrams (UML and node graphs)",
   "kind": "custom",
   "output": "picture",

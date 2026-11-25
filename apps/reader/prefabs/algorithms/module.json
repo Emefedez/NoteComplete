@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 70,
+  "pack": "algorithms",
   "label": "Algorithms",
   "kind": "window",
   "output": "picture",

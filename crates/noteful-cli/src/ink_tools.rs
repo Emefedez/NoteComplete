@@ -583,14 +583,19 @@ impl Server {
         let prefabs_js = find_prefabs_js()
             .ok_or("Could not locate apps/reader/prefabs.js (set NOTEFUL_READER_DIR)")?;
         let spec_json = serde_json::to_string(spec)?;
+        // Desktop CLI runs outside the browser's localStorage, so all shipped packs present in
+        // apps/reader/prefabs/ are allowed here; if a pack or module is genuinely missing on disk
+        // (or unknown), prefabMissingReason reports the missing pack clearly instead of a generic error.
         let script = r#"
 import { pathToFileURL } from 'node:url';
 import fs from 'node:fs';
-const { prefabSvg, prefabPrepare } = await import(pathToFileURL(process.argv[1]).href);
+const { prefabSvg, prefabPrepare, prefabMissingReason } = await import(pathToFileURL(process.argv[1]).href);
 const given = JSON.parse(fs.readFileSync(0, 'utf8'));
+const missing = prefabMissingReason?.(given);
+if (missing) throw new Error(missing);
 const spec = prefabPrepare ? await prefabPrepare(given) : given;
 const out = prefabSvg(spec);
-if (!out?.svg) throw new Error('Spec produced no prefab SVG');
+if (!out?.svg) throw new Error(prefabMissingReason?.(spec) || 'Spec produced no prefab SVG');
 process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg, spec: spec === given ? undefined : spec }));
 "#;
         let mut node = Command::new("node")
