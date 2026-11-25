@@ -178,3 +178,22 @@ contextBridge.exposeInMainWorld('notecompleteRBridge', {
   pickFolder: defaultPath => ipcRenderer.invoke('rbridge:pick-folder', typeof defaultPath === 'string' ? defaultPath : ''),
   createItem: request => ipcRenderer.invoke('rbridge:create-item', request || {}),
 });
+// Euro-Office module (office-bridge.js): local DocumentServer for Word, Excel and PowerPoint files.
+contextBridge.exposeInMainWorld('notecompleteOffice', {
+  status: () => ipcRenderer.invoke('office:status'),
+  install: onProgress => {
+    const listener = (_event, p) => { if (typeof onProgress === 'function') onProgress(p); };
+    ipcRenderer.on('office:progress', listener);
+    return ipcRenderer.invoke('office:install').finally(() => ipcRenderer.removeListener('office:progress', listener));
+  },
+  uninstall: options => ipcRenderer.invoke('office:uninstall', options || {}),
+  open: request => ipcRenderer.invoke('office:open', request || {}),
+  forcesave: sessionId => ipcRenderer.invoke('office:forcesave', String(sessionId || '')),
+  close: (sessionId, options) => ipcRenderer.invoke('office:close', String(sessionId || ''), options || {}),
+  onSaved: callback => {
+    if (typeof callback !== 'function') return () => {};
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('office:saved', listener);
+    return () => ipcRenderer.removeListener('office:saved', listener);
+  },
+});

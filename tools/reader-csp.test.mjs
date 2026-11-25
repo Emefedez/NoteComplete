@@ -54,8 +54,8 @@ test('script comes from the app and the hosts listed, and plugins and <base> are
     assert.deepEqual(list['base-uri'], ["'none'"], name);
     assert.deepEqual(list['default-src'], ["'self'"], name);
     const script = list['script-src'];
-    // No scheme-wide or wildcard script source; blob: is WebLLM's hash-checked copy.
-    for (const source of script) assert.ok(source.startsWith("'") || source === 'blob:' || /^https:\/\/[a-z.]+\/[\w/]+$/.test(source), `${name}: script-src ${source}`);
+    // No scheme-wide or wildcard script source; blob: is WebLLM's hash-checked copy; 127.0.0.1:* is local Euro-Office.
+    for (const source of script) assert.ok(source.startsWith("'") || source === 'blob:' || source === 'http://127.0.0.1:*' || /^https:\/\/[a-z.]+\/[\w/]+$/.test(source), `${name}: script-src ${source}`);
     assert.ok(script.includes("'wasm-unsafe-eval'"), name);
     for (const origin of ORIGINS) {
       assert.ok(allows(script, './app.js', origin), `${name}: ${origin} runs its own app.js`);

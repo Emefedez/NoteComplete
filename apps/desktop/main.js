@@ -24,6 +24,7 @@ import { renderHtmlToPdfWithTapes } from './html-pdf.js';
 import { appLog } from './app-log.js';
 import { diagramRenderer } from './diagrams.js';
 import { createRBridge } from './r-bridge.js';
+import { createOfficeBridge } from './office-bridge.js';
 import { pngClipboard, processRunner } from './png-clipboard.js';
 import { spawn } from 'node:child_process';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
@@ -608,6 +609,24 @@ app.whenReady().then(async () => {
   const diagrams = diagramRenderer({ folderOf: file => files.documentFolder(file) });
   // R Math & Statistics Bridge (r-bridge.js): connects to R Commander Studio or local Rscript.
   const rBridge = createRBridge({ openPath: (p) => shell.openPath(p) });
+  // Euro-Office DocumentServer module (office-bridge.js): starts on demand on 127.0.0.1.
+  const officeBridge = createOfficeBridge({
+    onSaved: (ev) => {
+      const contents = views.get(ev.ownerId)?.webContents;
+      if (contents && !contents.isDestroyed()) {
+        contents.send('office:saved', { sessionId: ev.sessionId, status: ev.status, bytes: new Uint8Array(ev.bytes), ext: ev.ext, name: ev.name, key: ev.key });
+      }
+    },
+    onLog: (line) => log.write(line),
+  });
+  let officeQuitting = false;
+  app.on('before-quit', (event) => {
+    if (officeBridge.running && !officeQuitting) {
+      event.preventDefault();
+      officeQuitting = true;
+      officeBridge.stop().finally(() => app.quit());
+    }
+  });
   // Copied items as a picture that keeps them (png-clipboard.js): the PNG byte for byte.
   const pictures = pngClipboard({ clipboard, ClipboardItem, run: processRunner(spawn) });
   ipcMain.handle('clipboard:write-png', guarded((_event, bytes, text) => pictures.write(bytes, typeof text === 'string' ? text : '')));
@@ -639,6 +658,19 @@ app.whenReady().then(async () => {
     if (created?.filePath) await files.remember(created.filePath);
     return created;
   }));
+  // Euro-Office module IPC (office-bridge.js).
+  ipcMain.handle('office:status', guarded(() => officeBridge.status()));
+  ipcMain.handle('office:install', guarded((event) => officeBridge.install((p) => {
+    if (!event.sender.isDestroyed()) event.sender.send('office:progress', p);
+  })));
+  ipcMain.handle('office:uninstall', guarded((_event, options) => officeBridge.uninstall(options || {})));
+  ipcMain.handle('office:open', guarded((event, request) => {
+    const ownerId = event.sender.id;
+    event.sender.once('destroyed', () => { void officeBridge.closeOwner(ownerId); });
+    return officeBridge.openDocument({ ...(request || {}), ownerId });
+  }));
+  ipcMain.handle('office:forcesave', guarded((_event, sessionId) => officeBridge.forcesave(String(sessionId || ''))));
+  ipcMain.handle('office:close', guarded((_event, sessionId, options) => officeBridge.closeDocument(String(sessionId || ''), options || {})));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
   // by the reader's cancel message or when its tab goes away (archive-download.js).
   const downloads = downloadRegistry();

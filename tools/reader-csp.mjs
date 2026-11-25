@@ -38,6 +38,7 @@ const sources = {
     ["'wasm-unsafe-eval'", 'WebAssembly: the engine (pkg/), Tesseract, ONNX Runtime (speech), pdf.js image decoders, WebLLM'],
     ['blob:', 'WebLLM (local-ai.js): downloaded from jsDelivr with fetch, run only if its SHA-256 is the pinned one, then imported from a blob: URL by the page and by local-ai-worker.js'],
     ['https://accounts.google.com/gsi/client', 'Google sign-in for Drive in a browser (drive-auth.js adds this one script)'],
+    ['http://127.0.0.1:*', 'Local Euro-Office DocumentServer api.js (office-view.js, desktop loopback only)'],
   ],
   'style-src': [
     ["'self'", 'style.css, vendor/katex/katex.min.css, vendor/tinymde/tiny-mde.min.css'],
@@ -78,6 +79,7 @@ const sources = {
     ['https:', 'Google Drive, Internet Archive, jsDelivr (WebLLM, Tesseract language data, word lists), raw.githubusercontent.com, Hugging Face and its storage hosts, api.github.com: see `inventory`'],
     ['wss:', 'a sharing session over the internet (wss://<name>.trycloudflare.com)'],
     ['ws:', 'a sharing session on the local network (ws://<lan address>:41237, ws://127.0.0.1:41237 for the host)'],
+    ['http://127.0.0.1:*', 'Local Euro-Office DocumentServer on desktop loopback (office-view.js)'],
     ['data:', 'fetch(dataUrl) turns pasted pictures into bytes (chat.js, quiz.js, study.js, explain.js, app.js)'],
     ['blob:', 'fetch(blobUrl) reads audio and images back (app.js)'],
   ],
@@ -89,6 +91,7 @@ const sources = {
     ["'self'", 'tabs.html shows the reader in one frame per tab (tab-host.js). The HTML document frame is srcdoc, which frame-src does not govern; <webview> on the desktop is not a frame of this page'],
     ['blob:', 'a PDF opened beside the chart editor while filling in an exercise (chart-editor.js)'],
     ['https://accounts.google.com/gsi/', 'Google sign-in, if it shows its own interface'],
+    ['http://127.0.0.1:*', 'Local Euro-Office DocumentServer editor iframe on desktop loopback (office-view.js)'],
   ],
   'object-src': [["'none'", 'no plugins, <object> or <embed> anywhere']],
   'base-uri': [["'none'", 'no page has a <base>; an injected one would redirect every relative address']],
@@ -174,9 +177,10 @@ export function allows(list, url, self = 'https://example.github.io') {
       return sameOrigin(own, target) || (own.host === target.host && { 'http:': 'ws:', 'https:': 'wss:' }[own.protocol] === target.protocol);
     }
     if (/^[a-z][a-z\d+.-]*:$/i.test(source)) return target.protocol === source.toLowerCase();
+    const anyPort = source.endsWith(':*');
     let allowed;
-    try { allowed = new URL(source.replace('://*.', '://wildcard.')); } catch { return false; }
-    if (allowed.protocol !== target.protocol || allowed.port !== target.port) return false;
+    try { allowed = new URL((anyPort ? source.slice(0, -2) : source).replace('://*.', '://wildcard.')); } catch { return false; }
+    if (allowed.protocol !== target.protocol || (!anyPort && allowed.port !== target.port)) return false;
     const wild = source.includes('://*.');
     const host = wild ? allowed.hostname.slice('wildcard'.length) : allowed.hostname;
     if (wild ? !target.hostname.endsWith(host) : target.hostname !== host) return false;

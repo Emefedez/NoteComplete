@@ -45,7 +45,8 @@ import { themeController } from "./theme.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
 import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
 import { euroOfficeMode, openOnceWith } from "./open-with.js";
-import { officeModule } from "./office-module.js";
+import { officeModule, setOfficeOpener } from "./office-module.js";
+import { officeViewer } from "./office-view.js";
 import { sharedAI as setupAI } from "./local-ai.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
@@ -210,7 +211,7 @@ const navHistory = new NavHistory();
 // Dialogs leave the tabs usable and draw no grey backdrop (modal-dialogs.js).
 installModalDialogs();
 const tabBar = tabStrip(window.notecompleteTabs || null, {
-  dirty: () => Boolean((doc || textView?.hasDocument || htmlView?.hasDocument) && dirty && changed),
+  dirty: () => Boolean((doc || textView?.hasDocument || htmlView?.hasDocument || officeView?.hasDocument) && dirty && changed),
   beforeClose: () => collab?.beforeClose?.() ?? true,
   onCurrent: () => { if (home?.visible && (doc || sideView())) showDocument(); },
   // This tab: save it, export it, share it (as on the Export menu); another: switch or close.
@@ -819,6 +820,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   textView?.close();
   textFinder?.close();
   webView?.close();
+  if (officeView?.hasDocument) void officeView.close({ save: true });
   $("pages").replaceChildren();
   $("pageList").replaceChildren();
   if (!keepSession) releaseSession();
@@ -826,6 +828,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   $("htmlView").hidden = true;
   $("textView").hidden = true;
   $("webView").hidden = true;
+  if ($("officeView")) $("officeView").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
   tabBar.update({ title: "Home", dirty: false });
@@ -4433,6 +4436,11 @@ document.addEventListener("keydown", (e) => {
     else find.open();
     return;
   }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !doc && officeView?.visible) {
+    e.preventDefault();
+    void officeView.forcesave();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && !doc && (textView.hasDocument || htmlView.hasDocument)) {
     e.preventDefault();
     saveText();
@@ -4875,6 +4883,93 @@ setReopenWith(async (file, opener) => {
   if (!file || busy() || !canReplace()) return false;
   openOnceWith(file.name, opener);
   await load(file).catch(() => {});
+  return true;
+});
+// Euro-Office editor tab (office-view.js): hosts DocsAPI.DocEditor and routes saves back
+// through NoteComplete's existing save paths (local, Library, Drive, or new OOXML copy).
+const officeView = officeViewer({
+  root: $("officeView"),
+  host: $("officeHost"),
+  title: $("officeTitle"),
+  stateEl: $("officeState"),
+  saveBtn: $("officeSave"),
+  textBtn: $("officeOpenText"),
+  getTheme: () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"),
+  getLang: () => navigator.language || "en",
+  onOpenAsText: (file) => void reopenWith(file, "text"),
+  onDirtyChange: (isDirty, name) => {
+    dirty = changed = isDirty;
+    tabBar.update({ title: name || activeFileName || "Document", dirty: isDirty });
+  },
+  onStatus: (msg, err) => status(msg, err),
+  onSaveBytes: async ({ file, bytes, plan, copyTarget }) => {
+    if (!plan || plan.kind === "none") return { savedName: file.name };
+    const bridge = window.notecompleteFiles;
+    const blob = new Blob([bytes], { type: "application/octet-stream" });
+    if (plan.kind === "copy") {
+      if (copyTarget?.path && bridge?.writeOpened) {
+        await bridge.writeOpened(copyTarget.path, bytes);
+        await library.rememberLocal(copyTarget.path, copyTarget.name, bytes.byteLength).catch(() => {});
+        return { savedName: copyTarget.name, copyTarget, message: `Saved ${copyTarget.name} (original untouched).` };
+      }
+      if (bridge?.saveFile) {
+        const chosen = await bridge.saveFile(plan.name, bytes);
+        if (chosen?.path) {
+          await library.rememberLocal(chosen.path, chosen.name, chosen.size ?? bytes.byteLength).catch(() => {});
+          return { savedName: chosen.name, copyTarget: chosen, message: `Saved new copy as ${chosen.name} (original untouched).` };
+        }
+      }
+      if (library?.keepSaved) {
+        const entry = await library.keepSaved(plan.name, blob);
+        return { savedName: entry.name, message: `Saved new copy as ${entry.name} in Library (original untouched).` };
+      }
+      await download(bytes, plan.name, "application/octet-stream");
+      return { savedName: plan.name, message: `Downloaded new copy ${plan.name}.` };
+    }
+    // In-place save (edit or confirmed lossy-edit).
+    if (docMember?.source === "local" && docMember.path && bridge?.writeOpened) {
+      await bridge.writeOpened(docMember.path, bytes);
+      await library.rememberLocal(docMember.path, docMember.name || file.name, bytes.byteLength).catch(() => {});
+      return { savedName: docMember.name || file.name, message: `Saved ${docMember.name || file.name}.` };
+    }
+    if (docMember?.source === "drive" && noteEntryKey && library?.entry) {
+      const entry = await library.entry(noteEntryKey).catch(() => null);
+      if (entry?.driveId && drive?.upload) {
+        await drive.upload(entry, blob);
+        await library.keepSaved(file.name, blob, { key: noteEntryKey }).catch(() => {});
+        return { savedName: file.name, message: `Saved ${file.name} to Google Drive.` };
+      }
+    }
+    if ((docMember?.source === "imported" || noteEntryKey.startsWith("imported:")) && library?.keepSaved) {
+      const entry = await library.keepSaved(file.name, blob, { key: docMember?.key || noteEntryKey });
+      return { savedName: entry.name, message: `Saved ${entry.name} in Library.` };
+    }
+    if (bridge?.saveFile) {
+      const chosen = await bridge.saveFile(file.name, bytes);
+      if (chosen?.path) {
+        await library.rememberLocal(chosen.path, chosen.name, chosen.size ?? bytes.byteLength).catch(() => {});
+        await setDocMember(localMember(chosen.path, chosen.name));
+        return { savedName: chosen.name, message: `Saved ${chosen.name}.` };
+      }
+    }
+    await download(bytes, file.name, "application/octet-stream");
+    return { savedName: file.name, message: `Downloaded ${file.name}.` };
+  },
+});
+setOfficeOpener(async (file, { mode = "edit" } = {}) => {
+  reset({ opening: true });
+  activeFileName = file.name || "Document";
+  activeDocKind = "office";
+  officeFile = file;
+  $("title").textContent = activeFileName;
+  document.title = `${activeFileName} — NoteComplete`;
+  tabBar.update({ title: activeFileName, dirty: false });
+  const opened = await officeView.open(file, { mode });
+  if (opened === false) { reset(); return false; }
+  showDocument();
+  rememberDocument();
+  documentControls();
+  status(`Opened ${activeFileName} in Euro-Office.`);
   return true;
 });
 if ($("textOpenRStudio")) {
@@ -6137,7 +6232,7 @@ $("htmlExportCopy").onclick = async () => {
 // A text document open instead of a note: studied by sections.
 function studyText() { return !doc && textView.hasDocument; }
 // The open HTML or text document, when one is open instead of a note.
-function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : webView.hasDocument ? webView : null; }
+function sideView() { return htmlView.hasDocument ? htmlView : textView.hasDocument ? textView : webView.hasDocument ? webView : officeView?.hasDocument ? officeView : null; }
 const webZoom = zoomControl({ key: "notecomplete-web-zoom", out: $("webZoomOut"), into: $("webZoomIn"), value: $("webZoomValue"), apply: (z) => webView.setZoom(z) });
 // Opens a link as a document: Recent keeps it, its group (if any) is listed beside it.
 async function openWeb(member) {
@@ -6597,6 +6692,7 @@ function showDocument() {
     $("htmlView").hidden = true;
     $("textView").hidden = true;
     $("webView").hidden = true;
+    if ($("officeView")) $("officeView").hidden = true;
     $("editor").hidden = false;
     if (panels[page]) resize();
   }

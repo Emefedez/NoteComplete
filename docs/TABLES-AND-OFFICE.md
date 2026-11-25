@@ -139,10 +139,10 @@ without a NoteComplete release.
       it is not installed (not added to `isOfficeName`); the message says they open in the
       Office suite module (Help ▸ Setup wizard ▸ Modules), and Drive/Dropbox cards say "Needs the
       Office suite module" instead of "Unsupported format".
-- [ ] Saving: the text view stays read-only (with its "save as Markdown"). Euro-Office saves
+- [D] Saving: the text view stays read-only (with its "save as Markdown"). Euro-Office saves
       OOXML and ODF back to the same file; legacy binary formats (.doc .xls .ppt) and the
       e-book/viewer formats save as a new .docx/.xlsx/.pptx beside the original, never over it.
-      Library and Drive versions record the save like any other.
+      Library and Drive versions record the save like any other (`office-view.js`, `app.js`).
 
 ### The module
 
@@ -162,13 +162,19 @@ AppImage.
       come from the module's own manifest (86 entries).
       Decision: phase 3c builds Linux x64 + arm64 first; Windows and macOS shown as
       "requires WSL2 / a container runtime" until tested on real machines.
-- [ ] Desktop main starts and stops it on localhost on demand (like `r-bridge.js`), with a
-      random port and a JWT secret it generates.
-- [ ] Editor tab: `DocsAPI.DocEditor` in a NoteComplete tab, themed light/dark, language from
-      the app; the document is served from a one-time local URL, and the save callback writes
-      the file back through the Library / Drive / Dropbox save paths.
-- [ ] Registered as an "app module" in the prefab-modules UI (`docs/PREFAB-MODULES.md`):
-      install, update, remove, show version and licence and a source link.
+- [D] Desktop main starts and stops it on localhost on demand (`apps/desktop/office-bridge.js`,
+      `office-image.js`, `office-runner/{linux,windows,macos}`), with a random port and a JWT
+      secret it generates (0600), idle stop (~10 min) and stop on quit. Linux aarch64 verified
+      end-to-end; Windows (WSL2) and macOS (container runtime) runners unit-tested with fakes
+      and untested on real machines.
+- [D] Editor tab (`apps/reader/office-view.js`): `DocsAPI.DocEditor` in a NoteComplete tab,
+      themed light/dark, language from the app, "Open as text" button; the document is served
+      from a one-time local URL, and the save callback writes the file back through the Library /
+      Drive / local save paths.
+- [D] Setup wizard & modules UI (`apps/reader/setup-modules.js`, `setup-wizard.js`): real status,
+      install with progress (~1 GB download size shown before starting), remove, version,
+      licences (AGPL-3.0-only + CC BY-SA 4.0), NOTICE text from image, and link to exact source
+      tag (`v9.3.8`); open-with menus read the installed module's manifest.
 - [ ] iPad / web PWA: optional, through the desktop's collab / tunnel server while the desktop
       is on.
 - Licence note: ONLYOFFICE disputed the fork's compliance at launch; Nextcloud updated the

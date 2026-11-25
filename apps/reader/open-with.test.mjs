@@ -114,12 +114,14 @@ test('a menu choice applies to the next opening of that file only', () => {
   assert.equal(W.takeOpenOnce('a.docx', 700000), null);
 });
 
-test('the module hook reports not installed', async () => {
-  assert.deepEqual(await officeModule.status(), { state: 'soon', installed: false });
+test('the module hook reports desktop-only without the bridge, and delegates when present', async () => {
+  assert.deepEqual(await officeModule.status(), { state: 'desktop', installed: false, detail: 'Needs the desktop app' });
   assert.equal(await officeInstalled(), false);
   assert.equal(await officeInstalled({ status: async () => ({ installed: true }) }), true);
   assert.equal(await officeInstalled({ status: async () => { throw Error('down'); } }), false);
-  await assert.rejects(officeModule.open(new Uint8Array()), /not installed/);
+  const fakeBridge = { status: async () => ({ state: 'installed', installed: true, version: '9.3.8', formats: [] }) };
+  assert.equal((await officeModule.status(fakeBridge)).installed, true);
+  await assert.rejects(officeModule.open(new Uint8Array()), /desktop app/);
 });
 
 test('the open path: defaults, menu choices, the chooser and Remember', async () => {
