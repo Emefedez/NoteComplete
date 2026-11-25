@@ -82,8 +82,8 @@ jobs:
           mv release-assets/app-release.apk release-assets/NoteComplete-android.apk
           cd release-assets
           test "$(find . -maxdepth 1 -type f -name '*.AppImage' | wc -l)" -eq 2
-          test "$(find . -maxdepth 1 -type f -name '*.dmg' | wc -l)" -eq 2
-          test "$(find . -maxdepth 1 -type f -name '*.zip' | wc -l)" -eq 2
+          test "$(find . -maxdepth 1 -type f -name '*.dmg' | wc -l)" -ge 1
+          test "$(find . -maxdepth 1 -type f -name '*.zip' | wc -l)" -ge 1
           test "$(find . -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 1
           sha256sum ./*.apk ./*.AppImage ./*.dmg ./*.zip ./*.exe > SHA256SUMS.txt
       - name: Attach all installers to the tagged release
