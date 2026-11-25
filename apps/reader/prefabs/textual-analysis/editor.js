@@ -12,6 +12,8 @@ import { KINDS, SHOWS, normalize, classify, candidateAt, findOccurrences, occurr
 import { tinyMdeHighlightGrammar, paintEditorHighlights } from '../../md-highlight.js';
 import { textFind } from '../../text-find.js';
 import { umlFromAnalysis, withLinks } from './uml-from.js';
+import { openContextMenu } from '../../context-menu.js';
+import { askRenameScope, promptRenameEverywhere } from '../../model-explorer.js';
 
 const SHOW_LABELS = { both: 'Text and table', text: 'Text only', table: 'Table only' };
 // The kind an owner has, for each kind that can have one.
@@ -49,7 +51,57 @@ export function open(root, { spec, editing, host }) {
   loadStyles();
   let model = normalize(spec);
   const past = [], future = [];
-  let view = 'text', editor = null, bar = null, area = null, typingTimer = 0, typingBase = null, lastSel = null, flashTimer = 0, destroyed = false, selected = -1;
+  let view = 'text', editor = null, bar = null, area = null, typingTimer = 0, typingBase = null, lastSel = null, flashTimer = 0, destroyed = false;
+  let selected = host.project?.focusCandidateId ? model.candidates.findIndex((c) => c.id === host.project.focusCandidateId) : -1;
+  const candidateOccurrences = (c) => (c && host.project?.getOccurrences ? (host.project.getOccurrences(c, model) || []) : []);
+  function jumpToDiagram(occ) {
+    if (!host.project?.jumpTo) return;
+    settleTyping();
+    host.project.jumpTo(occ, model);
+    host.done(model);
+  }
+  async function renameCandidateEverywhere(c, idx, nextName) {
+    const oldName = c.name;
+    if (!nextName || nextName === oldName) return;
+    change(update(model, idx, { name: nextName }), { rebuild: false });
+    host.project?.renameEverywhere?.(c, oldName, nextName, model);
+  }
+  function openCandidateMenu(ev, c, i) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (selected !== i) { selected = i; drawTable(); drawPanel(); }
+    const occs = candidateOccurrences(c);
+    const showIn = occs.length > 0 ? {
+      label: 'Show in…',
+      icon: 'link',
+      submenu: occs.map((o) => ({
+        label: o.label,
+        icon: o.module === 'textual-analysis' ? 'text' : 'uml',
+        run: () => jumpToDiagram(o),
+      })),
+    } : null;
+    const renameAll = occs.length > 0 ? {
+      label: 'Rename everywhere…',
+      icon: 'text',
+      run: async () => {
+        const res = await promptRenameEverywhere({
+          oldName: c.name,
+          occurrenceCount: occs.length + 1,
+          host: root.closest('dialog') || document.body,
+        });
+        if (res?.name && res.name !== c.name) {
+          await renameCandidateEverywhere(c, i, res.name);
+          drawTable();
+        }
+      },
+    } : null;
+    openContextMenu(ev.clientX, ev.clientY, [
+      showIn,
+      renameAll,
+      (showIn || renameAll) && '-',
+      { label: 'Remove candidate', icon: 'trash', danger: true, run: () => change(removeCandidate(model, i)) },
+    ], { title: c.name, host: root.closest('dialog') || document.body });
+  }
   const names = []; // CSS highlight names this editor registered
   const shell = editorShell(root, {
     id: 'textual-analysis',
@@ -336,7 +388,24 @@ export function open(root, { spec, editing, host }) {
     const head = make('tr', {}, ...['No.', 'Candidate Class', 'Extracted Text', 'Type', 'Description', 'Occurrence', 'Highlight', ''].map((t) => make('th', { textContent: t })));
     const rows = model.candidates.map((c, i) => {
       const name = make('input', { type: 'text', value: c.name, spellcheck: false, ariaLabel: 'Candidate class (model name)', placeholder: suggestName(c.text, c.kind) });
-      name.onchange = () => change(update(model, i, { name: name.value.trim() || suggestName(c.text, c.kind) }), { rebuild: false });
+      name.onchange = async () => {
+        const oldName = c.name;
+        const nextName = name.value.trim() || suggestName(c.text, c.kind);
+        change(update(model, i, { name: nextName }), { rebuild: false });
+        if (nextName !== oldName) {
+          const occs = candidateOccurrences(c);
+          if (occs.length > 0) {
+            const scope = await askRenameScope({
+              oldName,
+              newName: nextName,
+              otherCount: occs.length,
+              otherLabels: occs.map((o) => o.label),
+              host: root.closest('dialog') || document.body,
+            });
+            if (scope === 'everywhere') host.project?.renameEverywhere?.(c, oldName, nextName, model);
+          }
+        }
+      };
       name.onkeydown = (e) => { if (e.key === 'Enter') name.blur(); };
       const text = make('input', { type: 'text', value: [c.text, ...(c.aliases || [])].join(', '), spellcheck: false, ariaLabel: 'Extracted text', title: 'The words it stands for in the text (another candidate’s words merge the two)' });
       text.onchange = () => { const [first] = text.value.split(','); change(setText(model, i, first)); };
@@ -368,6 +437,7 @@ export function open(root, { spec, editing, host }) {
         if (selected !== i) { selected = i; table.querySelectorAll('tr.selected').forEach((r) => r.classList.remove('selected')); tr.classList.add('selected'); drawPanel(); }
         if (!e.target.closest('button, select, input[type="color"]')) flash(i);
       });
+      tr.addEventListener('contextmenu', (e) => openCandidateMenu(e, c, i));
       return tr;
     });
     const empty = !rows.length && make('p', { className: 'ta-empty', textContent: 'No candidates yet. Select words in the text and press a type above it (or Alt and its number).' });
@@ -387,8 +457,23 @@ export function open(root, { spec, editing, host }) {
       make('div', { className: 'ta-folder-name', textContent: folder || 'Candidate Items' }),
       ...list.map((i) => {
         const c = model.candidates[i];
-        const item = make('button', { type: 'button', className: `ta-tree-item${i === selected ? ' selected' : ''}`, role: 'treeitem', title: c.uml?.length ? `In ${new Set(c.uml.map((u) => u.diagram)).size} UML diagram(s)` : '' }, iconSvg(c.kind), make('span', { textContent: c.name }), c.uml?.length ? make('small', { className: 'ta-uml-mark', textContent: 'UML' }) : null, make('small', { textContent: String(counts[i]) }));
+        const occs = candidateOccurrences(c);
+        const linkCount = occs.length || (c.uml?.length ? new Set(c.uml.map((u) => u.diagram)).size : 0);
+        const umlMark = linkCount ? make('small', {
+          className: `ta-uml-mark${occs.length ? ' linked' : ''}`,
+          textContent: linkCount > 1 ? `UML · ${linkCount}` : 'UML',
+          title: occs.length ? 'Click to jump to linked UML diagram' : `In ${linkCount} UML diagram(s)`,
+        }) : null;
+        if (umlMark && occs.length) {
+          umlMark.onclick = (ev) => {
+            ev.stopPropagation();
+            if (occs.length === 1) jumpToDiagram(occs[0]);
+            else openCandidateMenu(ev, c, i);
+          };
+        }
+        const item = make('button', { type: 'button', className: `ta-tree-item${i === selected ? ' selected' : ''}`, role: 'treeitem', title: linkCount ? `In ${linkCount} UML diagram(s) — right-click for Show in…` : '' }, iconSvg(c.kind), make('span', { textContent: c.name }), umlMark, make('small', { textContent: String(counts[i]) }));
         item.onclick = () => { selected = i; drawTable(); drawPanel(); flash(i); };
+        item.oncontextmenu = (ev) => openCandidateMenu(ev, c, i);
         return item;
       }))));
     const c = model.candidates[selected];
@@ -403,8 +488,15 @@ export function open(root, { spec, editing, host }) {
       const owner = ownerKind ? selectInput([['', ownerKind === 'class' ? 'No class' : 'No actor'], ...owners.map((o) => [o.name, o.name])], c.owner || '', (value) => change(update(model, selected, { owner: value }))) : null;
       const others = model.candidates.map((o, j) => [String(j), o.name]).filter(([j]) => Number(j) !== selected);
       const mergeInto = others.length ? selectInput([['', 'Merge into…'], ...others], '', (j) => { if (j !== '') { const into = Number(j); selected = into > selected ? into - 1 : into; change(merge(model, model.candidates.indexOf(c), into)); } }) : null;
+      const occs = candidateOccurrences(c);
+      const showInLinks = occs.length ? make('div', { className: 'ta-links' }, ...occs.map((o) => {
+        const b = make('button', { type: 'button', className: 'ta-link-btn', textContent: o.label, title: `Jump to ${o.label}` });
+        b.onclick = () => jumpToDiagram(o);
+        return b;
+      })) : null;
       details = [
         make('h4', { textContent: `Selected: ${c.name}` }),
+        showInLinks && field('Show in…', showInLinks, 'Linked UML diagrams for this candidate'),
         field('Folder', make('div', {}, folder, folderList), 'Groups it in the tree above'),
         owner && field(ownerKind === 'class' ? 'Belongs to class' : 'Used by actor', owner, ownerKind === 'class' ? 'Its compartment in the class diagram' : 'An association in the use case diagram'),
         mergeInto && field('Merge', mergeInto, 'Its extracted text then counts for the other candidate'),

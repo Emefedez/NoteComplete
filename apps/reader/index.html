@@ -20,7 +20,7 @@
   /><link rel="apple-touch-icon" href="./apple-touch-icon.png" /><meta
     name="apple-mobile-web-app-title"
     content="NoteComplete"
-  /><link rel="stylesheet" href="./style.css" /><link rel="stylesheet" href="./setup-wizard.css" />
+  /><link rel="stylesheet" href="./style.css" /><link rel="stylesheet" href="./setup-wizard.css" /><link rel="stylesheet" href="./model-explorer.css" />
   <header class="chrome command-bar" id="commandBar">
     <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and cloud storage"></button>
     <button id="tabCount" class="tab-count" type="button" aria-haspopup="menu" aria-expanded="false" title="Open tabs" hidden>1</button>
@@ -78,6 +78,7 @@
           <button data-proxy="pagesToggle" data-icon="pages">Page list<kbd>Shift P</kbd></button>
           <button data-proxy="layersToggle" data-icon="layers">Layers</button>
           <button data-proxy="notesToggle" data-icon="note">Notes<kbd>N</kbd></button>
+          <button id="modelExplorerToggle" data-icon="uml" role="menuitemcheckbox" aria-checked="false" data-palette="Model Explorer" title="Show or hide the Model Explorer panel (UML elements and Textual Analysis across the note)">Model Explorer</button>
           <button id="viewExamHtml" data-icon="exam" hidden data-palette="Interactive exam HTML" title="View or edit the interactive HTML version saved inside this .nfedit exam">Interactive exam HTML</button>
           <button id="toolsToggle" data-icon="menu" role="menuitemcheckbox" aria-checked="true" data-palette="Show or hide the tool bar" title="The row of tools and their settings; with it hidden, use the quick menu (Shift + S, a pen's button or two fingers held still)">Show tool bar<kbd>Shift T</kbd></button>
           <hr />
@@ -1223,6 +1224,7 @@
           <p class="muted">Choose where to draw.</p>
           <div id="layersList"></div>
         </aside>
+        <aside id="modelExplorerPanel" class="chrome model-explorer-panel" aria-label="Model Explorer" hidden></aside>
       </div>
 
       <p id="warnings" class="muted"></p>

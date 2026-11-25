@@ -49,3 +49,7 @@
 ::highlight(ta-flash) { background-color: #ff8a00; color: #000; }
 .ta-note { font-size: 11.5px; color: var(--k-muted); }
 .ta-uml-mark { padding: 0 4px; border: 1px solid var(--k-line); border-radius: 4px; font-size: 9.5px; }
+.ta-uml-mark.linked { background: var(--k-soft); border-color: color-mix(in srgb, var(--k-accent) 45%, var(--k-line)); color: var(--k-accent); font-weight: 600; cursor: pointer; }
+.ta-links { display: grid; gap: 4px; }
+.ta-link-btn { width: 100%; padding: 4px 7px; border: 1px solid var(--k-line); border-radius: 5px; background: var(--k-surface); color: var(--k-accent); font: inherit; font-size: 12px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ta-link-btn:hover { background: var(--k-soft); border-color: var(--k-accent); }
