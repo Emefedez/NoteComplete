@@ -5674,16 +5674,19 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
 }
 
 /* Open with (open-with-ui.js): the chooser shown when a kind's default is "Ask each time". */
-.open-with-dialog { width: min(440px, calc(100vw - 24px)); }
+.open-with-dialog { width: min(560px, calc(100vw - 24px)); }
 .open-with-dialog .open-with-name { margin: -4px 0 12px; overflow-wrap: anywhere; }
-.open-with-choices { display: grid; gap: 6px; margin-bottom: 12px; }
-.open-with-choice { display: flex; align-items: flex-start; justify-content: flex-start; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
+/* Choices side by side (like the UML editor's tools), each with its number key. */
+.open-with-choices { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 12px; }
+.open-with-choice { display: grid; align-content: start; gap: 4px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--fill); color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
 .open-with-choice:hover:not(:disabled), .open-with-choice:focus-visible { border-color: var(--accent); background: var(--accent-soft); }
 .open-with-choice:disabled { opacity: .55; cursor: default; }
-.open-with-choice > svg { width: 20px; height: 20px; flex: none; margin-top: 1px; color: var(--accent); }
-.open-with-choice-text { display: grid; gap: 2px; min-width: 0; }
-.open-with-choice-text strong { font-size: 13px; }
-.open-with-choice-text span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.open-with-choice-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.open-with-choice-head > svg { width: 20px; height: 20px; color: var(--accent); }
+.open-with-dialog kbd { padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--muted); font: 600 10px/1.5 ui-monospace, Menlo, monospace; }
+.open-with-choice strong { font-size: 13px; }
+.open-with-choice-about { font-size: 12px; color: var(--muted); line-height: 1.4; }
+@media (max-width: 480px) { .open-with-choices { grid-auto-flow: row; } }
 .open-with-dialog .open-with-install { margin: -4px 0 12px; font-size: 12px; }
 .open-with-remember { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
 .open-with-dialog .ocr-actions { align-items: center; }

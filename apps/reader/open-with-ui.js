@@ -41,20 +41,23 @@ export function askOpener(name, decision, { installed = false, doc = globalThis.
     const remember = make('input', { type: 'checkbox' });
     const kindName = KIND_NAMES[decision.kind] || 'these files';
     let result = null;
-    const choices = make('div', { className: 'open-with-choices' }, ...decision.openers.map((o) => {
+    // Side by side like the UML editor's tools, each with its number key (1, 2, …).
+    const choices = make('div', { className: 'open-with-choices' }, ...decision.openers.map((o, i) => {
       const b = make('button', { type: 'button', className: 'open-with-choice', disabled: !o.available },
-        icon(o.id === 'text' ? 'text' : 'office'),
-        make('span', { className: 'open-with-choice-text' }, make('strong', { textContent: o.label }), make('span', { textContent: describe(o, installed) })));
+        make('span', { className: 'open-with-choice-head' }, icon(o.id === 'text' ? 'text' : 'office'), make('kbd', { textContent: String(i + 1) })),
+        make('strong', { textContent: o.label }),
+        make('span', { className: 'open-with-choice-about', textContent: describe(o, installed) }));
       b.dataset.opener = o.id;
+      b.title = `${o.label} (${i + 1})`;
       b.onclick = () => { result = { opener: o.id, remember: remember.checked }; dialog.close(); };
       return b;
     }));
     const missing = decision.openers.some((o) => !o.available);
-    const install = make('button', { type: 'button', className: 'link', textContent: `Euro-Office: ${INSTALL_HINT}` });
+    const install = make('button', { type: 'button', className: 'link', textContent: `Euro-Office: ${INSTALL_HINT} (I)` });
     install.onclick = () => { dialog.close(); setTimeout(openSetupModules, 0); };
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     cancel.onclick = () => dialog.close();
-    const rememberRow = make('label', { className: 'open-with-remember' }, remember, ` Remember for ${kindName}`);
+    const rememberRow = make('label', { className: 'open-with-remember' }, remember, ` Remember for ${kindName} `, make('kbd', { textContent: 'R' }));
     rememberRow.hidden = !OFFICE_KINDS.includes(decision.kind);
     dialog.append(
       make('h2', { id: 'openWithTitle', textContent: 'Open with' }),
@@ -62,6 +65,23 @@ export function askOpener(name, decision, { installed = false, doc = globalThis.
       choices,
       ...(missing ? [make('p', { className: 'open-with-install' }, install)] : []),
       make('div', { className: 'ocr-actions' }, rememberRow, make('span', { className: 'spacer' }), cancel));
+    // Keys: 1–9 open with that choice, R remembers, I installs Euro-Office, ← → move between
+    // choices (Enter opens the focused one; Esc cancels, as in every dialog).
+    dialog.addEventListener('keydown', (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const buttons = [...choices.querySelectorAll('button')];
+      const n = /^[1-9]$/.test(e.key) ? Number(e.key) - 1 : -1;
+      if (n >= 0) { e.preventDefault(); if (buttons[n] && !buttons[n].disabled) buttons[n].click(); return; }
+      const key = e.key.toLowerCase();
+      if (key === 'r' && !rememberRow.hidden) { e.preventDefault(); remember.checked = !remember.checked; return; }
+      if (key === 'i' && missing) { e.preventDefault(); install.click(); return; }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        const enabled = buttons.filter((b) => !b.disabled);
+        const at = enabled.indexOf(doc.activeElement);
+        const next = enabled[(at + (e.key === 'ArrowRight' ? 1 : -1) + enabled.length) % enabled.length];
+        if (next) { e.preventDefault(); next.focus(); }
+      }
+    });
     dialog.addEventListener('close', () => { dialog.remove(); resolve(result); });
     doc.body.append(dialog);
     dialog.showModal();
