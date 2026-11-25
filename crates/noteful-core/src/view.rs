@@ -1,7 +1,9 @@
 //! What a host draws for a page: `Editor::view`.
 use crate::{
     editor::{added_svg, Edit, Line},
-    manipulation::{adjusted_line, bounds, item_svg},
+    manipulation::{
+        adjusted_line, bounds, item_svg, sort_stack, stack_place, IMPORTED, OVER, UNDER,
+    },
     Adjustment, Editor, Error, Image, Layer, Page, Part, PdfBackground, Result,
 };
 use serde_json::{json, Value};
@@ -19,6 +21,13 @@ struct Added<'a> {
     /// The line as drawn, or the one a later resize of its shape replaced it with.
     line: &'a Line,
     replaced: bool,
+}
+
+/// One item of a layer, as `page_content` draws it in stacking order.
+enum Drawn<'a, 'b> {
+    Line(&'b Added<'a>),
+    Image(&'b String, &'a Image),
+    Imported(&'b crate::scene::Item),
 }
 
 /// What the applied history says about one page, read in one walk.
@@ -236,6 +245,8 @@ impl Editor {
         // (keeping its own layer's opacity).
         let mut tapes = String::new();
         // Writing to a String cannot fail, so the results of `write!` are dropped.
+        // Without a place set by Bring to front and the like, the order they were made in.
+        let stacked = adjustments.values().any(|a| a.z.is_some());
         for layer in facts.layers.iter().filter(|l| l.visible) {
             let mut layer_tapes = String::new();
             let _ = write!(
@@ -257,76 +268,143 @@ impl Editor {
                         && !deleted.contains(id.as_str())
                 })
             };
-            // Under-ink additions (highlighter fills, sticky note cards) go below the layer's ink,
-            // in the order they were made.
-            let mut under_pictures = images_in_layer(true).peekable();
-            let mut under_lines = added_in_layer(true).peekable();
-            loop {
-                let picture_first = match (under_pictures.peek(), under_lines.peek()) {
-                    (None, None) => break,
-                    (Some(_), None) => true,
-                    (None, Some(_)) => false,
-                    (Some((id, _)), Some(a)) => {
-                        crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
+            if stacked {
+                // Some item was brought forward or sent back: the layer's items by their place.
+                let mut entries = Vec::new();
+                for a in facts.added.iter() {
+                    if a.line.layer == layer.id && !deleted.contains(a.id.as_str()) {
+                        let made = [if a.line.under { UNDER } else { OVER }, a.index as f64];
+                        let place = stack_place(made, adjustments.get(a.id.as_str()).copied());
+                        entries.push((place, made, Drawn::Line(a)));
                     }
-                };
-                if picture_first {
-                    let (id, image) = under_pictures.next().unwrap();
-                    let svg = item_svg(
-                        &image.item(id.clone()),
-                        adjustments.get(id.as_str()).copied(),
-                    )?;
-                    let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
-                } else {
-                    let a = under_lines.next().unwrap();
-                    let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                    write_added(&mut content, &a.id, &svg, false);
                 }
-                added += 1;
-            }
-            for item in p.items.iter().filter(|i| i.layer == layer.id) {
-                if !deleted.contains(item.id.as_str()) {
-                    let target = if item.tape().is_some() {
-                        &mut layer_tapes
-                    } else {
-                        &mut content
+                for (id, image) in facts.images.iter() {
+                    if image.layer == layer.id && !deleted.contains(id.as_str()) {
+                        let made = [
+                            if image.under { UNDER } else { OVER },
+                            crate::editor::edit_index(id) as f64,
+                        ];
+                        let place = stack_place(made, adjustments.get(id.as_str()).copied());
+                        entries.push((place, made, Drawn::Image(id, image)));
+                    }
+                }
+                for (i, item) in p.items.iter().enumerate() {
+                    if item.layer == layer.id && !deleted.contains(item.id.as_str()) {
+                        let made = [IMPORTED, i as f64];
+                        let place = stack_place(made, adjustments.get(item.id.as_str()).copied());
+                        entries.push((place, made, Drawn::Imported(item)));
+                    }
+                }
+                sort_stack(&mut entries);
+                for (_, _, entry) in entries {
+                    match entry {
+                        Drawn::Line(a) => {
+                            let svg = added_fragment(
+                                &mut kept,
+                                a,
+                                adjustments.get(a.id.as_str()).copied(),
+                            );
+                            if a.line.tool == 2 && !a.line.under {
+                                write_added(&mut layer_tapes, &a.id, &svg, true);
+                            } else {
+                                write_added(&mut content, &a.id, &svg, false);
+                            }
+                            added += 1;
+                        }
+                        Drawn::Image(id, image) => {
+                            let svg = item_svg(
+                                &image.item(id.clone()),
+                                adjustments.get(id.as_str()).copied(),
+                            )?;
+                            let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
+                            added += 1;
+                        }
+                        Drawn::Imported(item) => {
+                            let target = if item.tape().is_some() {
+                                &mut layer_tapes
+                            } else {
+                                &mut content
+                            };
+                            let svg = item_svg(item, adjustments.get(item.id.as_str()).copied())?;
+                            let _ = write!(target, "<g data-item=\"{}\">{svg}</g>", item.id);
+                            imported += 1;
+                        }
+                    }
+                }
+            } else {
+                // Under-ink additions (highlighter fills, sticky note cards) go below the layer's ink,
+                // in the order they were made.
+                let mut under_pictures = images_in_layer(true).peekable();
+                let mut under_lines = added_in_layer(true).peekable();
+                loop {
+                    let picture_first = match (under_pictures.peek(), under_lines.peek()) {
+                        (None, None) => break,
+                        (Some(_), None) => true,
+                        (None, Some(_)) => false,
+                        (Some((id, _)), Some(a)) => {
+                            crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
+                        }
                     };
-                    let svg = item_svg(item, adjustments.get(item.id.as_str()).copied())?;
-                    let _ = write!(target, "<g data-item=\"{}\">{svg}</g>", item.id);
-                    imported += 1;
-                }
-            }
-            // Added pictures, text boxes and ink in the order they were made: a text box added
-            // after a stroke is over it, and a stroke added after it is over the box. Both ids
-            // carry their place in the history, so no order is stored.
-            let mut pictures = images_in_layer(false).peekable();
-            let mut lines = added_in_layer(false).peekable();
-            loop {
-                let picture_first = match (pictures.peek(), lines.peek()) {
-                    (None, None) => break,
-                    (Some(_), None) => true,
-                    (None, Some(_)) => false,
-                    (Some((id, _)), Some(a)) => {
-                        crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
-                    }
-                };
-                if picture_first {
-                    let (id, image) = pictures.next().unwrap();
-                    let svg = item_svg(
-                        &image.item(id.clone()),
-                        adjustments.get(id.as_str()).copied(),
-                    )?;
-                    let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
-                } else {
-                    let a = lines.next().unwrap();
-                    let svg = added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
-                    if a.line.tool == 2 {
-                        write_added(&mut layer_tapes, &a.id, &svg, true);
+                    if picture_first {
+                        let (id, image) = under_pictures.next().unwrap();
+                        let svg = item_svg(
+                            &image.item(id.clone()),
+                            adjustments.get(id.as_str()).copied(),
+                        )?;
+                        let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
                     } else {
+                        let a = under_lines.next().unwrap();
+                        let svg =
+                            added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
                         write_added(&mut content, &a.id, &svg, false);
                     }
+                    added += 1;
                 }
-                added += 1;
+                for item in p.items.iter().filter(|i| i.layer == layer.id) {
+                    if !deleted.contains(item.id.as_str()) {
+                        let target = if item.tape().is_some() {
+                            &mut layer_tapes
+                        } else {
+                            &mut content
+                        };
+                        let svg = item_svg(item, adjustments.get(item.id.as_str()).copied())?;
+                        let _ = write!(target, "<g data-item=\"{}\">{svg}</g>", item.id);
+                        imported += 1;
+                    }
+                }
+                // Added pictures, text boxes and ink in the order they were made: a text box added
+                // after a stroke is over it, and a stroke added after it is over the box. Both ids
+                // carry their place in the history, so no order is stored.
+                let mut pictures = images_in_layer(false).peekable();
+                let mut lines = added_in_layer(false).peekable();
+                loop {
+                    let picture_first = match (pictures.peek(), lines.peek()) {
+                        (None, None) => break,
+                        (Some(_), None) => true,
+                        (None, Some(_)) => false,
+                        (Some((id, _)), Some(a)) => {
+                            crate::editor::edit_index(id) < crate::editor::edit_index(&a.id)
+                        }
+                    };
+                    if picture_first {
+                        let (id, image) = pictures.next().unwrap();
+                        let svg = item_svg(
+                            &image.item(id.clone()),
+                            adjustments.get(id.as_str()).copied(),
+                        )?;
+                        let _ = write!(content, "<g data-item=\"{id}\">{svg}</g>");
+                    } else {
+                        let a = lines.next().unwrap();
+                        let svg =
+                            added_fragment(&mut kept, a, adjustments.get(a.id.as_str()).copied());
+                        if a.line.tool == 2 {
+                            write_added(&mut layer_tapes, &a.id, &svg, true);
+                        } else {
+                            write_added(&mut content, &a.id, &svg, false);
+                        }
+                    }
+                    added += 1;
+                }
             }
             content.push_str("</g>");
             if !layer_tapes.is_empty() {
@@ -507,7 +585,8 @@ impl Editor {
     /// gives now.
     ///
     /// `id` is always there. The rest is left out when the host should ask for the view
-    /// (tape laid under the ink, which is listed as tape but drawn as ink).
+    /// (tape laid under the ink, which is listed as tape but drawn as ink; a line under the
+    /// ink of a page whose items were restacked).
     ///
     /// - `item`: the line's `<g data-item>` element, as it is in the view's `svg`.
     /// - `layer`, and where the element goes: `tape` in the layer's `data-tapes` group
@@ -526,7 +605,9 @@ impl Editor {
         let id = format!("new:{index}");
         let mut out = json!({"id": id, "page": page, "slot": page});
         let tape = line.tool == 2;
-        if tape && line.under {
+        // Tape laid under the ink, or a line under the ink of a page where an item was sent
+        // back or brought forward (its place depends on theirs): the host asks for the view.
+        if line.under && (tape || self.adjustments(page).values().any(|a| a.z.is_some())) {
             return Ok(out);
         }
         // The element that follows a line under the ink: the layer's first imported item,
