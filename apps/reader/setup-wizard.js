@@ -13,7 +13,7 @@ import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } 
 
 export const SETUP_KEY = 'notecomplete-setup';
 // Raised when steps are added that everyone should see once.
-export const SETUP_VERSION = 1;
+export const SETUP_VERSION = 2;
 export const GITHUB_URL = 'https://github.com/Emefedez';
 const CLAIM_KEY = 'notecomplete-setup-claim';
 const AI_KEY = 'notecomplete-ai-provider';
