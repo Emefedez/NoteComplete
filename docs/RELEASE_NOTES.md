@@ -1,3 +1,7 @@
+## What's new in 1.2.92
+
+- **Fix Euro-Office background memory leaks.** `stop.sh` now forcefully terminates the `unshare` namespace and `pasta` after a short grace period so Euro-Office never lingers after NoteComplete closes, stale PIDs from crashed runs are cleaned up on startup and before launch, and idle shutdown is shortened to 3 minutes.
+
 ## What's new in 1.2.91
 
 - **Remember last reading position.** Notes, PDFs, and text/Markdown documents now remember their last page and scroll position on this device and restore it when reopened from Recents.

@@ -687,6 +687,7 @@ app.whenReady().then(async () => {
     return created;
   }));
   // Euro-Office module IPC (office-bridge.js).
+  void officeBridge.cleanupStale?.().catch(() => {});
   void officeBridge.status().then((s) => setEuroOfficeMenuEntry(Boolean(s?.installed))).catch(() => {});
   ipcMain.handle('office:status', guarded(() => officeBridge.status()));
   ipcMain.handle('office:install', guarded(async (event) => {

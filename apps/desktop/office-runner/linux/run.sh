@@ -10,6 +10,9 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOTFS=$1; STATE=$2; PORT=$3; HOSTGW=${4:-169.254.1.2}
 [ -n "${JWT_SECRET:-}" ] || { echo "JWT_SECRET is not set" >&2; exit 2; }
 mkdir -p "$STATE"
+if [ -f "$STATE/unshare.pid" ] || [ -f "$STATE/pasta.pid" ]; then
+  sh "$HERE/stop.sh" "$STATE" >/dev/null 2>&1 || true
+fi
 rm -f "$STATE/unshare.pid" "$STATE/child.pid" "$STATE/pasta.pid"
 export JWT_SECRET GENERATE_FONTS="${GENERATE_FONTS:-true}"
 unshare --map-auto --map-root-user --mount --pid --fork --net --uts --ipc --kill-child \

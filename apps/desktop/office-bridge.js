@@ -22,7 +22,7 @@ export { OFFICE_IMAGE, imageArch, imageRef };
 const CONTAINER_NAME = 'notecomplete-euro-office';
 const WSL_DISTRO = 'NoteComplete-EuroOffice';
 const PASTA_HOST_GW = '169.254.1.2';
-const DEFAULT_IDLE_MS = 10 * 60 * 1000;
+const DEFAULT_IDLE_MS = 3 * 60 * 1000;
 const CONVERTER_CONFIG = JSON.stringify({ FileConverter: { converter: { maxprocesscount: 0.5 } } }, null, 2) + '\n';
 
 const FALLBACK_DOC_TYPE = {
@@ -822,12 +822,20 @@ export function createOfficeBridge({
     throw Error(`Could not find a blank .${cleanExt} template in the Euro-Office module.`);
   }
 
+  async function cleanupStale() {
+    if (running || starting || platform !== 'linux') return;
+    if (!exists(path.join(stateDir, 'unshare.pid')) && !exists(path.join(stateDir, 'pasta.pid'))) return;
+    const stopSh = path.join(runnerDir, 'linux', 'stop.sh');
+    await run('sh', [stopSh, stateDir], { timeoutMs: 10000 }).catch(() => {});
+  }
+
   return {
     status,
     install,
     uninstall,
     start,
     stop,
+    cleanupStale,
     openDocument,
     blankTemplate,
     forcesave,
