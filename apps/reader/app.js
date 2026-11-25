@@ -87,6 +87,7 @@ import { syncStickyNotes, stickyAt } from "./sticky-notes.js";
 import { createMathBar } from "./math/math-bar.js";
 import { openNewRDialog } from "./math/new-r-dialog.js";
 import { openContextMenu, closeContextMenu } from "./context-menu.js";
+import { MAX_ROWS as TABLE_MAX_ROWS, MAX_COLUMNS as TABLE_MAX_COLUMNS } from "./table.js";
 import { audioTrim } from "./audio-trim.js";
 import { globalAudioController } from "./global-audio.js";
 import { androidUpdates } from "./android-updates.js";
@@ -5869,6 +5870,7 @@ const textView = textViewer({
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   editPrefab: (spec) => figureEditor(spec, { editing: true }),
+  tableToPage: (info) => tableToPage(info),
   // A relative link to another file opens it here, from this file's folder.
   openLink: (href) => {
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return status(`NoteComplete cannot open ${href.split(":")[0]}: links.`, true);
@@ -5982,28 +5984,28 @@ async function insertOpenDiagramIntoNote(openTargetNote) {
     await importImages([payload.file]);
   }
 }
-$("textIntoNote").onclick = async () => {
-  if (!textView.hasDocument || !textView.diagram) return;
-  const rect = $("textIntoNote").getBoundingClientRect();
+// The notes something from the open document can go into: the last note, recent ones, a new
+// blank note or a file to choose. insert(openTargetNote) opens the one picked and puts it there.
+async function noteTargetEntries(insert, blankTitle) {
   const recent = (await library.recent(12).catch(() => [])).filter((e) => e && e.source !== "web" && /\.(noteful|nfedit|notecomp(lete)?|notepart)$/i.test(e.name || ""));
   const entries = [];
   if (lastNoteMember) {
-    entries.push({ label: `Insert into ${lastNoteMember.name}`, icon: "note", run: () => insertOpenDiagramIntoNote(() => openMember(lastNoteMember)) });
+    entries.push({ label: `Insert into ${lastNoteMember.name}`, icon: "note", run: () => insert(() => openMember(lastNoteMember)) });
     entries.push("-");
   }
   for (const e of recent) {
     if (lastNoteMember && (e.key === lastNoteMember.key || (e.path && e.path === lastNoteMember.path))) continue;
-    entries.push({ label: entryTitle(e), icon: "note", run: () => insertOpenDiagramIntoNote(async () => { const f = await library.open(e); if (f) await openFromLibrary(f, e); }) });
+    entries.push({ label: entryTitle(e), icon: "note", run: () => insert(async () => { const f = await library.open(e); if (f) await openFromLibrary(f, e); }) });
   }
   if (entries.length) entries.push("-");
   entries.push({
     label: "New blank note",
     icon: "plus",
-    run: () => insertOpenDiagramIntoNote(async () => {
+    run: () => insert(async () => {
       if (!canReplace()) return;
       let format = "project";
       try { format = newFormat(localStorage.getItem("notecomplete-new-format")); } catch { /* Optional. */ }
-      const title = (textView.name || "Diagram").replace(/\.[^.]+$/, "");
+      const title = (textView.name || blankTitle).replace(/\.[^.]+$/, "");
       const seed = crypto.getRandomValues(new Uint8Array(16));
       notePath = noteEntryKey = ""; setDocMember(null);
       await load(new File([seed], `${title}${SAVE_EXT[format]}`), { kind: "blank", title, sizes: [PRESETS.a4.mm.map(mmToUnits)], bytes: new ArrayBuffer(0), saveAs: format, canvas: false });
@@ -6012,10 +6014,33 @@ $("textIntoNote").onclick = async () => {
   entries.push({
     label: "Choose a note file…",
     icon: "open",
-    run: () => insertOpenDiagramIntoNote(() => openLocal()),
+    run: () => insert(() => openLocal()),
   });
-  openContextMenu(rect.left, rect.bottom + 4, entries, { title: "Insert diagram into note" });
+  return entries;
+}
+$("textIntoNote").onclick = async () => {
+  if (!textView.hasDocument || !textView.diagram) return;
+  const rect = $("textIntoNote").getBoundingClientRect();
+  openContextMenu(rect.left, rect.bottom + 4, await noteTargetEntries(insertOpenDiagramIntoNote, "Diagram"), { title: "Insert diagram into note" });
 };
+// A table of the open document on a page of a note (table-filter.js: the rows shown, in their
+// order, cut to what a page table holds). The table editor opens with it, to check and insert.
+async function tableToPage({ value, total, kept, head = 1, filtered, filter, x, y }) {
+  const cut = kept.rows < total.rows || kept.columns < total.columns;
+  // Rows counted without the header, as the table's bar counts them.
+  const rows = (n) => `${n} ${filtered ? "rows shown" : "rows"}`;
+  const title = cut
+    ? `A page table holds up to ${TABLE_MAX_ROWS} rows and ${TABLE_MAX_COLUMNS} columns. Put the header and the first ${rows(kept.rows - head)} of ${total.rows - head}${kept.columns < total.columns ? `, the first ${kept.columns} of ${total.columns} columns,` : ""} on a page of:`
+    : `Put this table (${rows(total.rows - head)}) on a page of:`;
+  const insert = async (openTargetNote) => {
+    await openTargetNote();
+    if (!doc || !panels[page] || !ensureEditableLayer()) return;
+    await insertCompound(panels[page], "table", null, value);
+  };
+  const entries = await noteTargetEntries(insert, "Table");
+  if (cut && filter) entries.unshift({ label: "Choose the rows with the filter first", icon: "search", run: filter }, "-");
+  openContextMenu(x, y, entries, { title });
+}
 $("htmlSave").onclick = async () => {
   if (embeddedExam?.active && doc) {
     await save(false, saveAs === "noteful" ? "noteful" : "project", null, { inPlace: true });

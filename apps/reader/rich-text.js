@@ -1,7 +1,8 @@
 // Markdown from AI answers and notes: HTML from the Rust core (raw HTML shown
-// as text), formulas typeset by KaTeX, which loads only when there is math, and
+// as text, but for a document's tables with merged cells: html-table.js), formulas typeset by KaTeX, which loads only when there is math, and
 // fenced code coloured by its language (code-highlight.js).
 import { decorateCodeBlocks } from './code-highlight.js';
+import { htmlTablesToPipes, applyTableMerges } from './html-table.js';
 
 let katex = null;
 const aiFiles = new Map();
@@ -90,12 +91,17 @@ export function loadKatex() {
 // `document`: a text document's own Markdown, whose links are not AI page or image
 // references (text-view.js follows them); web links still open in the browser.
 export async function renderMarkdown(element, text, toHtml, { document: own = false, imageUrl = null } = {}) {
-  const html = await toHtml(normalizeMarkdown(text, { links: !own }));
+  // A document's HTML tables with merged cells (office.js writes them) are the one piece of
+  // raw HTML read as markup: rebuilt from their cells, spans only (html-table.js).
+  const marker = `NCTABLE${Math.random().toString(36).slice(2, 10)}`;
+  const tables = own ? htmlTablesToPipes(text, marker) : { text, tables: [] };
+  const html = await toHtml(normalizeMarkdown(tables.text, { links: !own }));
   // Parsed apart from the page, so no picture is fetched before it is settled: a picture
   // beside the document is shown through `imageUrl(path)` (a URL, or null) in a document, and
   // is only its description elsewhere (AI answers, notes), where no file sits beside the text.
   const inert = element.ownerDocument.implementation.createHTMLDocument('').createElement('div');
   inert.innerHTML = html;
+  applyTableMerges(inert, marker, tables.tables);
   await Promise.all([...inert.querySelectorAll('img')].map(async (img) => {
     const src = img.getAttribute('src') || '';
     if (/^(https:|data:image\/)/i.test(src)) return;
