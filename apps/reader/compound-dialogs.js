@@ -4,7 +4,7 @@
 // with a live preview, then drawn (again) on the page as one undo step. The math keypad
 // (math-keypad.js) types into a graph's function fields, inside the window.
 import { graphSpec, graphItems } from './graph.js';
-import { tableSpec, resized, TINTS, BACKGROUNDS, MAX_ROWS, MAX_COLUMNS, mergeAt, anchorOf, mergeArea, mergeCells, splitCell, shiftMerges } from './table.js';
+import { tableSpec, resized, TINTS, BACKGROUNDS, MAX_ROWS, MAX_COLUMNS, mergeAt, anchorOf, mergeArea, mergeCells, splitCell, insertLines, deleteLines } from './table.js';
 import { icon } from './icons.js';
 import { loadKatex } from './rich-text.js';
 import { movableWindow } from './prefabs/kit/window.js';
@@ -174,7 +174,6 @@ export function editTable({ spec = {}, editing = false } = {}) {
     // from one cell to another, or null.
     let at = [0, 0], sel = null;
     const span = () => { const m = mergeAt(value, ...at); return m ? [m[2], m[3]] : [1, 1]; };
-    const newRow = (cells) => cells[0].map(() => '');
     const mergeButton = iconButton('cellsMerge', 'Merge cells (select them first: Shift + click, Shift + arrows or drag)', () => {
       if (!sel) return;
       const area = mergeArea(value, sel.from, sel.to);
@@ -187,12 +186,12 @@ export function editTable({ spec = {}, editing = false } = {}) {
       draw(at);
     });
     const tools = make('div', { className: 'table-tools' },
-      iconButton('rowAbove', 'Row above', () => change((c, m) => { c.splice(at[0], 0, newRow(c)); return shiftMerges(m, 0, at[0], 1); }, at)),
-      iconButton('rowBelow', 'Row below', () => { const below = at[0] + span()[0]; change((c, m) => { c.splice(below, 0, newRow(c)); return shiftMerges(m, 0, below, 1); }, [below, at[1]]); }),
-      iconButton('colLeft', 'Column left', () => change((c, m) => { c.forEach((r) => r.splice(at[1], 0, '')); return shiftMerges(m, 1, at[1], 1); }, at)),
-      iconButton('colRight', 'Column right', () => { const right = at[1] + span()[1]; change((c, m) => { c.forEach((r) => r.splice(right, 0, '')); return shiftMerges(m, 1, right, 1); }, [at[0], right]); }),
-      iconButton('rowDelete', 'Delete row', () => value.cells.length > 1 && change((c, m) => { c.splice(at[0], 1); return shiftMerges(m, 0, at[0], -1); }, [Math.max(0, at[0] - 1), at[1]])),
-      iconButton('colDelete', 'Delete column', () => value.cells[0].length > 1 && change((c, m) => { c.forEach((r) => r.splice(at[1], 1)); return shiftMerges(m, 1, at[1], -1); }, [at[0], Math.max(0, at[1] - 1)])),
+      iconButton('rowAbove', 'Row above', () => add(0, at[0], at)),
+      iconButton('rowBelow', 'Row below', () => { const below = at[0] + span()[0]; add(0, below, [below, at[1]]); }),
+      iconButton('colLeft', 'Column left', () => add(1, at[1], at)),
+      iconButton('colRight', 'Column right', () => { const right = at[1] + span()[1]; add(1, right, [at[0], right]); }),
+      iconButton('rowDelete', 'Delete row', () => value.cells.length > 1 && change(deleteLines(value, 0, at[0]), [Math.max(0, at[0] - 1), at[1]])),
+      iconButton('colDelete', 'Delete column', () => value.cells[0].length > 1 && change(deleteLines(value, 1, at[1]), [at[0], Math.max(0, at[1] - 1)])),
       make('span', { className: 'table-tools-gap' }),
       mergeButton, splitButton,
       make('span', { className: 'spacer' }),
@@ -214,14 +213,18 @@ export function editTable({ spec = {}, editing = false } = {}) {
     background.addEventListener('input', () => { value.background = background.value; draw(); });
     const hint = make('p', { className: 'muted', textContent: 'Tab and the arrow keys move between cells; Tab in the last cell adds a row. Shift + click, Shift + arrows or a drag choose cells to merge. $…$ in a cell is math.' });
     body.append(tools, look, grid, hint);
-    // `edit(cells, merges)` changes the cells in place and returns the merges as they are after it.
-    function change(edit, focus) {
-      const cells = value.cells.map((r) => [...r]);
-      const merges = edit(cells, value.merges || []) ?? value.merges;
-      if (cells.length > MAX_ROWS || cells[0].length > MAX_COLUMNS) { error.textContent = `Up to ${MAX_ROWS} rows and ${MAX_COLUMNS} columns.`; return; }
-      value = { ...tableSpec({ cells, merges, header: header.checked, background: value.background, tint: value.tint }), widths: null };
+    // `next`: the table after a change (table.js insertLines, deleteLines…), its widths, heights
+    // and cell looks kept by the change itself.
+    function change(next, focus) {
+      value = tableSpec({ ...next, header: header.checked });
       sel = null;
       draw(focus);
+    }
+    // A row (axis 0) or column (axis 1) inserted before `at`, unless the table is at its limit.
+    function add(axis, before, focus) {
+      const next = insertLines({ ...value, header: header.checked }, axis, before);
+      if (next.cells.length === value.cells.length && next.cells[0].length === value.cells[0].length) { error.textContent = `Up to ${MAX_ROWS} rows and ${MAX_COLUMNS} columns.`; return; }
+      change(next, focus);
     }
     // The text field showing a cell: the one of its merge when it is merged.
     function cell(r, c) {
@@ -291,7 +294,7 @@ export function editTable({ spec = {}, editing = false } = {}) {
             e.preventDefault();
             const order = [...grid.querySelectorAll('[data-r]')];
             const i = order.indexOf(input) + (e.shiftKey ? -1 : 1);
-            if (i >= order.length) return change((cs_) => { cs_.push(newRow(cs_)); }, [rows, 0]);
+            if (i >= order.length) return add(0, rows, [rows, 0]);
             if (i >= 0) order[i].focus({ preventScroll: true });
             return;
           }
@@ -300,7 +303,7 @@ export function editTable({ spec = {}, editing = false } = {}) {
             e.preventDefault();
             const next = cell(r + rs, c);
             if (next) { next.focus({ preventScroll: true }); next.select(); }
-            else change((cs_) => { cs_.push(newRow(cs_)); }, [rows, c]);
+            else add(0, rows, [rows, c]);
             return;
           }
           if (!step) return;

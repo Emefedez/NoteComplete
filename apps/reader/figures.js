@@ -5,7 +5,7 @@
 // (part.rs), so any of it selects all of it. app.js wires it in with figureInserts().
 import { rgbaOf } from "./text-box.js";
 import { graphItems } from "./graph.js";
-import { tableItems } from "./table.js";
+import { tableItems, tableNaturalSize } from "./table.js";
 import { editorOf, moduleOf } from "./prefab-registry.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
@@ -54,7 +54,9 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       if (!p || !ensureEditableLayer()) return false;
     }
     let items;
-    try { items = compoundItems(kind, compoundBox(p, kind, box), chosen); } catch (e) { return status(e.message, true), false; }
+    // A table as tall as its rows need (fit rows, a row per line of text), within the page.
+    const size = kind === "table" ? ((w, h) => [w, Math.min(h, p.size[1] - 60)])(...tableNaturalSize(chosen)) : undefined;
+    try { items = compoundItems(kind, compoundBox(p, kind, box, size), chosen); } catch (e) { return status(e.message, true), false; }
     await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
     status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
     return true;
@@ -408,6 +410,16 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     const cw = (w - 2 * pad) * a.scale[0], ch = (h - 2 * pad) * a.scale[1], cx = x + w / 2 + a.translation[0], cy = y + h / 2 + a.translation[1];
     return [cx - cw / 2, cy - ch / 2, cw, ch];
   }
+  // A table given rows, columns or lines of text in its editor grows by as much (and shrinks when
+  // they go), from where it is, at the size it was given; kept inside the page.
+  function tableGrown(page, kind, box, before, after) {
+    if (kind !== "table") return box;
+    const [w0, h0] = tableNaturalSize(before), [w1, h1] = tableNaturalSize(after), size = app.panels[page]?.size;
+    const [x, y, w, h] = box;
+    let nw = w * w1 / w0, nh = h * h1 / h0;
+    if (size) { nw = Math.min(nw, Math.max(w, size[0] - x - 10)); nh = Math.min(nh, Math.max(h, size[1] - y - 10)); }
+    return [x, y, Math.max(40, nw), Math.max(20, nh)];
+  }
   // Edit graph / Edit table: its editor with what it is, then drawn again where it is now.
   async function editCompound(item, mode = "author") {
     const c = item?.compound;
@@ -437,7 +449,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (!chosen || !sameNote(note)) return;
     let items;
     // The page stayed usable behind the window: it may have been moved, or deleted meanwhile.
-    try { items = compoundItems(c.kind, await compoundFrame(item), chosen, c.id); } catch (e) { return status(e.message, true); }
+    try { items = compoundItems(c.kind, tableGrown(item.page, c.kind, await compoundFrame(item), spec, chosen), chosen, c.id); } catch (e) { return status(e.message, true); }
     selection.clear();
     await action("drawMany", { page: item.page, replace: c.items, lines: items.lines, images: items.images });
     status(`${c.kind === "graph" ? "Graph" : "Table"} changed. One undo brings back the one before.`);
