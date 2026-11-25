@@ -4,7 +4,7 @@
 // with a live preview, then drawn (again) on the page as one undo step. The math keypad
 // (math-keypad.js) types into a graph's function fields, inside the window.
 import { graphSpec, graphItems } from './graph.js';
-import { tableSpec, resized, TINTS, BACKGROUNDS } from './table.js';
+import { tableSpec, resized, TINTS, BACKGROUNDS, MAX_ROWS, MAX_COLUMNS, mergeAt, anchorOf, mergeArea, mergeCells, splitCell, shiftMerges } from './table.js';
 import { icon } from './icons.js';
 import { loadKatex } from './rich-text.js';
 import { movableWindow } from './prefabs/kit/window.js';
@@ -162,22 +162,39 @@ export function editGraph({ spec = {}, editing = false, rgba, keypad = null } = 
 }
 
 // Opens the table editor: a grid of cells to type in, rows and columns added or removed where
-// the cursor is. Resolves with the new spec, or null.
+// the cursor is, cells merged into one and split again. Resolves with the new spec, or null.
 export function editTable({ spec = {}, editing = false } = {}) {
   return new Promise((resolve) => {
     let value = tableSpec(spec);
-    const { win, body, error, cancel, apply, onFinish } = windowShell('table', editing ? 'Edit table' : 'Insert table', { width: 520, minWidth: 320, minHeight: 220 });
+    const { win, body, error, cancel, apply, onFinish } = windowShell('table', editing ? 'Edit table' : 'Insert table', { width: 560, minWidth: 320, minHeight: 220 });
     apply.textContent = editing ? 'Apply' : 'Insert';
     const grid = make('div', { className: 'table-grid' });
     const header = make('input', { type: 'checkbox', checked: value.header });
-    let at = [0, 0];
+    // `at`: the cell with the cursor (the first cell of its merge). `sel`: cells chosen to merge,
+    // from one cell to another, or null.
+    let at = [0, 0], sel = null;
+    const span = () => { const m = mergeAt(value, ...at); return m ? [m[2], m[3]] : [1, 1]; };
+    const newRow = (cells) => cells[0].map(() => '');
+    const mergeButton = iconButton('cellsMerge', 'Merge cells (select them first: Shift + click, Shift + arrows or drag)', () => {
+      if (!sel) return;
+      const area = mergeArea(value, sel.from, sel.to);
+      value = mergeCells({ ...value, header: header.checked }, sel.from, sel.to);
+      sel = null;
+      draw([area[0], area[1]]);
+    });
+    const splitButton = iconButton('cellsSplit', 'Split merged cell', () => {
+      value = splitCell({ ...value, header: header.checked }, ...at);
+      draw(at);
+    });
     const tools = make('div', { className: 'table-tools' },
-      iconButton('rowAbove', 'Row above', () => change((c) => c.splice(at[0], 0, c[0].map(() => '')), [at[0], at[1]])),
-      iconButton('rowBelow', 'Row below', () => change((c) => c.splice(at[0] + 1, 0, c[0].map(() => '')), [at[0] + 1, at[1]])),
-      iconButton('colLeft', 'Column left', () => change((c) => c.forEach((r) => r.splice(at[1], 0, '')), [at[0], at[1]])),
-      iconButton('colRight', 'Column right', () => change((c) => c.forEach((r) => r.splice(at[1] + 1, 0, '')), [at[0], at[1] + 1])),
-      iconButton('rowDelete', 'Delete row', () => value.cells.length > 1 && change((c) => c.splice(at[0], 1), [Math.max(0, at[0] - 1), at[1]])),
-      iconButton('colDelete', 'Delete column', () => value.cells[0].length > 1 && change((c) => c.forEach((r) => r.splice(at[1], 1)), [at[0], Math.max(0, at[1] - 1)])),
+      iconButton('rowAbove', 'Row above', () => change((c, m) => { c.splice(at[0], 0, newRow(c)); return shiftMerges(m, 0, at[0], 1); }, at)),
+      iconButton('rowBelow', 'Row below', () => { const below = at[0] + span()[0]; change((c, m) => { c.splice(below, 0, newRow(c)); return shiftMerges(m, 0, below, 1); }, [below, at[1]]); }),
+      iconButton('colLeft', 'Column left', () => change((c, m) => { c.forEach((r) => r.splice(at[1], 0, '')); return shiftMerges(m, 1, at[1], 1); }, at)),
+      iconButton('colRight', 'Column right', () => { const right = at[1] + span()[1]; change((c, m) => { c.forEach((r) => r.splice(right, 0, '')); return shiftMerges(m, 1, right, 1); }, [at[0], right]); }),
+      iconButton('rowDelete', 'Delete row', () => value.cells.length > 1 && change((c, m) => { c.splice(at[0], 1); return shiftMerges(m, 0, at[0], -1); }, [Math.max(0, at[0] - 1), at[1]])),
+      iconButton('colDelete', 'Delete column', () => value.cells[0].length > 1 && change((c, m) => { c.forEach((r) => r.splice(at[1], 1)); return shiftMerges(m, 1, at[1], -1); }, [at[0], Math.max(0, at[1] - 1)])),
+      make('span', { className: 'table-tools-gap' }),
+      mergeButton, splitButton,
       make('span', { className: 'spacer' }),
       make('label', {}, header, ' Header row'),
     );
@@ -195,24 +212,48 @@ export function editTable({ spec = {}, editing = false } = {}) {
     });
     const look = make('div', { className: 'table-tools table-look' }, make('label', {}, 'Background ', background), make('span', { className: 'table-swatches' }, ...swatches));
     background.addEventListener('input', () => { value.background = background.value; draw(); });
-    const hint = make('p', { className: 'muted', textContent: 'Tab and the arrow keys move between cells; Tab in the last cell adds a row. $…$ in a cell is math.' });
+    const hint = make('p', { className: 'muted', textContent: 'Tab and the arrow keys move between cells; Tab in the last cell adds a row. Shift + click, Shift + arrows or a drag choose cells to merge. $…$ in a cell is math.' });
     body.append(tools, look, grid, hint);
+    // `edit(cells, merges)` changes the cells in place and returns the merges as they are after it.
     function change(edit, focus) {
       const cells = value.cells.map((r) => [...r]);
-      edit(cells);
-      if (cells.length > 30 || cells[0].length > 12) { error.textContent = 'Up to 30 rows and 12 columns.'; return; }
-      value = { ...tableSpec({ cells, header: header.checked, background: value.background, tint: value.tint }), widths: null };
+      const merges = edit(cells, value.merges || []) ?? value.merges;
+      if (cells.length > MAX_ROWS || cells[0].length > MAX_COLUMNS) { error.textContent = `Up to ${MAX_ROWS} rows and ${MAX_COLUMNS} columns.`; return; }
+      value = { ...tableSpec({ cells, merges, header: header.checked, background: value.background, tint: value.tint }), widths: null };
+      sel = null;
       draw(focus);
     }
-    function cell(r, c) { return grid.querySelector(`[data-r="${r}"][data-c="${c}"]`); }
+    // The text field showing a cell: the one of its merge when it is merged.
+    function cell(r, c) {
+      if (r < 0 || c < 0 || r >= value.cells.length || c >= value.cells[0].length) return null;
+      const [ar, ac] = anchorOf(value, r, c);
+      return grid.querySelector(`[data-r="${ar}"][data-c="${ac}"]`);
+    }
+    function showSelection() {
+      const area = sel && mergeArea(value, sel.from, sel.to);
+      for (const input of grid.querySelectorAll('[data-r]')) {
+        const r = +input.dataset.r, c = +input.dataset.c;
+        input.classList.toggle('table-selected', !!area && area[2] * area[3] > 1 && r >= area[0] && r < area[0] + area[2] && c >= area[1] && c < area[1] + area[3]);
+      }
+      mergeButton.disabled = !area || area[2] * area[3] < 2;
+      splitButton.disabled = !mergeAt(value, ...at);
+    }
+    const fit = (input) => { input.rows = Math.max(1, input.value.split('\n').length); };
     function draw(focus = at) {
       error.textContent = '';
       const rows = value.cells.length, cols = value.cells[0].length;
       grid.style.gridTemplateColumns = `repeat(${cols}, minmax(70px, 1fr))`;
-      grid.replaceChildren(...value.cells.flatMap((row, r) => row.map((text, c) => {
-        const input = make('input', { type: 'text', value: text, spellcheck: false, autocomplete: 'off' });
+      const fields = [];
+      value.cells.forEach((row, r) => row.forEach((text, c) => {
+        const m = mergeAt(value, r, c);
+        if (m && (m[0] !== r || m[1] !== c)) return;
+        const [rs, cs] = m ? [m[2], m[3]] : [1, 1];
+        const input = make('textarea', { value: text, spellcheck: false, autocomplete: 'off', rows: 1 });
+        fit(input);
         input.dataset.r = r;
         input.dataset.c = c;
+        input.style.gridArea = `${r + 1} / ${c + 1} / span ${rs} / span ${cs}`;
+        input.classList.toggle('table-merged', !!m);
         const head = header.checked && r === 0 && rows > 1;
         input.classList.toggle('table-head', head);
         // The background as the table will have it (table.js tableItems).
@@ -222,31 +263,70 @@ export function editTable({ spec = {}, editing = false } = {}) {
           : value.background === 'header' && head ? tint.head : null;
         input.style.background = fill ? rgb(fill) : '';
         if (fill) input.style.color = '#1f2328';
-        input.setAttribute('aria-label', `Row ${r + 1}, column ${c + 1}`);
-        input.addEventListener('focus', () => { at = [r, c]; });
-        input.addEventListener('input', () => { value.cells[r][c] = input.value; });
+        input.setAttribute('aria-label', m ? `Rows ${r + 1}–${r + rs}, columns ${c + 1}–${c + cs} (merged)` : `Row ${r + 1}, column ${c + 1}`);
+        input.addEventListener('focus', () => { at = [r, c]; showSelection(); });
+        input.addEventListener('input', () => { value.cells[r][c] = input.value; fit(input); });
+        // Shift + click chooses the cells from the cursor's to this one; a drag from one cell to others too.
+        input.addEventListener('pointerdown', (e) => {
+          if (e.button !== 0) return;
+          if (e.shiftKey) { e.preventDefault(); sel = { from: sel?.from || at, to: [r, c] }; showSelection(); return; }
+          sel = null;
+          drag = [r, c];
+          showSelection();
+        });
         input.addEventListener('keydown', (e) => {
-          const move = { ArrowUp: [-1, 0], ArrowDown: [1, 0], Enter: [1, 0] }[e.key]
-            || (e.key === 'ArrowLeft' && input.selectionStart === 0 && input.selectionEnd === 0 ? [0, -1] : null)
-            || (e.key === 'ArrowRight' && input.selectionStart === input.value.length ? [0, 1] : null);
-          if (e.key === 'Tab') {
+          const before = input.value.slice(0, input.selectionStart), after = input.value.slice(input.selectionEnd);
+          const step = { ArrowUp: !before.includes('\n') && [-1, 0], ArrowDown: !after.includes('\n') && [rs, 0],
+            ArrowLeft: input.selectionStart === 0 && input.selectionEnd === 0 && [0, -1], ArrowRight: input.selectionStart === input.value.length && [0, cs] }[e.key];
+          if (step && e.shiftKey) {
+            // Shift + arrows: the chosen cells grow or shrink from the cursor's.
             e.preventDefault();
-            const i = r * cols + c + (e.shiftKey ? -1 : 1);
-            if (i >= rows * cols) return change((cs) => cs.push(cs[0].map(() => '')), [rows, 0]);
-            if (i >= 0) cell(Math.floor(i / cols), i % cols)?.focus({ preventScroll: true });
+            const to = sel?.to || [r, c], next = [to[0] + Math.sign(step[0]), to[1] + Math.sign(step[1])];
+            if (next[0] < 0 || next[1] < 0 || next[0] >= rows || next[1] >= cols) return;
+            sel = { from: sel?.from || [r, c], to: next };
+            showSelection();
             return;
           }
-          if (!move) return;
-          const next = cell(r + move[0], c + move[1]);
-          if (next) { e.preventDefault(); next.focus({ preventScroll: true }); next.select(); }
-          else if (e.key === 'Enter') { e.preventDefault(); change((cs) => cs.push(cs[0].map(() => '')), [rows, c]); }
+          if (e.key === 'Tab') {
+            e.preventDefault();
+            const order = [...grid.querySelectorAll('[data-r]')];
+            const i = order.indexOf(input) + (e.shiftKey ? -1 : 1);
+            if (i >= order.length) return change((cs_) => { cs_.push(newRow(cs_)); }, [rows, 0]);
+            if (i >= 0) order[i].focus({ preventScroll: true });
+            return;
+          }
+          if (e.key === 'Enter' && !e.shiftKey) {
+            // Enter goes down (Shift + Enter starts a new line in the cell).
+            e.preventDefault();
+            const next = cell(r + rs, c);
+            if (next) { next.focus({ preventScroll: true }); next.select(); }
+            else change((cs_) => { cs_.push(newRow(cs_)); }, [rows, c]);
+            return;
+          }
+          if (!step) return;
+          const next = cell(r + step[0], c + step[1]);
+          if (next) { e.preventDefault(); sel = null; next.focus({ preventScroll: true }); next.select(); }
         });
-        return input;
-      })));
+        fields.push(input);
+      }));
+      grid.replaceChildren(...fields);
       for (const swatch of swatches) swatch.setAttribute('aria-pressed', String(swatch.dataset.tint === value.tint));
       const target = cell(Math.min(focus[0], rows - 1), Math.min(focus[1], cols - 1));
       target?.focus({ preventScroll: true });
+      showSelection();
     }
+    // Dragging across cells chooses them; within one cell it selects text as usual.
+    let drag = null;
+    grid.addEventListener('pointermove', (e) => {
+      if (!drag || !(e.buttons & 1)) { drag = null; return; }
+      const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-r]');
+      if (!over || !grid.contains(over)) return;
+      const to = [+over.dataset.r, +over.dataset.c];
+      if (to[0] === drag[0] && to[1] === drag[1] && !sel) return;
+      sel = { from: drag, to };
+      showSelection();
+    });
+    grid.addEventListener('pointerup', () => { drag = null; });
     header.addEventListener('input', () => { value.header = header.checked; draw(); });
     draw([0, 0]);
     let done = false;

@@ -110,6 +110,9 @@ export const paths = {
  colRight:'M5 3h8v18H5zM9 3v18M15 12h6M18 9v6',
  rowDelete:'M3 7h18v10H3zM3 12h18M9 9.5l6 5M15 9.5l-6 5',
  colDelete:'M7 3h10v18H7zM12 3v18M9.5 9l5 6M14.5 9l-5 6',
+ // Cells joined into one, and a joined cell split again.
+ cellsMerge:'M3 5h18v14H3zM4 12h5M7 10l2 2-2 2M20 12h-5M17 10l-2 2 2 2',
+ cellsSplit:'M3 5h18v14H3zM12 5v14M10 12H5M7 10l-2 2 2 2M14 12h5M17 10l2 2-2 2',
  chat:'M4 5h16v11H9l-5 4V5Z',
  // UML diagrams (uml.js): a class box tied to an actor.
  uml:'M10 3h11v12H10zM10 7h11M10 11h11M5 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM5 13.5V18M2.5 15.5h5M3 21l2-3 2 3M7.5 15.5H10',

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tableItems, tableSpec, resized } from './table.js';
+import { tableItems, tableSpec, resized, mergeCells, splitCell, mergeAt, anchorOf, mergeArea, shiftMerges, normalMerges } from './table.js';
 
 test('a spec is a rectangular grid of strings, kept within bounds', () => {
   const s = tableSpec({ cells: [['a', 'b', 'c'], ['d']], header: false });
@@ -51,4 +51,68 @@ test('backgrounds: none, the header, striped rows or the whole table, in a chose
   // Unknown values fall back, and the spec the table keeps has them.
   assert.deepEqual([tableSpec({ background: 'x', tint: 'y' }).background, tableSpec({ background: 'x', tint: 'y' }).tint], ['header', 'blue']);
   assert.equal(JSON.parse(tableItems([0, 0, 10, 10], { cells, background: 'all', tint: 'pink' }).lines.find((l) => l.part.spec).part.spec).tint, 'pink');
+});
+
+test('merges are kept inside the grid, at least two cells, never overlapping', () => {
+  // [1,1,2,1] overlaps the first; [2,2,5,5] is cut to one cell; [0,2,1,1] is one cell.
+  assert.deepEqual(normalMerges([[0, 0, 2, 2], [1, 1, 2, 1], [2, 2, 5, 5], [0, 2, 1, 1], ['x'], [1, 2, 9, 1]], 3, 3), [[0, 0, 2, 2], [1, 2, 2, 1]]);
+  const s = tableSpec({ cells: [['a', 'b'], ['c', 'd']], merges: [[0, 0, 1, 2]] });
+  assert.equal(s.v, 2);
+  assert.deepEqual(s.merges, [[0, 0, 1, 2]]);
+  assert.equal(tableSpec({ cells: [['a']] }).v, 1, 'a table without merges stays version 1');
+  assert.equal('merges' in tableSpec({ cells: [['a']] }), false);
+});
+
+test('merging joins the text of the cells, splitting keeps it in the first cell', () => {
+  const s = mergeCells({ cells: [['a', 'b', 'c'], ['d', '', 'f']] }, [0, 0], [1, 1]);
+  assert.deepEqual(s.merges, [[0, 0, 2, 2]]);
+  assert.equal(s.cells[0][0], 'a\nb\nd');
+  assert.deepEqual([s.cells[0][1], s.cells[1][0], s.cells[1][1]], ['', '', '']);
+  assert.deepEqual(mergeAt(s, 1, 1), [0, 0, 2, 2]);
+  assert.deepEqual(anchorOf(s, 1, 0), [0, 0]);
+  assert.deepEqual(anchorOf(s, 1, 2), [1, 2]);
+  const back = splitCell(s, 1, 1);
+  assert.equal(back.merges, undefined);
+  assert.equal(back.cells[0][0], 'a\nb\nd');
+  assert.deepEqual(mergeCells({ cells: [['a', 'b']] }, [0, 1], [0, 1]).merges, undefined, 'one cell: nothing to merge');
+});
+
+test('a selection that cuts a merge grows to take all of it', () => {
+  const s = tableSpec({ cells: Array.from({ length: 4 }, () => ['', '', '', '']), merges: [[1, 1, 2, 2]] });
+  assert.deepEqual(mergeArea(s, [0, 0], [1, 1]), [0, 0, 3, 3]);
+  const joined = mergeCells(s, [0, 1], [1, 3]);
+  assert.deepEqual(joined.merges, [[0, 1, 3, 3]], 'the old merge becomes part of the new one');
+});
+
+test('rows and columns inserted or removed move, grow or shrink the merges', () => {
+  const m = [[1, 1, 2, 2]];
+  assert.deepEqual(shiftMerges(m, 0, 0, 1), [[2, 1, 2, 2]], 'row above: moved down');
+  assert.deepEqual(shiftMerges(m, 0, 2, 1), [[1, 1, 3, 2]], 'row inside: grown');
+  assert.deepEqual(shiftMerges(m, 0, 3, 1), m, 'row below: unchanged');
+  assert.deepEqual(shiftMerges(m, 1, 1, -1), [[1, 1, 2, 1]], 'first column removed: shrunk');
+  assert.deepEqual(shiftMerges(m, 1, 0, -1), [[1, 0, 2, 2]], 'column before removed: moved left');
+  assert.deepEqual(shiftMerges([[0, 0, 1, 2]], 1, 0, -2), [], 'all of it removed: gone');
+  // Cutting the table smaller cuts its merges; a merge left with one cell is dropped.
+  const s = tableSpec({ cells: [['a', 'b', 'c'], ['d', 'e', 'f']], merges: [[0, 1, 2, 2]] });
+  assert.deepEqual(resized(s, 2, 2).merges, [[0, 1, 2, 1]]);
+  assert.equal(resized(s, 1, 2).merges, undefined);
+});
+
+test('a merged area has no rules inside it and one text box in its middle', () => {
+  // 3 × 3, 300 × 90; the top row merged across all columns, and a 2 × 2 block at the bottom left.
+  const spec = { cells: [['Title', '', ''], ['a', 'b', 'c'], ['', 'e', 'f']], header: false, merges: [[0, 0, 1, 3], [1, 0, 2, 2]] };
+  const { lines, images } = tableItems([0, 0, 300, 90], spec, { id: 't' });
+  const rules = lines.filter((l) => l.shape?.kind === 'line').map((l) => l.points.flat());
+  // Row rule at y = 30 (under the title): whole width. At y = 60: only under column 3.
+  assert.deepEqual(rules.filter((p) => p[1] === 30 && p[3] === 30), [[0, 30, 300, 30]]);
+  assert.deepEqual(rules.filter((p) => p[1] === 60 && p[3] === 60), [[200, 60, 300, 60]]);
+  // Column rule at x = 100: none (title above, block below). At x = 200: under the title only.
+  assert.deepEqual(rules.filter((p) => p[0] === 100 && p[2] === 100), []);
+  assert.deepEqual(rules.filter((p) => p[0] === 200 && p[2] === 200), [[200, 30, 200, 90]]);
+  const title = images.find((i) => i.text.text === 'Title');
+  const [x, , w] = title.bounds;
+  assert.ok(Math.abs(x + w / 2 - 150) < 1, 'the merged title is centred across the table');
+  const a = images.find((i) => i.text.text === 'a');
+  assert.ok(a.bounds[1] > 30 && a.bounds[1] + a.bounds[3] < 90 && Math.abs(a.bounds[1] + a.bounds[3] / 2 - 60) < 1, 'centred in its two rows');
+  assert.equal(JSON.parse(lines.find((l) => l.part.spec).part.spec).merges.length, 2, 'the spec kept has the merges');
 });
