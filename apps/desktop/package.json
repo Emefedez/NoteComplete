@@ -59,6 +59,9 @@
       "dropbox-auth.js",
       "google-desktop-client.json"
     ],
+    "asarUnpack": [
+      "office-runner/**/*"
+    ],
     "fileAssociations": [
       {
         "ext": "noteful",

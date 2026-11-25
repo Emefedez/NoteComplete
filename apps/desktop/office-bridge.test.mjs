@@ -9,6 +9,7 @@ import {
   createOfficeBridge,
   defaultImageDir,
   defaultModuleDir,
+  defaultRunnerDir,
   detectLinuxRunner,
   detectMacRunner,
   detectWindowsRunner,
@@ -25,6 +26,17 @@ test('defaultModuleDir resolves per platform and honours dev overrides', () => {
   assert.equal(defaultModuleDir({ NOTECOMPLETE_OFFICE_MODULE_DIR: '/tmp/custom-eo' }, 'linux', '/home/u'), '/tmp/custom-eo');
   assert.equal(defaultImageDir({ NOTECOMPLETE_OFFICE_IMAGE_DIR: '/tmp/img' }), '/tmp/img');
   assert.equal(defaultImageDir({}), '');
+});
+
+test('defaultRunnerDir rewrites app.asar to app.asar.unpacked for child processes', () => {
+  assert.equal(
+    defaultRunnerDir('file:///tmp/.mount_NoteCo/resources/app.asar/office-bridge.js'),
+    '/tmp/.mount_NoteCo/resources/app.asar.unpacked/office-runner/',
+  );
+  assert.equal(
+    defaultRunnerDir('file:///home/user/NoteComplete/apps/desktop/office-bridge.js'),
+    '/home/user/NoteComplete/apps/desktop/office-runner/',
+  );
 });
 
 test('JWT HS256 signing and verification reject tampered tokens', () => {

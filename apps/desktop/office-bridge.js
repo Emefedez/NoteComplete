@@ -48,8 +48,11 @@ export function defaultModuleDir(env = process.env, platform = process.platform,
 
 export const defaultImageDir = (env = process.env) => (env.NOTECOMPLETE_OFFICE_IMAGE_DIR ? path.resolve(env.NOTECOMPLETE_OFFICE_IMAGE_DIR) : '');
 
-export function defaultRunnerDir() {
-  return fileURLToPath(new URL('./office-runner/', import.meta.url));
+export function defaultRunnerDir(baseUrl = import.meta.url) {
+  const dir = fileURLToPath(new URL('./office-runner/', baseUrl));
+  // Child processes (python3, bash, powershell) cannot execute scripts inside app.asar;
+  // package.json unpacks office-runner/**/* into app.asar.unpacked.
+  return dir.replace(/([/\\])app\.asar([/\\]|$)/, '$1app.asar.unpacked$2');
 }
 
 const b64url = (value) => Buffer.from(value).toString('base64url');
