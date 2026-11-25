@@ -131,7 +131,10 @@ test('an association class is a dashed line to the middle of its association', (
   const link = m.connectors.find((c) => c.type === 'associationClass');
   const line = connectorPath(m, assoc), dash = connectorPath(m, link);
   assert.equal(Math.round(dash.at(-1)[0]), Math.round((line[0][0] + line.at(-1)[0]) / 2));
-  assert.equal(connectorLabel(assoc), 'evaluado por ▸');
+  // The reading direction is a drawn triangle beside the words, not a character in them.
+  assert.equal(connectorLabel(assoc), 'evaluado por');
+  assert.equal(assoc.props.reading, 'forward');
+  assert.match(renderUml(m).svg, /class="uml-reading"/);
   assert.match(renderUml(m).svg, /stroke-dasharray/);
   // Without its association, the link goes too.
   assert.equal(normalizeModel({ ...m, connectors: [link] }).connectors.length, 0);
@@ -192,4 +195,92 @@ test('UML clipboard preserves positioning across PlantUML text, note specs, and 
   const seqBack = readUmlClipFromText(seqClip.text);
   assert.equal(seqBack.diagram, 'sequence');
   assert.deepEqual(seqBack.elements.map((e) => e.bounds), seq.elements.map((e) => e.bounds));
+});
+
+test('text styles go to PlantUML as Creole and come back', async () => {
+  const { starterModel, makeElement } = await import('./uml.js');
+  const m = starterModel('class');
+  const [book, member] = m.elements;
+  book.props.nameStyle = { italic: true };
+  book.props.attributes[1].style = { italic: true };
+  book.props.operations[0].style = { bold: true, underline: true };
+  member.props.nameStyle = { bold: true };
+  const abs = makeElement('class', [500, 300], { name: 'Shape', props: { abstract: true, nameStyle: { italic: true }, operations: [{ visibility: '+', name: 'draw', params: [], returns: 'void', abstract: true, static: false, style: { italic: true } }] } }, m);
+  m.elements.push(abs);
+  m.elements.push(makeElement('note', [420, 200], { name: 'Two\nlines', props: { nameStyle: { italic: true } } }, m));
+  const assoc = m.connectors.find((c) => c.type === 'association');
+  Object.assign(assoc.props, { labelStyle: { italic: true }, reading: 'forward', fromText: 'lender', fromTextStyle: { italic: true }, toText: 'borrower' });
+  assoc.props.fromEnd.style = { italic: true };
+  const text = toPlantUml(m);
+  assert.match(text, /class "\/\/Book\/\/" as /);
+  assert.match(text, /- \/\/title: String\/\//, 'the visibility stays outside the Creole');
+  assert.match(text, /\+ \*\*<u>lend\(to: Member\) : void<\/u>\*\*/);
+  assert.match(text, /class "\*\*Member\*\*" as /);
+  assert.match(text, /abstract class "Shape" as /, 'abstract is italic anyway: no Creole for it');
+  assert.match(text, /\{abstract\} \+ draw\(\) : void/);
+  assert.match(text, /note "\/\/Two\/\/\\n\/\/lines\/\/"/);
+  assert.match(text, /"\/\/0\.\.\*\/\/\\n\/\/lender\/\/" --> "0\.\.1\\nborrower"/);
+  assert.match(text, / : \/\/borrows\/\/ >/);
+  const back = normalizeModel(parsePlantUml(text).model);
+  const by = Object.fromEntries(back.elements.map((e) => [e.name, e]));
+  assert.deepEqual(by.Book.props.nameStyle, { italic: true });
+  assert.equal(by.Book.name, 'Book');
+  assert.deepEqual(by.Book.props.attributes.map((a) => [a.visibility, a.name, a.style || null]), [['-', 'isbn', null], ['-', 'title', { italic: true }]]);
+  assert.deepEqual(by.Book.props.operations[0].style, { bold: true, underline: true });
+  assert.equal(by.Book.props.operations[0].name, 'lend');
+  assert.deepEqual(by.Member.props.nameStyle, { bold: true });
+  assert.equal(by.Shape.props.abstract, true);
+  assert.equal(by['Two\nlines'].props.nameStyle.italic, true);
+  const a = back.connectors.find((c) => c.type === 'association');
+  assert.equal(a.props.name, 'borrows');
+  assert.deepEqual(a.props.labelStyle, { italic: true });
+  assert.equal(a.props.reading, 'forward');
+  assert.equal(a.props.fromEnd.multiplicity, '0..*');
+  assert.deepEqual(a.props.fromEnd.style, { italic: true });
+  assert.equal(a.props.fromText, 'lender');
+  assert.deepEqual(a.props.fromTextStyle, { italic: true });
+  assert.equal(a.props.toEnd.multiplicity, '0..1');
+  assert.equal(a.props.toText, 'borrower');
+  // Read from files written elsewhere: <i>, __underline__ and a plain URL left alone.
+  const other = parsePlantUml('@startuml\nclass "<i>Foo</i>" as Foo {\n  + __bar(): int__\n  - site = "http://x//y"\n}\n@enduml').model;
+  assert.deepEqual(other.elements[0].props.nameStyle, { italic: true });
+  assert.deepEqual(other.elements[0].props.operations[0].style, { underline: true });
+  assert.equal(other.elements[0].props.attributes[0].style, undefined);
+});
+
+test('reading direction and end texts round-trip through PlantUML', () => {
+  const { model } = parsePlantUml('@startuml\nclass A\nclass B\nclass C\nA "owner" -- "1..*" B : < has\nB "client" ..> "server" C : calls >\nA -- C : plain\n@enduml');
+  const m = normalizeModel(model);
+  const [ab, bc, ac] = m.connectors;
+  assert.equal(ab.props.reading, 'backward');
+  assert.equal(ab.props.fromText, 'owner', 'a word that is not a multiplicity is free text');
+  assert.equal(ab.props.fromEnd.multiplicity, '');
+  assert.equal(ab.props.toEnd.multiplicity, '1..*');
+  assert.equal(bc.type, 'dependency');
+  assert.equal(bc.props.reading, 'forward');
+  assert.deepEqual([bc.props.fromText, bc.props.toText], ['client', 'server']);
+  assert.equal(ac.props.reading, 'none', 'no < or >: no triangle');
+  const again = toPlantUml(m);
+  assert.match(again, /A "owner" -- "1\.\.\*" B : < has/);
+  assert.match(again, /B "client" \.\.> "server" C : calls >/);
+  assert.match(again, /A -- C : plain\n/);
+  // Dragged end texts keep their place in the layout comment.
+  m.connectors[0].props.toTextOffset = [3, -4];
+  assert.deepEqual(normalizeModel(parsePlantUml(toPlantUml(m)).model).connectors[0].props.toTextOffset, [3, -4]);
+});
+
+test('copy and paste keep the text styles (shared clip and PlantUML text)', async () => {
+  const { writeUmlClip, readUmlClipFromText } = await import('./uml-clipboard.js');
+  const { starterModel } = await import('./uml.js');
+  const m = starterModel('class');
+  m.elements[0].props.nameStyle = { italic: true };
+  m.elements[0].props.attributes[0].style = { italic: true };
+  m.connectors[0].props.labelStyle = { bold: true };
+  const { clip, text } = writeUmlClip({ diagram: 'class', elements: m.elements, connectors: m.connectors });
+  assert.deepEqual(clip.elements[0].props.nameStyle, { italic: true });
+  assert.deepEqual(clip.elements[0].props.attributes[0].style, { italic: true });
+  const back = readUmlClipFromText(text);
+  assert.deepEqual(back.elements.find((e) => e.name === 'Book').props.nameStyle, { italic: true });
+  assert.deepEqual(back.elements.find((e) => e.name === 'Book').props.attributes[0].style, { italic: true });
+  assert.deepEqual(back.connectors.find((c) => c.type === 'association').props.labelStyle, { bold: true });
 });
