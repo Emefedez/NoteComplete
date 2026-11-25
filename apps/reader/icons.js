@@ -130,10 +130,30 @@ export const paths = {
  translate:'M3 5h9M7.5 3v2M5 5c.9 3 3 5.4 6 7M10 5c-.9 3.3-3 6-6.5 8M12.5 21l4.25-10L21 21M14 17.5h5.5',
  language:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3.5 9h17M3.5 15h17M12 3c-2.4 2.6-3.5 5.6-3.5 9s1.1 6.4 3.5 9c2.4-2.6 3.5-5.6 3.5-9S14.4 5.6 12 3Z'
 };
+// A sheet of paper with rounded corners, `size` square, its top left at x, y.
+const sheet=(x,y,size=12,r=1.6)=>`M${x+r} ${y}h${size-2*r}a${r} ${r} 0 0 1 ${r} ${r}v${size-2*r}a${r} ${r} 0 0 1 -${r} ${r}h-${size-2*r}a${r} ${r} 0 0 1 -${r} -${r}v-${size-2*r}a${r} ${r} 0 0 1 ${r} -${r}Z`;
+// A sheet partly hidden by one over it whose top left is at bx, by: only what shows, with a
+// thin gap along the edge of the one in front.
+const behind=(x,y,size,bx,by,g=2.5,r=1.6)=>`M${x+r} ${y}H${x+size-r}a${r} ${r} 0 0 1 ${r} ${r}V${by-g}H${bx-g}V${y+size}H${x+r}a${r} ${r} 0 0 1 -${r} -${r}V${y+r}a${r} ${r} 0 0 1 ${r} -${r}Z`;
+// Icons in parts, drawn in order: `fill` is how solid a part is filled (none when absent).
+// Arranging items: two stacked sheets, the one moved solid and the other see-through.
+export const layered = {
+ bringFront:[{d:sheet(3,3,13),fill:.18},{d:sheet(8,8,13),fill:1}],
+ sendBack:[{d:behind(3,3,13,8,8),fill:1},{d:sheet(8,8,13),fill:.18}],
+ // One step: smaller sheets, and an arrow up or down beside them.
+ bringForward:[{d:sheet(3,8,10),fill:.18},{d:sheet(7,12,9.5),fill:1},{d:'M18.5 10V3m-3 3 3-3 3 3'}],
+ sendBackward:[{d:behind(3,8,10,7,12),fill:1},{d:sheet(7,12,9.5),fill:.18},{d:'M18.5 3v7m-3-3 3 3 3-3'}],
+};
+for(const [name,parts] of Object.entries(layered))paths[name]=parts.map(p=>p.d).join('');
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.65','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);
- const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.note);svg.append(path);return svg;
+ for(const part of layered[name]||[{d:paths[name]||paths.note}]){
+  const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',part.d);
+  if(part.fill){path.setAttribute('fill','currentColor');if(part.fill<1)path.setAttribute('fill-opacity',part.fill);}
+  svg.append(path);
+ }
+ return svg;
 }
 export function decorateIcons(){
  for(const el of document.querySelectorAll('[data-icon]'))el.prepend(icon(el.dataset.icon));
