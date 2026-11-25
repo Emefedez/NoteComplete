@@ -1,6 +1,12 @@
+## What's new in 1.2.95
+
+- **UML editor: workspace tabs.** Several diagrams open at once in tabs above the editor; "+" starts a new diagram of any kind and the list button opens the note's other UML diagrams. Each tab keeps its own undo, selection and zoom, Ctrl+Page Up/Down switches, and open tabs are remembered per note.
+- **Study → Generate quiz (AI).** The former *Quiz me* is renamed to match Create exam (AI) and Solve exam (AI).
+
 ## What's new in 1.2.94
 
 - **Beta updates from a branch (Linux AppImage).** **Help → Update from a branch (beta)…** builds any branch of the repository on this computer (git, Rust, Node.js, Python and squashfs-tools needed) and installs it in place of this copy, to try changes before they are released. Nothing is replaced unless the build succeeds, the previous copy is kept as `NoteComplete.AppImage.previous`, the top bar shows the build's progress, and **Back to the latest release** returns to normal releases. Normal release updates are unchanged.
+- **UML editor: softer "not recommended" hint.** The warning box in the full editor is now a faint yellow tint on the palette.
 
 ## What's new in 1.2.93
 
