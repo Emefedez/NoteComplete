@@ -1,9 +1,10 @@
 // Cache only application assets. Notes opened with the file picker never enter CacheStorage.
 // precache.json (tools/build_web.py) lists every app file with a hash of its contents: a cached
 // file is used as long as its hash is the current one, so a visit downloads only what changed
-// (before, every visit downloaded the whole app again). Installing caches only the shell; the
-// engines a feature loads when used (speech, text recognition, Word and spreadsheet readers,
-// math, PDF fonts) are cached the first time they are fetched.
+// (before, every visit downloaded the whole app again). Installing caches only the shell
+// (including the core prefab pack); optional prefab packs (tools/prefab_packs.mjs,
+// prefab-packs.js) and the engines a feature loads when used (speech, text recognition, Word
+// and spreadsheet readers, math, PDF fonts) are cached when installed or first fetched.
 const CACHE='noteful-reader-v12';
 const base=()=>self.registration.scope;
 // A file's place in the cache: its path and hash (never fetched with this address).

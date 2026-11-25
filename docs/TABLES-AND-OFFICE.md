@@ -260,6 +260,16 @@ Owner's idea (2026-11-25): prefab groups are no longer all preinstalled.
       (charts, UML, maths, algorithms, Chinese, textual analysis …), then individual prefabs.
 - [ ] Where packs come from: the release's assets (or the repo) by version, checked by hash, cached
       for offline use; the core set (sticky note, table, graph) always installed.
+      Today on desktop/Android the shipped packs live inside the app bundle (instant enable/hide);
+      on the web PWA, `tools/build_web.py` + `tools/prefab_packs.mjs` exclude non-core packs from
+      the service worker's install `shell` and record each pack's file list, byte size and SHA-256
+      hash in `precache.json`, so `prefab-packs.js` fetches them on demand into Cache Storage (with
+      progress) and drops them on remove.
+      **Future remote release packs (not yet wired):** a release workflow can publish each optional
+      pack as a versioned tarball (`prefab-pack-<id>-v<version>.tar.gz` + manifest with SHA-256
+      hashes) on the GitHub release for that app version; the desktop app downloads and verifies
+      the archive by hash into its writable modules folder (`prefabs-user/`), keeping the installer
+      smaller without changing the pack registry or UI.
 - [ ] `add_prefab` (MCP) and AI features say when a pack is missing instead of failing.
 
 ## Phase 8: Model Explorer and connectivity across the project

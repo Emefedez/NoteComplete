@@ -182,7 +182,14 @@ def write_manifest():
     names+=sorted(p.relative_to(reader).as_posix() for p in (reader/'prefabs').rglob('*') if p.is_file() and '/test/' not in p.as_posix() and not p.name.endswith('.test.mjs'))
     files={name:hashlib.sha256((reader/name).read_bytes()).hexdigest()[:16] for name in names}
     shell=[name for name in names if not name.startswith(LAZY) and 'LICENSE' not in name and name!='sw.js']
-    (reader/'precache.json').write_text(json.dumps({'files':files,'shell':shell})+'\n')
+    # Prefab packs (docs/TABLES-AND-OFFICE.md, phase 7; tools/prefab_packs.mjs): only the core
+    # pack is cached at install; the others when the device installs them (prefab-packs.js),
+    # which reads their files and sizes here.
+    packs=json.loads(subprocess.check_output(['node',str(ROOT/'tools/prefab_packs.mjs'),str(reader)],text=True))
+    lazy=set(packs['lazy'])
+    shell=[name for name in shell if name not in lazy]
+    packed={pid:{'bytes':p['bytes'],'files':{f:n for f,n in p['files'].items() if f in files}} for pid,p in packs['packs'].items()}
+    (reader/'precache.json').write_text(json.dumps({'files':files,'shell':shell,'packs':packed})+'\n')
 
 IMPORT=re.compile(r"""(^[ \t]*(?:(?:import|export)\b[^;'"]*?\bfrom\s*|import\s*))(['"])([^'"]+)\2""",re.M)
 def vendor_modules():

@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 60,
+  "pack": "maths",
   "label": "Truth table",
   "kind": "custom",
   "output": "picture",

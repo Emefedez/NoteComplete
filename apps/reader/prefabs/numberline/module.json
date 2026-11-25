@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 50,
+  "pack": "maths",
   "label": "Number line",
   "kind": "custom",
   "output": "picture",

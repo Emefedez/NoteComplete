@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 46,
+  "pack": "textual-analysis",
   "label": "Textual analysis",
   "kind": "custom",
   "output": "picture",

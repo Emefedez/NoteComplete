@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 30,
+  "pack": "charts",
   "label": "Charts and exam figures",
   "kind": "custom",
   "output": "picture",

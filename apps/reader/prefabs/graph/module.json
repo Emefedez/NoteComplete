@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 10,
+  "pack": "core",
   "label": "Function graph",
   "kind": "window",
   "output": "items",

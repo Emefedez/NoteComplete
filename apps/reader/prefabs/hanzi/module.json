@@ -3,6 +3,7 @@
   "api": 1,
   "version": "1.0.0",
   "order": 80,
+  "pack": "chinese",
   "label": "Chinese stroke order",
   "kind": "window",
   "output": "picture",
