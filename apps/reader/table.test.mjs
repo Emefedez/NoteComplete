@@ -120,7 +120,7 @@ test('a merged area has no rules inside it and one text box in its middle', () =
 
 // Sprint 1b (docs/TABLES-AND-OFFICE.md): row heights, cell looks, header column, borders, text size.
 import { readFileSync } from 'node:fs';
-import { insertLines, deleteLines, rowWeights, tableNaturalSize, formatCells, formatOf, areaAnchors, sortRows, canSort, compareCells, pasteBlock, shiftFormat, TINTS, MAX_ROWS, MAX_COLUMNS } from './table.js';
+import { insertLines, deleteLines, rowWeights, tableNaturalSize, formatCells, formatOf, areaAnchors, sortRows, canSort, compareCells, pasteBlock, shiftFormat, textBlock, CAP_HEIGHT, TINTS, MAX_ROWS, MAX_COLUMNS } from './table.js';
 
 test('tables of versions 1 and 2 draw exactly as they did before', () => {
   // table.golden.json: what the table.js of commit 6fa98cc drew for these specs.
@@ -206,9 +206,11 @@ test('cell looks: bold, italic, alignment both ways and a fill under the text', 
   assert.ok(Math.abs(rx + rw - 297) < 1e-9, 'right: against the cell\'s right edge');
   const [tx, , tw] = at('top').bounds;
   assert.ok(Math.abs(tx + tw / 2 - 75) < 1e-9, 'centred across its cell');
-  assert.equal(at('top').bounds[1], 60 + 1, 'top: at the top of its row');
-  const [, by, , bh] = at('bottom').bounds;
-  assert.ok(Math.abs(by + bh - 89) < 1e-9, 'bottom: at the bottom of its row');
+  // Top and bottom: the glyphs (textBlock: where the core puts them) a pad from the rules.
+  const glyphs = (i) => { const b = textBlock(i.text.font_size, 1); return [i.bounds[1] + b.top, i.bounds[1] + b.bottom]; };
+  assert.ok(Math.abs(glyphs(at('top'))[0] - 60 - Math.max(2, 0.3 * at('top').text.font_size)) < 1e-9, 'top: caps a pad under the row\'s top');
+  assert.ok(glyphs(at('bottom'))[1] < 90 && glyphs(at('bottom'))[1] > 90 - at('bottom').text.font_size, 'bottom: baseline near the row\'s bottom');
+  assert.ok(glyphs(at('bottom'))[0] > glyphs(at('top'))[0] + 5, 'bottom is lower than top');
   // The fill: a band in the cell only; the row's own band leaves that cell out (no band over a band).
   const bands = lines.filter((l) => l.tool === 1 && l.under && l.square);
   const fill = bands.find((b) => b.rgba === TINTS.yellow.head);
@@ -319,5 +321,45 @@ test('a 50 × 20 table draws quickly and the core takes every item', async () =>
   for (const line of clear.lines) session.draw(0, JSON.stringify(line));
   for (const image of clear.images) session.add_image(0, JSON.stringify(image));
   assert.ok(session.export_noteful().length > 0);
+  session.free();
+});
+
+test('text sits where it is told in its cell as the core draws it: every size, one to three lines', async () => {
+  // The core's own page SVG (WASM): each text box's baselines, read back; the glyphs reach a cap
+  // height above the first. Their middle must be the cell's middle (or a pad from its top or
+  // bottom rule) within 1.5 units.
+  const { default: init, EditorSession } = await import('./pkg/noteful_wasm.js');
+  await init({ module_or_path: readFileSync(new URL('./pkg/noteful_wasm_bg.wasm', import.meta.url)) });
+  const session = new EditorSession(readFileSync(new URL('../../samples/Examen%20wuolah.noteful', import.meta.url)));
+  session.insert_pages(0, JSON.stringify([{ size: [800, 3000] }]));
+  const cases = [];
+  let top = 10;
+  for (const size of ['auto', 'small', 'medium', 'large']) for (const lines of [1, 2, 3]) for (const valign of ['top', 'middle', 'bottom']) {
+    const text = Array.from({ length: lines }, (_, k) => `L${k}`).join('\n');
+    // fit: a v3 table; the row asked for is as tall as three lines need, so every case fits.
+    const cells = [['a', text], ['b\nb\nb', 'x']];
+    const box = [20, top, 300, 200];
+    const { images } = tableItems(box, { cells, fit: true, header: false, size, format: { '0,1': { valign } } });
+    const item = images.find((i) => i.text.text === text);
+    session.add_image(0, JSON.stringify(item));
+    const rule = tableItems(box, { cells, fit: true, header: false, size }).lines.find((l) => l.shape?.kind === 'line' && l.points[0][1] === l.points[1][1]).points[0][1];
+    cases.push({ size, lines, valign, item, cell: [top, rule] });
+    top += 230;
+  }
+  const svg = JSON.parse(session.view(0)).svg;
+  // Each added text box: <g transform="translate(cx cy) … translate(-w/2 -h/2)"> then its <text y=…>.
+  const groups = [...svg.matchAll(/<g transform="translate\(([-\d.]+) ([-\d.]+)\) rotate\(0\) translate\(([-\d.]+) ([-\d.]+)\)">([\s\S]*?)<\/g>/g)];
+  for (const { size, lines, valign, item, cell: [y0, y1] } of cases) {
+    const g = groups.find((m) => Math.abs(+m[2] + +m[4] - item.bounds[1]) < 1e-6 && m[5].includes('>L0<'));
+    assert.ok(g, `drawn: ${size} ${lines} ${valign}`);
+    const baselines = [...g[5].matchAll(/<text [^>]*y="([-\d.]+)"/g)].map((m) => item.bounds[1] + +m[1]);
+    assert.equal(baselines.length, lines);
+    const s = item.text.font_size, capTop = baselines[0] - CAP_HEIGHT * s, base = baselines.at(-1), pad = Math.max(2, 0.3 * s);
+    const where = `${size} (${s}) ${lines} line(s) ${valign}: glyphs ${capTop.toFixed(1)}–${base.toFixed(1)} in ${y0.toFixed(1)}–${y1.toFixed(1)}`;
+    if (valign === 'middle') assert.ok(Math.abs((capTop + base) / 2 - (y0 + y1) / 2) <= 1.5, where);
+    if (valign === 'top') assert.ok(Math.abs(capTop - (y0 + pad)) <= 1.5, where);
+    if (valign === 'bottom') assert.ok(Math.abs(base - (y1 - pad - 0.2 * s)) <= 1.5, where);
+    assert.ok(capTop >= y0 - 1e-9 && base <= y1, `inside: ${where}`);
+  }
   session.free();
 });

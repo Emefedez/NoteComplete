@@ -293,6 +293,20 @@ export function pasteBlock(spec, [r0, c0], block) {
   return tableSpec({ ...spec, cells, merges: [...(spec.merges || []).filter(outside), ...pasted] });
 }
 
+// Where the core puts a text box's lines (crates/noteful-core text.rs text_svg): the first
+// baseline 8 + max(15, size) below the box's top, each next one 1.2 × max(15, size) + 8 lower.
+// The glyphs of a line reach a cap height (0.716 of the size in Helvetica / Arial) above it.
+// Returns, from the box's top, where the glyphs start and where the last baseline is, and the
+// box height that holds the lines with their descenders.
+export const CAP_HEIGHT = 0.716;
+export function textBlock(size, lines) {
+  const step = Math.max(15, size), first = 8 + step, last = first + (lines - 1) * (1.2 * step + 8);
+  return { top: first - CAP_HEIGHT * size, bottom: last, height: Math.ceil(last + 0.25 * size + 2) };
+}
+// Room around a cell's text, above its caps and below its baseline (with descenders).
+const textPad = (size) => Math.max(2, 0.3 * size) ;
+// The height a row of `lines` lines needs, glyphs and padding, in page units.
+const rowNeed = (size, lines) => { const b = textBlock(size, lines); return b.bottom - b.top + 0.2 * size + 2 * textPad(size); };
 // Row heights, relative: the ones it was given, all equal, or (fit) each row as tall as its
 // tallest text needs — a row of n lines (1.3 font sizes each, 0.9 of padding) against one line.
 export function rowWeights(spec) {
@@ -303,7 +317,8 @@ export function rowWeights(spec) {
   spec.cells.forEach((row, r) => row.forEach((text, c) => {
     const value = text.trim(), m = mergeAt(spec, r, c);
     if (!value || (m && (m[0] !== r || m[1] !== c))) return;
-    const rs = m ? m[2] : 1, need = (0.9 + 1.3 * value.split('\n').length) / 2.2 / rs;
+    const size = TEXT_SIZES[spec.size || 'auto'].size || 14, rs = m ? m[2] : 1;
+    const need = rowNeed(size, value.split('\n').length) / rowNeed(size, 1) / rs;
     for (let i = r; i < r + rs; i++) weights[i] = Math.max(weights[i], need);
   }));
   return weights;
@@ -407,12 +422,21 @@ export function tableItems(box, spec = {}, { layer = 0, id = `t${Date.now().toSt
     const [rs, cs] = m ? [m[2], m[3]] : [1, 1];
     const areaW = xs[c + cs] - xs[c], areaH = ys[r + rs] - ys[r], lines_ = value.split('\n').length;
     const w = Math.max(size, Math.min(areaW - 6, Math.ceil(Math.max(...value.split('\n').map((l) => l.length)) * size * 0.58 + 12)));
-    // Fixed sizes: as tall as the core lays the lines out (8 above, at least 15 per line), so small
-    // text is centred; auto keeps the height tables always had.
-    const h = Math.max(size, Math.min(areaH - 2, fixed ? Math.ceil(8 + lines_ * Math.max(15, size) + size * 0.3) : Math.ceil(lines_ * size * 1.3 + 8)));
     const align = f.align || (m ? 'center' : 'left'), valign = f.valign || 'middle';
     const x = align === 'center' ? xs[c] + Math.max(3, (areaW - w) / 2) : align === 'right' ? Math.max(xs[c] + 3, xs[c + cs] - 3 - w) : xs[c] + 3;
-    const y = valign === 'top' ? ys[r] + 1 : valign === 'bottom' ? Math.max(ys[r] + 1, ys[r + rs] - 1 - h) : ys[r] + Math.max(1, (areaH - h) / 2);
+    let y, h;
+    if (spec.v < 3) {
+      // Tables of versions 1 and 2: placed as they always were.
+      h = Math.max(size, Math.min(areaH - 2, Math.ceil(lines_ * size * 1.3 + 8)));
+      y = valign === 'top' ? ys[r] + 1 : valign === 'bottom' ? Math.max(ys[r] + 1, ys[r + rs] - 1 - h) : ys[r] + Math.max(1, (areaH - h) / 2);
+    } else {
+      // Placed by where its glyphs land (textBlock), not by its box: caps-to-baseline centred,
+      // or a pad from the top or bottom rule; text taller than its cell starts at the top.
+      const b = textBlock(size, lines_), pad = textPad(size), glyphs = b.bottom - b.top, low = 0.2 * size;
+      h = b.height;
+      const top = ys[r] + pad - b.top, bottom = ys[r + rs] - pad - low - b.bottom;
+      y = glyphs + low + 2 * pad > areaH || valign === 'top' ? top : valign === 'bottom' ? bottom : (ys[r] + ys[r + rs]) / 2 - (b.top + b.bottom) / 2;
+    }
     // Lines inside the box aligned too (the text box's own align, which Noteful keeps), when
     // the cell asks for it.
     const boxAlign = f.align === 'center' ? 1 : f.align === 'right' ? 2 : 0;
