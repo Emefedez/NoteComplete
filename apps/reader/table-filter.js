@@ -5,6 +5,8 @@
 // together, and such tables are not sorted. "Put on page" gives the rows shown, in their order,
 // as a page table spec (table.js) to the app.
 import { MAX_ROWS, MAX_COLUMNS } from './table.js';
+import { openContextMenu } from './context-menu.js';
+import { cleanMerges, mergedTableHtml } from './html-table.js';
 
 // ---- Values ---------------------------------------------------------------------------------
 
@@ -107,6 +109,25 @@ export function pageTable(rows, head = 1, { maxRows = MAX_ROWS, maxColumns = MAX
   return { value: { cells, merges: inside, header: head > 0 }, total: { rows: grid.length, columns: width }, kept };
 }
 
+// ---- Copies -----------------------------------------------------------------------------------
+
+// Tab-separated (what spreadsheets paste), one line per row; tabs and line breaks in a cell
+// become spaces.
+export const gridTsv = (grid) => grid.map((r) => r.map((c) => String(c).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+// CSV (RFC 4180): fields with a comma, a quote or a line break quoted, quotes doubled.
+export const gridCsv = (grid) => grid.map((r) => r.map((c) => (/[",\r\n]/.test(c) ? `"${String(c).replace(/"/g, '""')}"` : String(c))).join(',')).join('\r\n') + '\r\n';
+// Markdown as NoteComplete writes tables: a pipe table, or with merges the HTML table the text
+// view reads (html-table.js). Cells are plain text, so Markdown's own characters are escaped.
+export function gridMarkdown(grid, merges = [], head = 1) {
+  if (!grid.length || !grid[0].length) return '';
+  const md = grid.map((r) => r.map((c) => String(c).replace(/[\\`*_[\]<~]/g, '\\$&')));
+  const kept = cleanMerges(merges, grid.length, grid[0].length);
+  if (kept.length) return mergedTableHtml(md, kept);
+  const line = (r) => `| ${r.map((c) => c.replace(/\|/g, '\\|')).join(' | ')} |`;
+  const top = Math.max(1, Math.min(head, 1));
+  return [...md.slice(0, top).map(line), `|${' --- |'.repeat(md[0].length)}`, ...md.slice(top).map(line)].join('\n');
+}
+
 // ---- In the page ------------------------------------------------------------------------------
 
 // A cell's text as a page table writes it: formulas back as $TeX$, pictures as their description.
@@ -122,20 +143,30 @@ export function cellSource(cell) {
 }
 const rowCells = (tr) => [...tr.cells].map((td) => ({ text: cellSource(td), rs: td.rowSpan || 1, cs: td.colSpan || 1 }));
 
-// Bars on the tables of `root` (a rendered document). minRows: tables with fewer body rows get
-// no bar. onToPage({ value, total, kept, head, filtered, filter, x, y }): Put on page (also a right-click on
-// any table); without it, no such button.
-export function attachTableFilters(root, { minRows = 4, onToPage = null } = {}) {
+// Bars on the tables of `root` (a rendered document), and a menu on a right-click on any table.
+// minRows: tables with fewer body rows get no bar until asked for. pageMenu(info) resolves to
+// { title, entries }: where the rows shown can go as a page table (info: { value, total, kept,
+// head, filtered, filter }); without it, no Put on page. notify(message, error?): a word after
+// a copy.
+export function attachTableFilters(root, { minRows = 4, pageMenu = null, notify = () => {} } = {}) {
   for (const table of root.querySelectorAll('table')) {
     if (table.closest('.tf-wrap, pre, code')) continue;
     const body = table.tBodies[0];
     const bodyRows = body ? body.rows.length : 0;
-    if (onToPage) table.addEventListener('contextmenu', (event) => {
+    // A right press can move or drop the selection before the menu opens: what was selected
+    // inside the table as it went down is what Copy selection copies.
+    table.addEventListener('pointerdown', (event) => {
+      if (event.button !== 2) return;
+      const sel = table.ownerDocument.getSelection();
+      table.tfSelected = sel && !sel.isCollapsed && table.contains(sel.anchorNode) ? sel.toString() : '';
+    }, true);
+    table.addEventListener('contextmenu', (event) => {
       if (event.target.closest('.tf-values')) return;
       event.preventDefault();
-      onToPage({ ...toPage(table), x: event.clientX, y: event.clientY });
+      event.stopPropagation();
+      tableMenu(table, event, { pageMenu, notify });
     });
-    if (bodyRows >= minRows) tableBar(table, { onToPage });
+    if (bodyRows >= minRows) tableBar(table, { pageMenu });
   }
 }
 
@@ -145,12 +176,98 @@ function toPage(table) {
   const rows = [...table.rows].filter((tr) => !tr.hidden);
   const filtered = rows.length < table.rows.length;
   // With a bar, the app can offer to choose the rows with its filter.
-  return { ...pageTable(rows.map(rowCells), head), head, filtered, filter: table.tfFocus || null };
+  return { ...pageTable(rows.map(rowCells), head), head, filtered, filter: table.tfBar?.focus || null };
+}
+
+// The rows shown as a grid of plain cells, with merges, and the row each <tr> became.
+function shownGrid(table) {
+  const trs = [...table.rows].filter((tr) => !tr.hidden);
+  const placed = placeCells(trs.map(rowCells));
+  return { ...placed, trs, head: table.tHead ? [...table.tHead.rows].filter((tr) => !tr.hidden).length : 0 };
+}
+// The column a cell starts in (the whole table, rows hidden or not, placed as drawn).
+function columnOf(table, cell) {
+  const taken = [];
+  const rows = [...table.rows];
+  for (let r = 0; r < rows.length; r++) {
+    let c = 0;
+    for (const td of rows[r].cells) {
+      while (taken[r]?.has(c)) c++;
+      if (td === cell) return c;
+      for (let i = r; i < r + (td.rowSpan || 1); i++) for (let j = c; j < c + (td.colSpan || 1); j++) (taken[i] ||= new Set()).add(j);
+      c += td.colSpan || 1;
+    }
+  }
+  return -1;
+}
+// The table as it shows (rows hidden by the filter left out, bar marks gone) for an HTML copy.
+function shownHtml(table) {
+  const copy = table.cloneNode(true);
+  for (const tr of [...copy.rows]) if (tr.hidden) tr.remove();
+  for (const el of copy.querySelectorAll('*')) {
+    for (const a of [...el.attributes]) if (!/^(rowspan|colspan|href|src|alt)$/i.test(a.name)) el.removeAttribute(a.name);
+  }
+  for (const extra of copy.querySelectorAll('.tf-values, .tf-sort, button, span:empty')) extra.remove();
+  copy.removeAttribute('class');
+  copy.setAttribute('border', '1');
+  return copy.outerHTML;
+}
+async function copyText(text, html = '') {
+  if (html && globalThis.ClipboardItem && navigator.clipboard?.write) {
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+  } else await navigator.clipboard.writeText(text);
+}
+
+// The menu of a table: copies, sorting and filtering by the cell pressed, Put on page, Select.
+async function tableMenu(table, event, { pageMenu, notify }) {
+  const doc = table.ownerDocument;
+  const cell = event.target.closest('td, th');
+  const row = cell?.parentElement;
+  const column = cell ? columnOf(table, cell) : -1;
+  const selection = doc.getSelection();
+  const selected = (selection && !selection.isCollapsed && table.contains(selection.anchorNode) ? selection.toString() : '') || table.tfSelected || '';
+  table.tfSelected = '';
+  const copy = (what, text, html) => () => copyText(text(), html?.()).then(() => notify(`Copied ${what}.`), () => notify('Could not copy: the clipboard is not available here.', true));
+  const grid = () => shownGrid(table);
+  const bar = table.tfBar;
+  const body = table.tBodies[0];
+  const inBody = row && body?.contains(row);
+  const value = cell ? cellSource(cell) : '';
+  // Sorting needs the bar (it holds the order); one is added when asked for.
+  const control = () => table.tfBar || tableBar(table, { pageMenu });
+  const spanned = bar ? bar.spanned : [...(body?.rows || [])].some((tr) => [...tr.cells].some((td) => td.rowSpan > 1));
+  const sortable = column >= 0 && (cell.colSpan || 1) === 1 && body?.rows.length > 1;
+  const sortNow = bar?.state.column === column ? bar.state.dir : 0;
+  const sortEntries = [
+    { label: 'Ascending', icon: 'up', checked: sortNow === 1, run: () => control().sort(column, 1) },
+    { label: 'Descending', icon: 'down', checked: sortNow === -1, run: () => control().sort(column, -1) },
+    { label: 'As written', icon: 'undo', checked: !sortNow, run: () => control().sort(column, 0) },
+  ];
+  const put = pageMenu ? await pageMenu(toPage(table)).catch(() => null) : null;
+  const entries = [
+    selected && { label: 'Copy selection', icon: 'copy', run: copy('the selection', () => selected) },
+    { label: 'Copy table', icon: 'copy', run: copy('the table: it pastes into spreadsheets and documents', () => gridTsv(grid().grid), () => shownHtml(table)) },
+    { label: 'Copy as Markdown', icon: 'copy', run: copy('the table as Markdown', () => { const g = grid(); return gridMarkdown(g.grid, g.merges, g.head); }) },
+    { label: 'Copy as CSV', icon: 'copy', run: copy('the table as CSV', () => gridCsv(grid().grid)) },
+    cell && { label: 'Copy cell', icon: 'copy', run: copy('the cell', () => value) },
+    row && { label: 'Copy row', icon: 'copy', run: copy('the row', () => { const g = grid(), i = g.trs.indexOf(row); return gridTsv([g.grid[i] || []]); }) },
+    '-',
+    cell && (spanned
+      ? { label: 'Sorting is off: rows share merged cells', icon: 'sort', disabled: true }
+      : { label: 'Sort by this column', icon: 'sort', disabled: !sortable, submenu: sortEntries }),
+    inBody && column >= 0 && { label: value ? `Only rows with “${value.length > 24 ? `${value.slice(0, 23)}…` : value}” here` : 'Only rows empty here', icon: 'searchText', run: () => control().only(column, value) },
+    bar?.active && { label: 'Clear filters and sorting', icon: 'close', run: () => bar.clear() },
+    !bar && body?.rows.length && { label: 'Show filter bar', icon: 'search', run: () => control().focus() },
+    '-',
+    put && { label: 'Put on page', icon: 'table', submenu: put.entries, subtitle: put.title },
+    { label: 'Select table', icon: 'select', run: () => { const range = doc.createRange(); range.selectNode(table); selection.removeAllRanges(); selection.addRange(range); } },
+  ];
+  openContextMenu(event.clientX, event.clientY, entries, { title: 'Table' });
 }
 
 // The bar's words and marks are drawn by CSS (data-label), not text in the document: Find, a
 // selection or a copy of the table never meets them.
-function tableBar(table, { onToPage }) {
+function tableBar(table, { pageMenu }) {
   const doc = table.ownerDocument, body = table.tBodies[0];
   const original = [...body.rows], scroller = table.closest('.text-doc');
   const spanned = original.some((tr) => [...tr.cells].some((td) => td.rowSpan > 1));
@@ -182,17 +299,19 @@ function tableBar(table, { onToPage }) {
   clear.setAttribute('aria-label', 'Clear');
   clear.title = 'Show every row in the order written';
   bar.append(search, count, clear);
-  if (onToPage) {
+  if (pageMenu) {
     const put = doc.createElement('button');
     put.type = 'button';
     put.className = 'tf-put';
     put.dataset.label = 'Put on page';
     put.setAttribute('aria-label', 'Put on page');
     put.title = 'Put the rows shown on a page of a note, as a table you can edit';
-    put.onclick = () => { const r = put.getBoundingClientRect(); onToPage({ ...toPage(table), x: r.left, y: r.bottom + 4 }); };
+    put.onclick = async () => {
+      const r = put.getBoundingClientRect(), menu = await pageMenu(toPage(table));
+      openContextMenu(r.left, r.bottom + 4, menu.entries, { title: menu.title });
+    };
     bar.append(put);
   }
-  table.tfFocus = () => { search.focus(); search.select(); };
   const wrap = doc.createElement('div');
   wrap.className = 'tf-wrap';
   table.before(wrap);
@@ -271,6 +390,16 @@ function tableBar(table, { onToPage }) {
   };
   count.dataset.label = `${original.length} rows`;
   clear.hidden = true;
+  // What the table's menu does through the bar.
+  const controller = {
+    spanned, state,
+    get active() { return Boolean(state.query.trim() || state.values.size || state.dir); },
+    focus: () => { search.focus(); search.select(); },
+    sort(column, dir) { if (spanned) return; state.column = dir ? column : -1; state.dir = dir; apply(); },
+    only(column, value) { state.values.set(column, new Set([value])); apply(); },
+    clear: () => clear.onclick(),
+  };
+  table.tfBar = controller;
 
   // The values of one column, each with a check box; the filter follows every change.
   function valueMenu(anchor, column, name) {
@@ -345,6 +474,7 @@ function tableBar(table, { onToPage }) {
     scroller?.addEventListener('scroll', () => closeValueMenu(doc), { once: true });
     menu.__off = () => { doc.removeEventListener('pointerdown', away, true); doc.removeEventListener('keydown', keys, true); };
   }
+  return controller;
 }
 
 function closeValueMenu(doc) {

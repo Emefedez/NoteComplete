@@ -52,6 +52,10 @@ in the desktop app); sprints 2 onwards in progress.
       in their order, with merges, go to a note picked like "Insert diagram into note"; the
       table editor opens with them. Over 30 × 12, the menu says what is taken (header + first
       rows/columns) and offers to choose rows with the filter first. Limits not raised.
+- [!] Right-click on a table: a table menu (context-menu.js): Copy selection (when text in it
+      was selected), Copy table (HTML + TSV), Copy as Markdown / CSV, Copy cell / row, Sort by
+      this column ▸ (off with the reason when rows share merged cells), Only rows with this value,
+      Clear filters and sorting, Show filter bar (small tables), Put on page ▸, Select table.
 
 ## Phase 3: open with NoteComplete or Euro-Office
 

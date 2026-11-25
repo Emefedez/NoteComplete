@@ -5872,7 +5872,8 @@ const textView = textViewer({
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   editPrefab: (spec) => figureEditor(spec, { editing: true }),
-  tableToPage: (info) => tableToPage(info),
+  tablePage: (info) => tablePageMenu(info),
+  tableNotify: (message, error = false) => status(message, error),
   // A relative link to another file opens it here, from this file's folder.
   openLink: (href) => {
     if (/^[a-z][a-z0-9+.-]*:/i.test(href)) return status(`NoteComplete cannot open ${href.split(":")[0]}: links.`, true);
@@ -6027,7 +6028,8 @@ $("textIntoNote").onclick = async () => {
 };
 // A table of the open document on a page of a note (table-filter.js: the rows shown, in their
 // order, cut to what a page table holds). The table editor opens with it, to check and insert.
-async function tableToPage({ value, total, kept, head = 1, filtered, filter, x, y }) {
+// Gives the menu's title and entries (the table's bar and its right-click menu show them).
+async function tablePageMenu({ value, total, kept, head = 1, filtered, filter }) {
   const cut = kept.rows < total.rows || kept.columns < total.columns;
   // Rows counted without the header, as the table's bar counts them.
   const rows = (n) => `${n} ${filtered ? "rows shown" : "rows"}`;
@@ -6041,7 +6043,7 @@ async function tableToPage({ value, total, kept, head = 1, filtered, filter, x, 
   };
   const entries = await noteTargetEntries(insert, "Table");
   if (cut && filter) entries.unshift({ label: "Choose the rows with the filter first", icon: "search", run: filter }, "-");
-  openContextMenu(x, y, entries, { title });
+  return { title, entries };
 }
 $("htmlSave").onclick = async () => {
   if (embeddedExam?.active && doc) {
