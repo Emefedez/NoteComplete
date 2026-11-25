@@ -44,3 +44,12 @@ test('Tools opens the UML editor page, and only the reader pages open in windows
   assert.equal(ownPage(`${home}index.html`, home), null);
   assert.equal(ownPage('https://example.com/uml.html', home), null);
 });
+
+test('Help ▸ Setup wizard… asks the reader to open the wizard', () => {
+  let asked = 0;
+  for (const platform of ['linux', 'darwin', 'win32']) {
+    const help = menuTemplate(platform, { openSetup: () => { asked++; } }).find((m) => m.label === 'Help');
+    help.submenu.find((i) => i.label === 'Setup wizard…').click();
+  }
+  assert.equal(asked, 3);
+});

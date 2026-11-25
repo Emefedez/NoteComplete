@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="R Commander Studio">
+  <rect x="4" y="4" width="120" height="120" rx="22" fill="#191A21" stroke="#BD93F9" stroke-opacity="0.65" stroke-width="3"/>
+  <rect x="11" y="11" width="106" height="106" rx="16" fill="#21222C" stroke="#44475A" stroke-width="1.5"/>
+  <!-- Subtle coordinate grid lines -->
+  <path d="M24 94 H104 M24 34 V94" stroke="#44475A" stroke-width="2" stroke-linecap="square"/>
+  <!-- Distribution curve in cyan -->
+  <path d="M26 91 C44 90, 52 54, 66 54 C80 54, 86 89, 102 91" fill="none" stroke="#8BE9FD" stroke-opacity="0.7" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- Crisp geometric R monogram -->
+  <path d="M36 30 H65 C79 30, 88 37.5, 88 49.5 C88 58.6, 82.8 65.1, 74.2 67.6 L91 96 H75.5 L61.2 70.2 H49.5 V96 H36 Z M49.5 41.2 V59.2 H63.4 C70.1 59.2, 74.2 55.9, 74.2 50.2 C74.2 44.5, 70.1 41.2, 63.4 41.2 Z" fill="#F8F8F2"/>
+  <!-- Machined green play chevron accent -->
+  <polygon points="94,28 106,35 94,42" fill="#50FA7B"/>
+</svg>

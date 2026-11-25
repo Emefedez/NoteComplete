@@ -3,8 +3,9 @@
 // a + key (Spanish) took that key before the reader, so Ctrl + stopped zooming the document
 // while Ctrl − still did. Ctrl +/−/0 belong to the reader and Ctrl Shift +/−/0 to the
 // interface size (main.js), on every layout.
-// Tools opens the reader's own pages in a window of their own (`openPage`: main.js).
-export function menuTemplate(platform = process.platform, { openPage = () => {} } = {}) {
+// Tools opens the reader's own pages in a window of their own (`openPage`: main.js); Help ▸
+// Setup wizard… asks the tab in front to open it (`openSetup`: main.js).
+export function menuTemplate(platform = process.platform, { openPage = () => {}, openSetup = () => {} } = {}) {
   return [
     ...(platform === 'darwin' ? [{ role: 'appMenu' }] : []),
     { role: 'fileMenu' },
@@ -12,6 +13,7 @@ export function menuTemplate(platform = process.platform, { openPage = () => {} 
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { label: 'Tools', submenu: [{ label: 'UML diagram editor', click: () => openPage(PAGES.uml) }, { label: 'Chart and timeline editor', click: () => openPage(PAGES.charts) }] },
     { role: 'windowMenu' },
+    { label: 'Help', submenu: [{ label: 'Setup wizard…', click: () => openSetup() }] },
   ];
 }
 

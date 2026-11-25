@@ -22,6 +22,11 @@ export function normalizeQuality(value = {}) {
     return [key, key === "preloadPages" || key === "keptPages" ? Math.round(clamped) : clamped];
   }));
 }
+// The preset a choice is, or null when it was adjusted by hand.
+export function presetOf(value) {
+  const v = JSON.stringify(normalizeQuality(value));
+  return Object.keys(presets).find(name => JSON.stringify(presets[name]) === v) || null;
+}
 const storageKey = "notecomplete-quality-v1";
 export function loadQuality() {
   try { return normalizeQuality(JSON.parse(localStorage.getItem(storageKey))); }
@@ -77,9 +82,8 @@ export function qualitySettings(onApply) {
   }
   for (const button of dialog.querySelectorAll("[data-preset]")) button.onclick = () => fill(presets[button.dataset.preset]);
   form.oninput = update;
-  form.onsubmit = event => {
-    event.preventDefault();
-    const next = read(), nextDetail = form.elements.zoomDetail.checked;
+  // Saves and applies a choice: the dialog's Apply, and the setup wizard (set below).
+  function save(next, nextDetail) {
     const rasterChanged = next.scale !== current.scale || next.megapixels !== current.megapixels || nextDetail !== detail;
     const preloadChanged = next.preloadPages !== current.preloadPages || next.keptPages !== current.keptPages;
     current = next;
@@ -89,7 +93,15 @@ export function qualitySettings(onApply) {
       localStorage.setItem(detailKey, detail ? "1" : "0");
     } catch { /* Session settings still work without storage. */ }
     onApply(current, rasterChanged, detail, preloadChanged);
+  }
+  form.onsubmit = event => {
+    event.preventDefault();
+    save(read(), form.elements.zoomDetail.checked);
     dialog.close();
   };
   onApply(current, false, detail, false);
+  return {
+    get: () => ({ quality: { ...current }, detail }),
+    set: (next, nextDetail = detail) => save(normalizeQuality(next), nextDetail === true),
+  };
 }

@@ -387,6 +387,13 @@ function openPage(page) {
   win.webContents.on('will-navigate', (event, url) => { if (!ownPage(url, home)) event.preventDefault(); });
   win.loadURL(home + page);
 }
+// Help ▸ Setup wizard…: the tab in front of the focused window (or the last window) opens it.
+function openSetup() {
+  const focused = BaseWindow.getFocusedWindow();
+  const win = (focused && windows.get(focused.id)) || [...windows.values()].at(-1);
+  const view = win && views.get(tabs.active(win.id));
+  if (view && !view.webContents.isDestroyed()) view.webContents.send('app:setup-wizard');
+}
 function createWindow({ tab = true, files = [] } = {}) {
   const win = new BaseWindow({ width: 1280, height: 900, minWidth: 360, minHeight: 480, backgroundColor: backdrop(),
     // The reader draws its own File/Edit/View menubar; Alt still reveals the native one and its accelerators keep working.
@@ -477,7 +484,7 @@ app.whenReady().then(async () => {
     responseHeaders['cross-origin-resource-policy'] = ['cross-origin'];
     callback({ responseHeaders });
   });
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, { openPage })));
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(process.platform, { openPage, openSetup })));
   // Web pages may sign in (pop-ups in their own sandboxed windows) and copy text; nothing else.
   const web = session.fromPartition(WEB_SESSION);
   web.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === 'clipboard-sanitized-write' || permission === 'fullscreen'));

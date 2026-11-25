@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('notecompleteWindows', {
   open: () => ipcRenderer.invoke('windows:new'),
   list: () => ipcRenderer.invoke('windows:list'),
   focus: id => ipcRenderer.invoke('windows:focus', id),
+  // Help ▸ Setup wizard… in the native menu (app-menu.js): the tab in front opens it.
+  onSetupWizard: callback => ipcRenderer.on('app:setup-wizard', () => callback()),
 });
 // Tabs in this window: the reader draws the strip and reports its title and
 // unsaved state; closing asks the reader first (onCloseRequest).

@@ -20,7 +20,7 @@
   /><link rel="apple-touch-icon" href="./apple-touch-icon.png" /><meta
     name="apple-mobile-web-app-title"
     content="NoteComplete"
-  /><link rel="stylesheet" href="./style.css" />
+  /><link rel="stylesheet" href="./style.css" /><link rel="stylesheet" href="./setup-wizard.css" />
   <header class="chrome command-bar" id="commandBar">
     <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and cloud storage"></button>
     <button id="tabCount" class="tab-count" type="button" aria-haspopup="menu" aria-expanded="false" title="Open tabs" hidden>1</button>
@@ -183,6 +183,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="paletteOpen" data-icon="search">Search commands<kbd>Ctrl K</kbd></button>
           <button id="shortcutsOpen" data-icon="keyboard">Keyboard shortcuts…</button>
+          <button id="setupWizardOpen" data-icon="settings" data-palette="Setup wizard… (look, performance, writing, AI, modules)" title="The first-run setup again: theme, performance, pen, AI and optional modules (Math &amp; R, Office, Chinese, AI tools)">Setup wizard…</button>
           <hr />
           <button id="welcomeToggle" data-icon="note" role="menuitemcheckbox" aria-checked="true" data-palette="Help: Open the welcome note at start" title="Whether this site opens its welcome note in a tab each time it starts (remembered in this browser)" hidden>Open the welcome note at start</button>
           <button id="installApp" data-icon="import" data-palette="Add this site as an app…" title="Install NoteComplete from this site: it opens from your Home Screen or app list, offline">Add this site as an app…</button>

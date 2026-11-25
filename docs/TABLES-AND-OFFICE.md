@@ -111,42 +111,52 @@ Step n of N / Next, "(Optional)" on optional steps) and the same end screen (gre
 installs (R, Euro-Office, AI tools) are offered here instead of when first needed.
 
 Steps, in this order (everything is also in the menus; the wizard calls the same setters, so
-there is one source for each setting):
+there is one source for each setting, and each choice applies at once):
 
 1. **Look**: theme (Light / Dark / Follow the system, `theme.js`), dark pages, interface size.
-2. **Performance**: the quality presets (Fast / Balanced / Sharp, `quality.js`), fast zoom
-   sharpening, with a hint picked from the device (phone or tablet → Fast).
+2. **Performance**: the quality presets (Performance / Balanced / Sharp, `quality.js`), fast zoom
+   sharpening, with a hint picked from the device (phone or tablet → Performance).
 3. **Writing**: pen pressure, smoothing, tool names under icons, new note format.
 4. **AI** (Optional): the AI tools found (`notecompleteAI.providers`) plus "In this app
-   (WebLLM)"; the chosen one becomes `notecomplete-ai-provider`; connect AI tools to the note
-   server (`notecompleteAgents`). "No AI" is a choice.
-5. **R** (Optional, desktop): R / R Commander Studio status (`notecompleteRBridge.status`), with
-   Install R Commander Studio (`installStudio`, progress shown) and Get R.
-6. **Office files** (Optional): default way to open documents, spreadsheets and presentations
-   (Text view / Euro-Office / Ask each time); Euro-Office install button once phase 3c exists,
-   until then "coming as a separate install".
-7. **Modules**: every module that installs separately, each as a card with its icon, a one-line
-   description, its state (installed, version / not installed / not available on this device)
-   and an **Install** (or Open / Update) button with progress:
-   - **R Commander Studio**: "R statistics and graphs in a friendly editor" (`notecompleteRBridge`).
-   - **Euro-Office**: "Full office suite: edit Word, Excel and PowerPoint files" (phase 3c; until
-     then shown as coming soon).
-   - **AI tools**: connect installed AI apps to your notes (`notecompleteAgents`).
-   - later modules register a card themselves (`id`, `icon`, `name`, `summary`, `status()`,
-     `install(onProgress)`).
-   On the web reader the card says it needs the desktop app.
-8. **Preferences**: menu bar auto-hide, tool bar side in landscape, page spread, welcome note at
-   start, update checks.
-9. **All done!** end screen.
+   (WebLLM)"; the chosen one becomes `notecomplete-ai-provider`. "No AI" is a choice.
+5. **Modules**: the one place for optional features (owner, 2026-11-25: Office and Math are
+   modules, not steps). One registry (`setup-modules.js`), two kinds of card: built-in features
+   turned on with a switch, and separate installs with an **Install** (or Open / Update) button
+   and progress. Each card: icon, one-line description, state, action; its few settings open
+   inside it when it is on or installed. On the web reader the install cards say they need
+   the desktop app.
+   - **Math & R** (feature): "Calculator bar, formulas and R statistics in your notes". Switch =
+     Math Mode (`math/settings.js` `mathSettings({ enabled })`); inside: angle unit, precision,
+     "use R on this computer when R Commander Studio is not running" (`rAutoFallback`), and the
+     **R Commander Studio** row with its icon, status and Install (`notecompleteRBridge`).
+   - **Office suite (Euro-Office)** (install): "Edit Word, Excel and PowerPoint files". Coming
+     soon (disabled) until phase 3c; inside, always: the default way to open documents,
+     spreadsheets and presentations (Text view / Euro-Office, once installed / Ask each time),
+     in `notecomplete-open-with`, read with `openWith(kind)` (`open-with-pref.js`). Unchanged,
+     files open in the text view as today.
+   - **Chinese** (feature): "Type Chinese with pinyin, with Pinyin over characters and a
+     dictionary". Switch = the 中 buttons in every field (`setZhEverUsed`); inside: what new
+     fields start in, simplified or traditional.
+   - **AI tools connection** (install): connect installed AI apps to your notes
+     (`notecompleteAgents`).
+   - later modules register a card themselves (`id`, `kind`, `icon`, `name`, `summary`,
+     `status()`, `install(onProgress)` or `setEnabled(on)`, optional `settings(el, ui)`);
+     Sprint 6 fills in Euro-Office's `status()` and `install()`.
+6. **Preferences**: menu bar auto-hide, tool bar side, page spread, welcome note at start (the
+   website), update checks (desktop).
+7. **All done!** end screen.
 
-- [ ] `setup-wizard.js` + `setup-wizard.css`, steps as small objects (`id`, `label`,
-      `optional`, `available()`, `render(section, draft)`), so a module (R, Euro-Office, later
-      ones) can add its own step.
-- [ ] Opens on first launch (desktop and web), state in `notecomplete-setup`
+- [D] `setup-wizard.js` + `setup-wizard.css`, steps as small objects (`id`, `label`,
+      `optional`, `available()`, `render(section, draft)`); modules in `setup-modules.js`.
+- [D] Opens on first launch (desktop and web), state in `notecomplete-setup`
       (`{ completed, skipped, version, step }`); Skip keeps what was already chosen. Existing
-      users get it once too, with their current settings already selected.
-- [ ] Reopen from Help ▸ Setup wizard… and the command palette.
-- [ ] Tests: step list and availability, state persistence, done screen.
+      users get it once too, with their current settings already selected. Only the tab in
+      front opens it; never in automated browsers (`navigator.webdriver`); `?setup=1` (or
+      `?setup=<step>`) opens it at once.
+- [!] Reopen from Help ▸ Setup wizard… (reader menu and the desktop app's native Help menu)
+      and the command palette (native menu not tried in Electron yet).
+- [D] Tests: step list and availability, state persistence, module states, done screen
+      (`setup-wizard.test.mjs`); headless screenshots of every step and the end screen.
 
 ## Phase 5: Textual Analysis prefab
 

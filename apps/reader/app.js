@@ -42,6 +42,8 @@ import { dictation } from "./dictate.js";
 import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
 import { themeController } from "./theme.js";
+import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
+import { sharedAI as setupAI } from "./local-ai.js";
 import { getAiFile } from "./rich-text.js";
 import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
@@ -232,7 +234,7 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
+const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
 const chromeState = new ChromeState();
 let panels = [],
   observer = null,
@@ -444,7 +446,7 @@ async function pumpRenders() {
     if (renderQueue.size) queueMicrotask(pumpRenders);
   }
 }
-qualitySettings((value, rasterChanged, detail, preloadChanged) => {
+const quality = qualitySettings((value, rasterChanged, detail, preloadChanged) => {
   displayQuality = value;
   zoomDetail = detail;
   // A filter list (never "none"): dark pages append invert() to it, and "none invert()" is
@@ -7844,6 +7846,51 @@ $("uiSizeItems").hidden = false;
 $("uiSmaller").onclick = () => applyUiSize(-1);
 $("uiLarger").onclick = () => applyUiSize(1);
 $("uiReset").onclick = () => applyUiSize(0);
+
+// Help ▸ Setup wizard… (setup-wizard.js): each choice goes through the setter the menus use.
+// A switch kept by a menu item is turned by that item, so its status and side effects stay one.
+{
+  const checked = (id) => $(id)?.getAttribute("aria-checked") === "true";
+  const flip = (id, on) => { if (checked(id) !== on) $(id).click(); };
+  const wizard = setupWizard({
+    status,
+    ai: setupAI(),
+    mobile: isPhoneOrTablet({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints, coarse: matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches }),
+    openExternal: (url) => window.open(url, "_blank", "noopener,noreferrer"),
+    settings: {
+      theme: { get: () => { try { return localStorage.getItem("notecomplete-theme") || "system"; } catch { return "system"; } }, set: (v) => theme.set(v) },
+      darkPages: { get: () => document.body.classList.contains("pages-dark"), set: (on) => setDarkPages(on) },
+      uiSize: {
+        get: () => (windows?.zoom ? null : webUiZoom),
+        step: async (n) => {
+          if (windows?.zoom) { const z = await windows.zoom(n); status(`Interface size ${Math.round(z * 100)}%`); return z; }
+          applyUiSize(n);
+          return webUiZoom;
+        },
+      },
+      quality: { get: () => quality.get(), set: (value, detail) => quality.set(value, detail) },
+      pressure: { get: () => pressureOn(), set: (on) => { $("pressure").value = on ? "on" : "off"; $("pressure").dispatchEvent(new Event("change")); } },
+      smoothing: { get: () => smoothingOn, set: (on) => { if (on !== smoothingOn) $("penSmoothToggle").click(); } },
+      toolNames: { get: () => toolNamesOn(), set: (on) => { if (on !== toolNamesOn()) $("toolNames").click(); } },
+      newFormat: {
+        get: () => { try { return newFormat(localStorage.getItem("notecomplete-new-format")); } catch { return "project"; } },
+        set: (v) => { try { localStorage.setItem("notecomplete-new-format", newFormat(v)); } catch { /* Optional. */ } },
+      },
+      menuBarAutoHide: { get: () => checked("menuBarAutoHide"), set: (on) => setMenuBarAutoHide(on) },
+      dock: { get: () => document.body.dataset.landscapeDock || "top", set: (side) => setLandscapeDock(side) },
+      spread: { get: () => spread === 2, set: (on) => setPageSpread(on ? 2 : 1) },
+      welcome: { available: () => !!$("welcomeToggle") && !$("welcomeToggle").hidden, get: () => welcomeWanted(), set: (on) => { if (on !== welcomeWanted()) $("welcomeToggle").click(); } },
+      updateChecks: { available: () => !$("updateItems").hidden, get: () => checked("updateOnOpen"), set: (on) => flip("updateOnOpen", on) },
+    },
+  });
+  $("setupWizardOpen").onclick = () => { closeMenus(); wizard.open(); };
+  // The desktop app's own Help menu asks the tab in front.
+  window.notecompleteWindows?.onSetupWizard?.(() => wizard.open());
+  // ?setup=1 (or =<step>) opens it at once: for checking it, and for links from the docs.
+  const asked = new URLSearchParams(location.search).get("setup");
+  if (asked) setTimeout(() => wizard.open(asked === "1" ? "" : asked), 300);
+  else autoOpenSetup(wizard);
+}
 
 // Links in AI answers: page links jump to the page, attached images open large;
 // web links open through the desktop app's window handler (target=_blank).
