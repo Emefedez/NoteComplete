@@ -407,7 +407,9 @@ export function tableItems(box, spec = {}, { layer = 0, id = `t${Date.now().toSt
     const [rs, cs] = m ? [m[2], m[3]] : [1, 1];
     const areaW = xs[c + cs] - xs[c], areaH = ys[r + rs] - ys[r], lines_ = value.split('\n').length;
     const w = Math.max(size, Math.min(areaW - 6, Math.ceil(Math.max(...value.split('\n').map((l) => l.length)) * size * 0.58 + 12)));
-    const h = Math.max(size, Math.min(areaH - 2, Math.ceil(lines_ * size * 1.3 + 8)));
+    // Fixed sizes: as tall as the core lays the lines out (8 above, at least 15 per line), so small
+    // text is centred; auto keeps the height tables always had.
+    const h = Math.max(size, Math.min(areaH - 2, fixed ? Math.ceil(8 + lines_ * Math.max(15, size) + size * 0.3) : Math.ceil(lines_ * size * 1.3 + 8)));
     const align = f.align || (m ? 'center' : 'left'), valign = f.valign || 'middle';
     const x = align === 'center' ? xs[c] + Math.max(3, (areaW - w) / 2) : align === 'right' ? Math.max(xs[c] + 3, xs[c + cs] - 3 - w) : xs[c] + 3;
     const y = valign === 'top' ? ys[r] + 1 : valign === 'bottom' ? Math.max(ys[r] + 1, ys[r + rs] - 1 - h) : ys[r] + Math.max(1, (areaH - h) / 2);
