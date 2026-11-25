@@ -76,7 +76,7 @@ export function headingFor(headings, fragment) {
 // (a file next to this one).
 // diagram = { is(name), draw(text) }: files it names (PlantUML) show as a drawing while the format
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
-export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, editorZoom = null, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null }) {
+export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, editorZoom = null, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null, tableToPage = null }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null, helpSheet = null;
   attachMarkdownPrefabContextMenu({
     editorContainer: editorHost,
@@ -406,6 +406,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
     await renderMarkdown(scratch, text, toHtml, { document: true, imageUrl });
     if (token !== renders) return;
     body.replaceChildren(...scratch.childNodes);
+    // Tables get a filter bar and sorting (view only), and Put on page (table-filter.js).
+    if (body.querySelector('table')) {
+      import('./table-filter.js').then(({ attachTableFilters }) => { if (token === renders) attachTableFilters(body, { onToPage: tableToPage }); }).catch(() => {});
+    }
     // Pinyin over the Chinese where it now is (chinese/ruby.js), kept registered for live toggles.
     if (/\p{Script=Han}/u.test(text)) rubyElement(body).catch(() => {});
   }

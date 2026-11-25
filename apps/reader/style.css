@@ -2569,6 +2569,31 @@ body.bar-compact .tab { height: 22px; }
 .notes-render th, .notes-render td { padding: 4px 8px; border: 1px solid var(--line); }
 /* Merged cells (office files, html-table.js): a cell spanning rows reads best centred on them. */
 .notes-render .md-merged-table :is(th, td)[rowspan] { vertical-align: middle; }
+/* Filter and sort on a document's tables (table-filter.js): a bar above, sortable headers with
+   a ▾ for their values, and the values' menu. View only. */
+.notes-render .tf-wrap { margin: 1em 0; }
+.notes-render .tf-wrap > table { margin: 0; }
+.tf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; line-height: 1.3; }
+.tf-bar .tf-search { flex: 0 1 220px; min-width: 120px; height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.tf-bar .tf-count { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tf-bar .tf-put { border-color: var(--line); }
+.tf-bar .tf-clear { color: var(--accent); }
+.notes-render th.tf-head { white-space: nowrap; }
+.notes-render th.tf-sortable { cursor: pointer; user-select: none; }
+.notes-render th.tf-sortable:hover { background: var(--accent-soft); }
+.notes-render th .tf-sort { display: inline-block; min-width: 1em; margin-left: 2px; color: var(--accent); font-size: 10px; }
+.notes-render th .tf-values { min-height: 0; width: 20px; height: 20px; margin-left: 2px; padding: 0; font-size: 11px; color: var(--muted); vertical-align: middle; opacity: .55; }
+.notes-render th:hover .tf-values, .notes-render th .tf-values:focus-visible { opacity: 1; }
+.notes-render th .tf-values.active { opacity: 1; color: var(--surface); background: var(--accent); }
+.tf-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 6px; width: 240px; max-height: min(360px, 70vh); padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: var(--shadow-pop); font-size: 13px; }
+.tf-menu input[type="search"] { height: var(--control); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.tf-menu label { display: flex; align-items: center; gap: 6px; padding: 2px 2px; cursor: pointer; }
+.tf-menu label[hidden] { display: none; }
+.tf-menu .tf-all { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.tf-menu .tf-items { overflow: auto; min-height: 0; }
+.tf-menu .tf-items span:not(.tf-n) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tf-menu .tf-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tf-menu p { margin: 4px 0 0; font-size: 12px; }
 .notes-render img { max-width: 100%; }
 .notes-render .md-page { display: inline-block; margin: 12px 0 4px; padding: 1px 10px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
 @media (max-width: 700px) {
