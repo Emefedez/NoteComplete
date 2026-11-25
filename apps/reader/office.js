@@ -6,6 +6,7 @@
 // and spreadsheets (.xlsx/.xlsm/.xlsb/.xls/.ods/.fods) use SheetJS. Both libraries (vendor/)
 // and this module are fetched only when such a file is opened.
 import { decodeText } from './text-types.js';
+import { cleanMerges, mergedTableHtml } from './html-table.js';
 
 // Big sheets are cut, so the view stays responsive.
 export const MAX_ROWS = 1000, MAX_COLUMNS = 50;
@@ -91,9 +92,43 @@ export function tableMarkdown(rows) {
   return [line(rows[0]), `|${' --- |'.repeat(width)}`, ...rows.slice(1).map(line)].join('\n');
 }
 
+// A table that may have merged cells: merges [row, col, rows, cols] as in table.js. With any
+// (that fit the grid), an HTML <table> with rowspan / colspan, which the text view renders
+// (html-table.js); without, a pipe table as always.
+export function tableBlock(rows, merges = []) {
+  const width = rows.reduce((n, r) => Math.max(n, r.length), 0);
+  const kept = cleanMerges(merges, rows.length, width);
+  return kept.length ? mergedTableHtml(rows, kept) : tableMarkdown(rows);
+}
+
+// Places cells that span rows and columns on a grid: rows of { cell, rs, cs } in reading order
+// (covered spots left out, as in HTML). Gives rows of cells with null on covered spots, and the
+// merges.
+export function spanGrid(rows) {
+  const grid = [], merges = [], taken = [];
+  rows.forEach((row, r) => {
+    grid[r] ||= [];
+    let c = 0;
+    for (const { cell, rs = 1, cs = 1 } of row) {
+      while (taken[r]?.has(c)) c++;
+      if (c >= MAX_COLUMNS) break;
+      const h = Math.max(1, Math.min(rs, rows.length - r)), w = Math.max(1, Math.min(cs, MAX_COLUMNS - c));
+      for (let i = r; i < r + h; i++) for (let j = c; j < c + w; j++) { (taken[i] ||= new Set()).add(j); (grid[i] ||= [])[j] ??= null; }
+      grid[r][c] = cell;
+      if (h * w > 1) merges.push([r, c, h, w]);
+      c += w;
+    }
+  });
+  const width = grid.reduce((n, r) => Math.max(n, r.length), 0);
+  const out = Array.from(grid, (r) => Array.from({ length: width }, (_, c) => r?.[c] ?? null));
+  out.merges = merges;
+  return out;
+}
+
 // rows: plain cell values (a spreadsheet or CSV). Empty rows and columns at the end are
 // dropped, the rest is cut to MAX_ROWS × MAX_COLUMNS with a note saying so.
-export function gridMarkdown(rows, { totalRows, totalColumns } = {}) {
+// merges: [row, col, rows, cols] from the sheet, kept as merged cells.
+export function gridMarkdown(rows, { totalRows, totalColumns, merges = [] } = {}) {
   // Loops rather than Math.max(...rows): a CSV can have a million rows.
   const filled = (v) => cellText(v) !== '';
   let count = rows.length, width = 0;
@@ -106,7 +141,7 @@ export function gridMarkdown(rows, { totalRows, totalColumns } = {}) {
   // A sheet's stated size can count formatted but empty cells: only a full cut is a cut.
   if (allRows > MAX_ROWS && count >= MAX_ROWS) cut.push(`the first ${MAX_ROWS} of ${allRows} rows`);
   if (allColumns > MAX_COLUMNS && width >= MAX_COLUMNS) cut.push(`the first ${MAX_COLUMNS} of ${allColumns} columns`);
-  const table = tableMarkdown(shown);
+  const table = tableBlock(shown, merges);
   return cut.length ? `${table}\n\n*Showing ${cut.join(' and ')}.*` : table;
 }
 
@@ -254,12 +289,13 @@ function documentMarkdown(root, dialect) {
       else if (kind === 'para') { const text = inline(n); if (text) out.push(blockStart(text)); }
       else if (kind === 'list') { const text = list(n, depth); if (text) out.push(text); }
       else if (kind === 'table') {
-        const rows = dialect.rows(n).map((row) => row.map((cell) => (cell ? inline(cell, {}).replace(/\\\n/g, ' ') : '')));
+        const cells = dialect.rows(n);
+        const rows = cells.map((row) => row.map((cell) => (cell ? inline(cell, {}).replace(/\\\n/g, ' ') : '')));
         while (rows.length && rows.at(-1).every((c) => !c)) rows.pop();
         // Trailing empty cells, often repeated to the page's edge, are not columns.
         let width = rows.reduce((w, r) => Math.max(w, r.length), 0);
         while (width && rows.every((r) => !r[width - 1])) width--;
-        const text = tableMarkdown(rows.map((r) => r.slice(0, width)));
+        const text = tableBlock(rows.map((r) => r.slice(0, width)), cells.merges);
         if (text) out.push(text);
       } else if (kind === 'block') for (const b of blocks(n, depth)) out.push(b);
     }
@@ -390,13 +426,16 @@ function odfDialect(styles, pictures = new Map()) {
     },
     items: (n) => n.children.filter((c) => c.name === 'text:list-item' || c.name === 'text:list-header'),
     rows(n) {
-      const rows = [];
+      const rows = [], merges = [];
       const walk = (node) => {
         for (const c of node.children) {
           if (c.name === 'table:table-row') {
             const cells = [];
             for (const cell of c.children) {
               if (cell.name !== 'table:table-cell' && cell.name !== 'table:covered-table-cell') continue;
+              // A merged area is its first cell with the spans, then covered cells in its spots.
+              const rs = Number(cell.attrs['table:number-rows-spanned']) || 1, cs = Number(cell.attrs['table:number-columns-spanned']) || 1;
+              if (cell.name === 'table:table-cell' && rs * cs > 1) merges.push([rows.length, cells.length, rs, cs]);
               const repeat = Math.min(Number(cell.attrs['table:number-columns-repeated']) || 1, MAX_COLUMNS);
               for (let i = 0; i < repeat && cells.length < MAX_COLUMNS; i++) cells.push(cell.name === 'table:table-cell' ? cell : null);
             }
@@ -406,6 +445,7 @@ function odfDialect(styles, pictures = new Map()) {
         }
       };
       walk(n);
+      rows.merges = merges;
       return rows;
     },
     inline(n, style) {
@@ -541,11 +581,8 @@ export function htmlToMarkdown(html) {
     level: (n) => Number(n.name[1]),
     ordered: (n) => tag(n) === 'ol',
     items: (n) => n.children.filter((c) => tag(c) === 'li'),
-    rows(n) {
-      const rows = rowsOf(n);
-      // Merged cells (colspan) take their columns, empty after the first.
-      return rows.map((r) => r.flatMap((c) => [c, ...Array(Math.min(Math.max(0, (Number(c.attrs.colspan) || 1) - 1), MAX_COLUMNS)).fill(null)]));
-    },
+    // Merged cells (colspan, rowspan) take their spots, kept as merges.
+    rows: (n) => spanGrid(rowsOf(n).slice(0, MAX_ROWS).map((r) => r.map((cell) => ({ cell, rs: Number(cell.attrs.rowspan) || 1, cs: Number(cell.attrs.colspan) || 1 })))),
     inline(n, style) {
       switch (tag(n)) {
         case 'br': return { br: true };
@@ -717,25 +754,38 @@ export async function docxXmlDocument(bytes, folder = 'document_files') {
     return inlineMarkdown(paragraphRuns(p, {}, [])).replace(asHeading ? /\\\n/g : /(?!)/, ' ');
   }
 
+  // gridSpan merges across; vMerge "restart" starts a merge down that the cells below marked
+  // vMerge (continue) join.
   function renderTable(tbl) {
-    const rows = [];
+    const rows = [], merges = [], down = new Map();
     for (const tr of tbl.children) {
       if (typeof tr === 'string' || localName(tr.name) !== 'tr') continue;
       const cells = [];
       for (const tc of tr.children) {
         if (typeof tc === 'string' || localName(tc.name) !== 'tc') continue;
-        const span = Math.min(Math.max(1, Number(findLocal(findLocal(tc, 'tcPr'), 'gridSpan')?.attrs['w:val']) || 1), MAX_COLUMNS);
+        const pr = findLocal(tc, 'tcPr');
+        const span = Math.min(Math.max(1, Number(findLocal(pr, 'gridSpan')?.attrs['w:val']) || 1), MAX_COLUMNS);
+        const vMerge = findLocal(pr, 'vMerge'), col = cells.length;
         const text = tc.children
           .filter((c) => typeof c !== 'string' && localName(c.name) === 'p')
           .map((p) => renderPara(p, true))
           .filter(Boolean)
           .join(' ');
-        cells.push(text);
+        const above = down.get(col);
+        if (vMerge && vMerge.attrs['w:val'] !== 'restart' && above && above[3] === span && above[0] + above[2] === rows.length) {
+          above[2]++;
+          cells.push('');
+        } else {
+          const merge = [rows.length, col, 1, span];
+          merges.push(merge);
+          if (vMerge) down.set(col, merge); else down.delete(col);
+          cells.push(text);
+        }
         for (let k = 1; k < span; k++) cells.push('');
       }
       if (cells.length) rows.push(cells);
     }
-    return tableMarkdown(rows);
+    return tableBlock(rows, merges);
   }
 
   const out = [];
@@ -1284,17 +1334,22 @@ export async function pptxDocument(bytes, folder = 'document_files') {
     // Tables
     for (const tbl of descendantsLocal(tree, 'tbl')) {
       const rows = [];
+      const merges = [];
       for (const tr of tbl.children) {
         if (typeof tr === 'string' || localName(tr.name) !== 'tr') continue;
         const cells = [];
         for (const tc of tr.children) {
           if (typeof tc === 'string' || localName(tc.name) !== 'tc') continue;
-          const cellLines = [...descendantsLocal(tc, 'p')].map((p) => drawPara(p, rels).replace(/\\\n/g, ' ')).filter(Boolean);
+          // A merged area's first cell says gridSpan / rowSpan; the cells it covers (hMerge,
+          // vMerge) are there too, empty.
+          const rs = Number(tc.attrs.rowSpan) || 1, cs = Number(tc.attrs.gridSpan) || 1;
+          if (rs * cs > 1 && !tc.attrs.hMerge && !tc.attrs.vMerge) merges.push([rows.length, cells.length, rs, cs]);
+          const cellLines = tc.attrs.hMerge || tc.attrs.vMerge ? [] : [...descendantsLocal(tc, 'p')].map((p) => drawPara(p, rels).replace(/\\\n/g, ' ')).filter(Boolean);
           cells.push(cellLines.join(' '));
         }
         if (cells.length) rows.push(cells);
       }
-      const md = tableMarkdown(rows);
+      const md = tableBlock(rows, merges);
       if (md) blocks.push(md);
     }
 
@@ -1509,7 +1564,9 @@ export function workbookMarkdown(XLSX, workbook) {
     range.e.r = Math.min(range.e.r, range.s.r + MAX_ROWS - 1);
     range.e.c = Math.min(range.e.c, range.s.c + MAX_COLUMNS - 1);
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: '', blankrows: true, range });
-    parts.push(gridMarkdown(rows, { totalRows: full.e.r - full.s.r + 1, totalColumns: full.e.c - full.s.c + 1 }));
+    // Merged cells, counted from the first cell shown (gridMarkdown cuts what lies outside).
+    const merges = (sheet['!merges'] || []).map(({ s, e }) => [s.r - range.s.r, s.c - range.s.c, e.r - s.r + 1, e.c - s.c + 1]).filter(([r, c]) => r >= 0 && c >= 0);
+    parts.push(gridMarkdown(rows, { totalRows: full.e.r - full.s.r + 1, totalColumns: full.e.c - full.s.c + 1, merges }));
   }
   return parts.join('\n\n') + '\n';
 }

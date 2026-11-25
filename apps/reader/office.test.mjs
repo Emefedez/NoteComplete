@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDelimited, guessSeparator, delimitedMarkdown, gridMarkdown, tableMarkdown, escapeText, parseXml, odfToMarkdown, zipEntry, zipList, odtMarkdown,
-  htmlToMarkdown, docxToMarkdown, docxDocument, docxXmlDocument, odtDocument, odpDocument, pptxDocument, docDocument, pptDocument, rtfToMarkdown, epubDocument, ipynbDocument, parseCfb, officeDocument, imageFolder, imageExtension, linkPath, workbookMarkdown, readWorkbook, officeMarkdown, MAX_ROWS, MAX_COLUMNS } from './office.js';
+  htmlToMarkdown, docxToMarkdown, docxDocument, docxXmlDocument, odtDocument, odpDocument, pptxDocument, docDocument, pptDocument, rtfToMarkdown, epubDocument, ipynbDocument, parseCfb, officeDocument, imageFolder, imageExtension, linkPath, workbookMarkdown, readWorkbook, officeMarkdown, tableBlock, spanGrid, MAX_ROWS, MAX_COLUMNS } from './office.js';
 import { fileKind, prepareDocument } from './media-import.js';
 import { isOfficeName, isAudioName, isVideoName, isImageName } from './text-types.js';
 import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
@@ -136,9 +136,15 @@ test('HTML (as mammoth writes it) becomes Markdown', () => {
     '',
     '1. primero',
     '',
-    '| Cabecera |  |',
-    '| --- | --- |',
-    '| x | y z |',
+    // A merged cell (colspan) keeps the table as HTML (html-table.js renders it).
+    '<table>',
+    '<thead>',
+    '<tr><th colspan="2">Cabecera</th></tr>',
+    '</thead>',
+    '<tbody>',
+    '<tr><td>x</td><td>y z</td></tr>',
+    '</tbody>',
+    '</table>',
     '',
     '\\[Image: Gráfico\\] \\[1\\] [link](http://e.com/a%20b) ~~old~~',
     '',
@@ -510,4 +516,96 @@ test('fileCoverSvg provides crisp icon covers for MP3, MP4, Office, EPUB and Jup
   assert.equal(isOfficeName('f.pptx'), true);
   assert.equal(isOfficeName('g.epub'), true);
   assert.equal(isOfficeName('h.ipynb'), true);
+});
+
+// ---- Merged cells ------------------------------------------------------------------------
+
+// A small .docx whose table merges "Tema" across two columns and "Q1" down two rows.
+function mergedDocx() {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const tc = (text, pr = '') => `<w:tc>${pr ? `<w:tcPr>${pr}</w:tcPr>` : ''}<w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc>`;
+  const table = '<w:tbl>'
+    + `<w:tr>${tc('Tema', '<w:gridSpan w:val="2"/>')}${tc('Nota')}</w:tr>`
+    + `<w:tr>${tc('Q1', '<w:vMerge w:val="restart"/>')}${tc('a &lt;b&gt;')}${tc('7')}</w:tr>`
+    + `<w:tr>${tc('', '<w:vMerge/>')}${tc('c')}${tc('8')}</w:tr>`
+    + '</w:tbl>';
+  return zip({
+    '[Content_Types].xml': '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    '_rels/.rels': '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    'word/document.xml': `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${table}</w:body></w:document>`,
+  });
+}
+const MERGED_DOCX_HTML = [
+  '<table>',
+  '<thead>',
+  '<tr><th colspan="2">Tema</th><th>Nota</th></tr>',
+  '</thead>',
+  '<tbody>',
+  '<tr><td rowspan="2">Q1</td><td>a \\&lt;b&gt;</td><td>7</td></tr>',
+  '<tr><td>c</td><td>8</td></tr>',
+  '</tbody>',
+  '</table>',
+].join('\n');
+
+test('tables with merged cells become HTML tables; others stay pipe tables', () => {
+  assert.equal(tableBlock([['a', 'b'], ['1', '2']]), '| a | b |\n| --- | --- |\n| 1 | 2 |');
+  // Merges that do not fit, cover one cell or overlap are dropped.
+  assert.equal(tableBlock([['a', 'b'], ['1', '2']], [[0, 0, 1, 1], [5, 0, 2, 2]]), '| a | b |\n| --- | --- |\n| 1 | 2 |');
+  assert.equal(tableBlock([['A', '', 'B'], ['x', 'y', 'z'], ['"q" & <r>', 'w', 'v']], [[0, 0, 1, 2], [1, 2, 2, 1], [0, 1, 2, 1]]), [
+    '<table>', '<thead>', '<tr><th colspan="2">A</th><th>B</th></tr>', '</thead>', '<tbody>',
+    '<tr><td>x</td><td>y</td><td rowspan="2">z</td></tr>', '<tr><td>&quot;q&quot; &amp; &lt;r&gt;</td><td>w</td></tr>', '</tbody>', '</table>',
+  ].join('\n'));
+  // A header cell reaching down takes the rows it covers into the header.
+  assert.match(tableBlock([['A', 'B'], ['', 'c'], ['d', 'e']], [[0, 0, 2, 1]]), /<thead>\n<tr><th rowspan="2">A<\/th><th>B<\/th><\/tr>\n<tr><th>c<\/th><\/tr>\n<\/thead>/);
+  // HTML rows (as mammoth writes them) on a grid: covered spots null.
+  const grid = spanGrid([[{ cell: 'a', rs: 2 }, { cell: 'b', cs: 2 }], [{ cell: 'c' }, { cell: 'd' }]]);
+  assert.deepEqual([...grid], [['a', 'b', null], [null, 'c', 'd']]);
+  assert.deepEqual(grid.merges, [[0, 0, 2, 1], [0, 1, 1, 2]]);
+});
+
+test('.docx merged cells: gridSpan and vMerge, through mammoth and the built-in reader', async () => {
+  const bytes = mergedDocx();
+  assert.equal((await docxXmlDocument(bytes)).markdown, `${MERGED_DOCX_HTML}\n`);
+  assert.equal(await docxToMarkdown(mammoth, { buffer: Buffer.from(bytes) }), `${MERGED_DOCX_HTML}\n`);
+});
+
+test('.xlsx, .xls and .ods keep merged cells', () => {
+  for (const bookType of ['xlsx', 'biff8', 'ods']) {
+    const book = XLSX.utils.book_new(), sheet = XLSX.utils.aoa_to_sheet([['Grupo', '', 'Total'], ['A', 1, 3], ['', 2, '']]);
+    sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }, { s: { r: 1, c: 2 }, e: { r: 2, c: 2 } }];
+    XLSX.utils.book_append_sheet(book, sheet, 'Hoja');
+    const md = workbookMarkdown(XLSX, readWorkbook(XLSX, new Uint8Array(XLSX.write(book, { type: 'array', bookType }))));
+    assert.equal(md, [
+      '## Hoja', '', '<table>', '<thead>', '<tr><th colspan="2">Grupo</th><th>Total</th></tr>', '</thead>', '<tbody>',
+      '<tr><td rowspan="2">A</td><td>1</td><td rowspan="2">3</td></tr>', '<tr><td>2</td></tr>', '</tbody>', '</table>', '',
+    ].join('\n'), bookType);
+  }
+  // Merges reaching past the rows shown are cut to them.
+  assert.match(gridMarkdown([['a', 'b'], ['c', 'd']], { merges: [[1, 0, 5, 2]] }), /<td colspan="2">c<\/td>/);
+});
+
+test('OpenDocument merged cells (number-columns-spanned / number-rows-spanned)', () => {
+  const ns = 'xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"';
+  const cell = (t, a = '') => `<table:table-cell ${a}><text:p>${t}</text:p></table:table-cell>`, covered = '<table:covered-table-cell/>';
+  const content = `<office:document-content ${ns}><office:body><office:text><table:table>`
+    + `<table:table-row>${cell('Tema', 'table:number-columns-spanned="2"')}${covered}${cell('Nota')}</table:table-row>`
+    + `<table:table-row>${cell('Q1', 'table:number-rows-spanned="2"')}${cell('a &lt;b&gt;')}${cell('7')}</table:table-row>`
+    + `<table:table-row>${covered}${cell('c')}${cell('8')}</table:table-row>`
+    + '</table:table></office:text></office:body></office:document-content>';
+  assert.equal(odfToMarkdown(content), `${MERGED_DOCX_HTML}\n`);
+});
+
+test('.pptx table merged cells (gridSpan / rowSpan)', async () => {
+  const A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const tc = (t, a = '') => `<a:tc ${a}><a:txBody><a:p><a:r><a:t>${t}</a:t></a:r></a:p></a:txBody></a:tc>`;
+  const tbl = `<a:tbl><a:tr>${tc('Tema', 'gridSpan="2"')}${tc('', 'hMerge="1"')}${tc('Nota')}</a:tr>`
+    + `<a:tr>${tc('Q1', 'rowSpan="2"')}${tc('a &lt;b&gt;')}${tc('7')}</a:tr><a:tr>${tc('', 'vMerge="1"')}${tc('c')}${tc('8')}</a:tr></a:tbl>`;
+  const bytes = zip({
+    '[Content_Types].xml': '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+    'ppt/presentation.xml': `<?xml version="1.0"?><p:presentation ${A}><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`,
+    'ppt/_rels/presentation.xml.rels': '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>',
+    'ppt/slides/slide1.xml': `<?xml version="1.0"?><p:sld ${A}><p:cSld><p:spTree><p:graphicFrame><a:graphic><a:graphicData>${tbl}</a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`,
+  });
+  const { markdown } = await pptxDocument(bytes);
+  assert.ok(markdown.includes(MERGED_DOCX_HTML), markdown);
 });

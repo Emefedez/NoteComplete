@@ -2567,6 +2567,8 @@ body.bar-compact .tab { height: 22px; }
 .notes-render blockquote { margin: 0; padding-left: 12px; border-left: 3px solid var(--line); color: var(--muted); }
 .notes-render table { border-collapse: collapse; }
 .notes-render th, .notes-render td { padding: 4px 8px; border: 1px solid var(--line); }
+/* Merged cells (office files, html-table.js): a cell spanning rows reads best centred on them. */
+.notes-render .md-merged-table :is(th, td)[rowspan] { vertical-align: middle; }
 .notes-render img { max-width: 100%; }
 .notes-render .md-page { display: inline-block; margin: 12px 0 4px; padding: 1px 10px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
 @media (max-width: 700px) {
