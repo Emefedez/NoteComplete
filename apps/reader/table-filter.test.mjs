@@ -1,3 +1,4 @@
+import { MAX_ROWS, MAX_COLUMNS } from './table.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { numberOf, compareCells, folded, placeCells, visibleGroups, sortedGroups, distinctValues, pageTable, gridTsv, gridCsv, gridMarkdown } from './table-filter.js';
@@ -62,7 +63,7 @@ test('a page table from the rows shown, cut to what a page holds, merges kept', 
   // Merges cut at the edge; one that no longer joins two cells goes.
   assert.deepEqual(cut.value.merges, [[0, 0, 2, 1]]);
   const big = pageTable(Array.from({ length: 1001 }, (_, r) => Array.from({ length: 50 }, (_, c) => ({ text: `${r}:${c}` }))), 1);
-  assert.deepEqual([big.total, big.kept, big.value.cells.length, big.value.cells[0].length], [{ rows: 1001, columns: 50 }, { rows: 30, columns: 12 }, 30, 12]);
+  assert.deepEqual([big.total, big.kept, big.value.cells.length, big.value.cells[0].length], [{ rows: 1001, columns: 50 }, { rows: MAX_ROWS, columns: MAX_COLUMNS }, MAX_ROWS, MAX_COLUMNS]);
 });
 
 test('copies: TSV for spreadsheets, CSV, and Markdown as NoteComplete writes tables', () => {
