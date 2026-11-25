@@ -165,6 +165,7 @@ export function open(root, { spec, editing, host }) {
   - `host.editing`: as above.
   - `host.mode`: `"author"`, or the `mode` of the manifest's `menu` entry it was opened from.
   - `host.kit`: the kit's exports (`kit/index.js`), the same as importing them.
+  - `host.insert(spec)` (only when opened from a note): another figure, of any module, to add after this editor finishes with `host.done`: it opens in its own editor, then goes on the same page as its own undo step (the Textual Analysis's *Create UML diagrams*). Dropped on cancel.
 - Returns `{ destroy }`: called once, when it closes. `editorShell(...).destroy()` undoes everything the shell did.
 - Keys: the dialog stops key events from reaching the note, and the browser's Esc on the dialog is turned off, so Esc is yours; `editorShell` maps it to `onCancel`, and Ctrl Enter to `onApply`.
 - If `open` throws, the dialog closes and the app shows "The <label> editor could not open: <message>".

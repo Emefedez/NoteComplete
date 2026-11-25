@@ -9,11 +9,16 @@
 //
 // Spec: { type: 'textual-analysis', title, text, show: 'both'|'text'|'table',
 //         match: { plural: false, accents: false },
-//         candidates: [{ name, text, kind, description, colour, order,
-//                        aliases?: [more extracted texts], folder?: 'Clases', owner?: name }] }
+//         id, candidates: [{ id, name, text, kind, description, colour, order,
+//                        aliases?: [more extracted texts], folder?: 'Clases', owner?: name,
+//                        uml?: [{ diagram, element }] }] }
 // `owner`: the class an attribute or operation belongs to, or the actor of a use case (its
 // compartment or association in "Create UML diagrams"). `folder`: a group in the candidates'
-// tree (VP's Model Explorer "Candidate Items" folders).
+// tree (VP's Model Explorer "Candidate Items" folders). `id`s are stable (kept once given; a
+// spec without them gets ones made from its text, the same each time), and `uml` links a
+// candidate to the elements made from it (a UML diagram's `id` and the element's `id`), so a
+// model explorer can go from a candidate to where it is used and back (the diagram keeps
+// `origin: { module, id, candidates: { elementId: candidateId } }`).
 import { findMarkdownHighlights } from '../../md-highlight.js';
 
 export const TYPE = 'textual-analysis';
@@ -32,6 +37,9 @@ const KIND_IDS = KINDS.map((k) => k.id);
 // Highlight colours given to new candidates in turn (distinct pastels, readable under black).
 export const PALETTE = ['#fff169', '#ffc799', '#cdb8fb', '#8ee6dc', '#a8e6a1', '#9ed6ff', '#fab0c8', '#e6d3a3', '#ffd6a5', '#c8f0a0', '#f3c4fb', '#b8c7ff'];
 const HEX = /^#[0-9a-f]{6}$/i;
+const ID = /^[A-Za-z0-9_-]{1,64}$/;
+// A short hash (FNV-1a, base 36): ids made from a text are the same every time.
+const hash = (s) => { let h = 0x811c9dc5; for (const c of String(s)) { h ^= c.codePointAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(36); };
 
 // Letters with their accents taken off, one character for one (so offsets stay): "é" → "e".
 const foldChar = (c) => c.normalize('NFD')[0] || c;
@@ -67,6 +75,7 @@ export function normalize(raw = {}) {
   const match = { plural: !!raw.match?.plural, accents: !!raw.match?.accents };
   const model = {
     type: TYPE,
+    id: ID.test(raw.id || '') ? raw.id : `ta-${hash(`${raw.title ?? ''}\n${raw.text ?? ''}`)}`,
     title: String(raw.title ?? '').slice(0, 200),
     text: String(raw.text ?? ''),
     show: SHOWS.includes(raw.show) ? raw.show : 'both',
@@ -90,7 +99,10 @@ export function normalize(raw = {}) {
       continue;
     }
     const kind = KIND_IDS.includes(c.kind) ? c.kind : KIND_IDS.find((k) => k === String(c.kind ?? '').toLowerCase().replace(/[^a-z]/g, '')) || 'class';
+    let id = ID.test(c.id || '') ? c.id : `c-${hash(textKey(text))}`;
+    while (model.candidates.some((x) => x.id === id)) id = `${id}-${model.candidates.length}`;
     const out = {
+      id,
       name: String(c.name ?? '').trim().slice(0, 120) || suggestName(text, kind),
       text,
       kind,
@@ -101,6 +113,8 @@ export function normalize(raw = {}) {
     if (own.length) out.aliases = [...new Set(own)];
     if (String(c.folder ?? '').trim()) out.folder = String(c.folder).trim().slice(0, 60);
     if (String(c.owner ?? '').trim()) out.owner = String(c.owner).trim().slice(0, 120);
+    const uml = (Array.isArray(c.uml) ? c.uml : []).filter((u) => u && ID.test(u.diagram || '') && ID.test(u.element || '')).map((u) => ({ diagram: u.diagram, element: u.element, ...(u.list === 'attributes' || u.list === 'operations' ? { list: u.list } : {}) }));
+    if (uml.length) out.uml = uml;
     model.candidates.push(out);
     if (model.candidates.length >= MAX_CANDIDATES) break;
   }
@@ -158,7 +172,13 @@ export function occurrences(model) {
   return counts;
 }
 
-const copy = (model) => ({ ...model, match: { ...model.match }, candidates: model.candidates.map((c) => ({ ...c, ...(c.aliases ? { aliases: [...c.aliases] } : {}) })) });
+const copy = (model) => ({ ...model, match: { ...model.match }, candidates: model.candidates.map((c) => ({ ...c, ...(c.aliases ? { aliases: [...c.aliases] } : {}), ...(c.uml ? { uml: c.uml.map((u) => ({ ...u })) } : {}) })) });
+// A new id for a candidate: from its text, unique in the model.
+function newCandidateId(model, text) {
+  let id = `c-${hash(textKey(text))}`;
+  while (model.candidates.some((x) => x.id === id)) id = `${id}-${model.candidates.length}`;
+  return id;
+}
 const renumber = (model) => { model.candidates.forEach((c, i) => { c.order = i; }); return model; };
 
 // The text from `from` to `to` classified as `kind`: a new candidate (its suggested name, the
@@ -176,7 +196,7 @@ export function classify(model, from, to, kind) {
     return { model: out, index: at, added: false };
   }
   // The text of the statement as written there (its own case), not lower-cased.
-  out.candidates.push({ name: suggestName(text, kind), text, kind, description: '', colour: nextColour(out.candidates), order: out.candidates.length });
+  out.candidates.push({ id: newCandidateId(out, text), name: suggestName(text, kind), text, kind, description: '', colour: nextColour(out.candidates), order: out.candidates.length });
   return { model: out, index: out.candidates.length - 1, added: true };
 }
 
@@ -236,6 +256,7 @@ export function merge(model, from, into) {
   for (const t of textsOf(a)) if (!textsOf({ text: target.text, aliases }).some((x) => textKey(x, model.match?.accents) === textKey(t, model.match?.accents))) aliases.push(t);
   if (aliases.length) target.aliases = aliases;
   if (a.description.trim() && !target.description.includes(a.description.trim())) target.description = [target.description.trim(), a.description.trim()].filter(Boolean).join(' ');
+  if (a.uml) target.uml = [...(target.uml || []), ...a.uml];
   for (const x of out.candidates) if (x.owner === a.name) x.owner = target.name;
   out.candidates.splice(from, 1);
   return renumber(out);

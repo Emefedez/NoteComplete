@@ -11,6 +11,7 @@ import { render, kindIcon } from './render.js';
 import { KINDS, SHOWS, normalize, classify, candidateAt, findOccurrences, occurrences, update, setText, merge, move, removeCandidate, suggestName } from './model.js';
 import { tinyMdeHighlightGrammar, paintEditorHighlights } from '../../md-highlight.js';
 import { textFind } from '../../text-find.js';
+import { umlFromAnalysis, withLinks } from './uml-from.js';
 
 const SHOW_LABELS = { both: 'Text and table', text: 'Text only', table: 'Table only' };
 // The kind an owner has, for each kind that can have one.
@@ -386,7 +387,7 @@ export function open(root, { spec, editing, host }) {
       make('div', { className: 'ta-folder-name', textContent: folder || 'Candidate Items' }),
       ...list.map((i) => {
         const c = model.candidates[i];
-        const item = make('button', { type: 'button', className: `ta-tree-item${i === selected ? ' selected' : ''}`, role: 'treeitem' }, iconSvg(c.kind), make('span', { textContent: c.name }), make('small', { textContent: String(counts[i]) }));
+        const item = make('button', { type: 'button', className: `ta-tree-item${i === selected ? ' selected' : ''}`, role: 'treeitem', title: c.uml?.length ? `In ${new Set(c.uml.map((u) => u.diagram)).size} UML diagram(s)` : '' }, iconSvg(c.kind), make('span', { textContent: c.name }), c.uml?.length ? make('small', { className: 'ta-uml-mark', textContent: 'UML' }) : null, make('small', { textContent: String(counts[i]) }));
         item.onclick = () => { selected = i; drawTable(); drawPanel(); flash(i); };
         return item;
       }))));
@@ -409,7 +410,18 @@ export function open(root, { spec, editing, host }) {
         mergeInto && field('Merge', mergeInto, 'Its extracted text then counts for the other candidate'),
       ];
     }
+    // Create UML diagrams: classes (with their attributes and operations) and actors and use
+    // cases, as new UML prefabs, each opened in the diagram editor and put on the page after
+    // this one; the candidates keep which elements came from them.
+    const kinds = new Set(model.candidates.map((x) => x.kind));
+    const makeUml = button('uml', 'Create UML diagrams', { title: 'Classes with their attributes and operations become a class diagram; actors and use cases a use case diagram. Each opens in the diagram editor, then goes on the page.' });
+    makeUml.disabled = !host.insert || !['class', 'actor', 'usecase'].some((k) => kinds.has(k));
+    makeUml.onclick = () => createUml();
+    const linked = model.candidates.filter((x) => x.uml?.length).length;
     shell.panel.replaceChildren(
+      make('h4', { textContent: 'UML' }),
+      makeUml,
+      make('small', { className: 'ta-note', textContent: !host.insert ? 'Open this analysis from a note to make diagrams from it.' : linked ? `${linked} candidate${linked === 1 ? '' : 's'} already in a diagram; making them again adds new diagrams.` : `${host.applyLabel}s this analysis, then opens each diagram.` }),
       field('Title', textInput(model.title, (title) => typing(() => { model.title = title; }))),
       field('On the page', selectInput(SHOWS.map((s) => [s, SHOW_LABELS[s]]), model.show, (show) => change({ ...model, show }, { rebuild: false }))),
       make('h4', { textContent: 'Matching' }),
@@ -419,6 +431,16 @@ export function open(root, { spec, editing, host }) {
       tree,
       ...details,
     );
+  }
+  function createUml() {
+    if (!host.insert) return;
+    settleTyping();
+    const { diagrams, links, skipped } = umlFromAnalysis(model);
+    if (!diagrams.length) return shell.say('No class, actor or use case candidates to make diagrams from.', true);
+    model = normalize(withLinks(model, links));
+    for (const d of diagrams) host.insert(d);
+    if (skipped.length) console.info(`Textual analysis: no class for ${skipped.join(', ')}`);
+    host.done(model);
   }
   function drawPage() {
     if (view === 'page') pageHost.innerHTML = render(model).svg;

@@ -6,8 +6,9 @@ import * as kit from './prefabs/kit/index.js';
 import { moduleBase } from './prefab-registry.js';
 
 // `mode`: how it opens, "author" (the usual) or one of the entries its manifest's "menu"
-// adds to the figure's menu (host.mode).
-export async function openModuleEditor(module, spec, { editing = false, mode = 'author' } = {}) {
+// adds to the figure's menu (host.mode). `insert(spec)`: where figures the editor asks to
+// add besides its own go (host.insert; none, and the editor has no host.insert).
+export async function openModuleEditor(module, spec, { editing = false, mode = 'author', insert = null } = {}) {
   const base = moduleBase(module);
   const editor = await import(new URL(module.manifest.editor, base).href);
   if (typeof editor.open !== 'function') throw Error(`Prefab module ${module.manifest.id}: its editor has no open()`);
@@ -46,6 +47,9 @@ export async function openModuleEditor(module, spec, { editing = false, mode = '
       done: (next) => finish(next),
       cancel: () => finish(null),
       render: (s) => module.code.render?.(s) ?? null,
+      // Another figure (any module's spec) to add after this editor closes with done(): it
+      // opens in its own editor, then goes on the same page (the Textual Analysis's UML).
+      ...(insert ? { insert: (s) => insert(structuredClone(s)) } : {}),
     };
     try {
       instance = editor.open(root, { spec: structuredClone(spec), editing, host });

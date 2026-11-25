@@ -155,6 +155,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     }
     const done = await placePrefab(p, spec, box);
     if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+    if (done) await placeQueued(p); else queuedFigures.length = 0;
     return done;
   }
   // The editor of a prefab's figure: the diagram editor for UML and node graphs, the chart
@@ -272,6 +273,18 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     const timer = setTimeout(() => { shown = true; status(text); clearTimeout(app.statusTimer); }, 350);
     try { return await promise; } finally { clearTimeout(timer); if (shown) status(""); }
   }
+  // Figures a module's editor asked to add besides its own (host.insert): each opens in its
+  // editor, then goes on the page `p` (its own undo step), once the first one is placed.
+  const queuedFigures = [];
+  async function placeQueued(p) {
+    const list = queuedFigures.splice(0);
+    for (const start of list) {
+      const note = app.epoch;
+      const spec = await figureEditor(start);
+      if (!spec || !sameNote(note) || !p) continue;
+      if (await placePrefab(p, spec)) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+    }
+  }
   function figureEditor(spec, options = {}) {
     return oneFigure(() => openFigureEditor(spec, options));
   }
@@ -284,7 +297,10 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (editor === "module") {
       try {
         const { openModuleEditor } = await loading(import("./prefab-host.js"));
-        return keepModule(await openModuleEditor(owner, spec, { editing, mode }));
+        queuedFigures.length = 0;
+        const result = keepModule(await openModuleEditor(owner, spec, { editing, mode, insert: (s) => queuedFigures.push(s) }));
+        if (!result) queuedFigures.length = 0;
+        return result;
       } catch (e) {
         status(`The ${owner.manifest.label || owner.manifest.id} editor could not open: ${e.message}`, true);
         return null;
@@ -429,7 +445,10 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       if (!chosen || !sameNote(note)) return;
       const frame = await compoundFrame(item);
       selection.clear();
-      if (await placePrefab(app.panels[item.page], chosen, frame, c.items, c.id)) status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
+      if (await placePrefab(app.panels[item.page], chosen, frame, c.items, c.id)) {
+        status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
+        await placeQueued(app.panels[item.page]);
+      } else queuedFigures.length = 0;
       return;
     }
     const note = app.epoch;

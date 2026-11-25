@@ -79,3 +79,30 @@ test('the figure: text, table or both, escaped, never throwing on odd specs', ()
   assert.match(render({ text: '<b>&', candidates: [{ name: 'A<B', text: 'b' }] }).svg, /A&lt;B/);
   for (const odd of [{}, null, { candidates: 'x', text: 5 }, { candidates: [null, { text: '' }, { name: 'n' }] }]) assert.ok(render(odd ?? {}).svg.startsWith('<svg'));
 });
+
+test('Create UML diagrams: classes with their members, actors and use cases, linked both ways', async () => {
+  const { umlFromAnalysis, withLinks } = await import('../uml-from.js');
+  const { normalizeModel, renderUml } = await import('../../../uml.js');
+  const analysis = normalize({ title: 'Library', text: 'x', candidates: [
+    { name: 'Book', text: 'book' }, { name: 'Member', text: 'member', kind: 'actor' },
+    { name: 'title', text: 'title', kind: 'attribute', owner: 'Book' }, { name: 'lend', text: 'lend', kind: 'operation', owner: 'Book' },
+    { name: 'Borrow book', text: 'borrow a book', kind: 'usecase', owner: 'Member' }, { name: 'loose', text: 'loose', kind: 'attribute' },
+  ] });
+  const { diagrams, links, skipped } = umlFromAnalysis(analysis);
+  assert.deepEqual(diagrams.map((d) => d.diagram), ['class', 'useCase']);
+  const [cls, uc] = diagrams.map((d) => normalizeModel(d));
+  const book = cls.elements.find((e) => e.name === 'Book');
+  assert.deepEqual([book.props.attributes[0].name, book.props.operations[0].name], ['title', 'lend']);
+  assert.deepEqual(uc.elements.map((e) => e.type).sort(), ['actor', 'system', 'useCase']);
+  assert.equal(uc.connectors.length, 1, 'the use case is linked to its actor');
+  // Ids and links survive the diagram's normalising, and the candidates point at them.
+  assert.equal(cls.id, diagrams[0].id);
+  assert.equal(cls.origin.candidates[book.id], analysis.candidates[0].id);
+  const linked = normalize(withLinks(analysis, links));
+  assert.deepEqual(linked.candidates[0].uml, [{ diagram: cls.id, element: book.id }]);
+  assert.deepEqual(linked.candidates[2].uml, [{ diagram: cls.id, element: book.id, list: 'attributes' }]);
+  assert.deepEqual(skipped, ['loose']);
+  assert.ok(renderUml(cls).svg.includes('Book') && renderUml(uc).svg.includes('Borrow book'));
+  // Candidate ids are stable: the same spec gives the same ids.
+  assert.deepEqual(normalize({ text: 'a', candidates: [{ text: 'cliente' }] }).candidates[0].id, normalize({ text: 'b', candidates: [{ text: 'Cliente' }] }).candidates[0].id);
+});
