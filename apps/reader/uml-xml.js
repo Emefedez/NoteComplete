@@ -7,7 +7,7 @@
 // The Visual Paradigm names (element tags, attributes) are a first draft from its documentation
 // and are meant to be checked against exported samples: they all live in the registry (`vp`)
 // and in VP below, so fixing one is a change of a name, not of this code.
-import { ELEMENTS, CONNECTORS, DIAGRAMS, normalizeModel, parseLine, formatLine, UML_VERSION } from './uml.js';
+import { ELEMENTS, CONNECTORS, DIAGRAMS, normalizeModel, parseLine, formatLine, UML_VERSION, cleanStyle } from './uml.js';
 
 // ---------------------------------------------------------------------------------------
 // A small XML reader and writer (the same in the browser and in Node, for the tests).
@@ -53,6 +53,45 @@ const ownProps = (type, props) => Object.fromEntries(Object.entries(props).filte
 const local = (name) => String(name).replace(/^.*:/, '');
 function* walk(node) { for (const c of node.children) { yield c; yield* walk(c); } }
 const kids = (node, name) => node.children.filter((c) => local(c.name) === name);
+
+// Text styles (bold, italic, underline) and free end texts have no place in XMI: they go in
+// NoteComplete's layout section, as one JSON attribute per shape or line (`nc:styles`).
+const ROW_LISTS = ['attributes', 'operations', 'literals', 'actions'];
+function elementStyles(e) {
+  const out = {}, name = cleanStyle(e.props?.nameStyle);
+  if (name) out.name = name;
+  for (const key of ROW_LISTS) {
+    const rows = {};
+    (e.props?.[key] || []).forEach((r, i) => { const st = cleanStyle(r?.style); if (st) rows[i] = st; });
+    if (Object.keys(rows).length) (out.rows ||= {})[key] = rows;
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : undefined;
+}
+function connectorStyles(c) {
+  const p = c.props || {}, out = {};
+  for (const [k, v] of [['label', p.labelStyle], ['fromEnd', p.fromEnd?.style], ['toEnd', p.toEnd?.style], ['fromText', p.fromTextStyle], ['toText', p.toTextStyle]]) { const st = cleanStyle(v); if (st) out[k] = st; }
+  for (const k of ['fromText', 'toText']) if (String(p[k] ?? '').trim()) (out.texts ||= {})[k] = p[k];
+  for (const k of ['fromTextOffset', 'toTextOffset']) if (Array.isArray(p[k])) (out.offsets ||= {})[k] = p[k];
+  if (p.reading === 'forward' || p.reading === 'backward') out.reading = p.reading;
+  return Object.keys(out).length ? JSON.stringify(out) : undefined;
+}
+const readJson = (s) => { try { const v = JSON.parse(s); return v && typeof v === 'object' ? v : null; } catch { return null; } };
+function applyElementStyles(e, raw) {
+  const st = readJson(raw);
+  if (!st) return;
+  if (cleanStyle(st.name)) e.props.nameStyle = cleanStyle(st.name);
+  for (const key of ROW_LISTS) for (const [i, v] of Object.entries(st.rows?.[key] || {})) { const r = e.props[key]?.[Number(i)]; if (r && cleanStyle(v)) r.style = cleanStyle(v); }
+}
+function applyConnectorStyles(c, raw) {
+  const st = readJson(raw);
+  if (!st) return;
+  const p = c.props;
+  if (cleanStyle(st.label)) p.labelStyle = cleanStyle(st.label);
+  for (const side of ['fromEnd', 'toEnd']) if (cleanStyle(st[side])) { p[side] ||= { role: '', multiplicity: '', navigable: false }; p[side].style = cleanStyle(st[side]); }
+  for (const k of ['fromText', 'toText']) { if (typeof st.texts?.[k] === 'string') p[k] = st.texts[k]; if (cleanStyle(st[k])) p[`${k}Style`] = cleanStyle(st[k]); }
+  for (const k of ['fromTextOffset', 'toTextOffset']) if (Array.isArray(st.offsets?.[k])) p[k] = st.offsets[k];
+  if (st.reading === 'forward' || st.reading === 'backward') p.reading = st.reading;
+}
 
 // Which format a file is in.
 export function detectFormat(text) {
@@ -208,8 +247,8 @@ export function exportXmi(input) {
   for (const [name, id] of types) top.push(el('packagedElement', { 'xmi:type': 'uml:DataType', 'xmi:id': id, name }));
   // Layout, which XMI has no place for: an extension the other tools skip.
   const layout = el('xmi:Extension', { extender: 'NoteComplete' }, [el('nc:diagram', { kind: model.diagram, name: model.name, title: model.title, badge: model.badge ? undefined : 'false' }, [
-    ...model.elements.map((e) => el('nc:shape', { element: xid(e.id), type: e.type, x: Math.round(e.bounds[0]), y: Math.round(e.bounds[1]), width: Math.round(e.bounds[2]), height: Math.round(e.bounds[3]), parent: e.parent ? xid(e.parent) : undefined })),
-    ...model.connectors.map((c) => el('nc:connector', { element: xid(c.id), type: c.type, from: xid(c.from), to: xid(c.to), y: Number.isFinite(c.props?.y) ? Math.round(c.props.y) : undefined, waypoints: (c.waypoints || []).map((p) => p.map(Math.round).join(',')).join(' ') || undefined })),
+    ...model.elements.map((e) => el('nc:shape', { element: xid(e.id), type: e.type, x: Math.round(e.bounds[0]), y: Math.round(e.bounds[1]), width: Math.round(e.bounds[2]), height: Math.round(e.bounds[3]), parent: e.parent ? xid(e.parent) : undefined, 'nc:styles': elementStyles(e) })),
+    ...model.connectors.map((c) => el('nc:connector', { element: xid(c.id), type: c.type, from: xid(c.from), to: xid(c.to), y: Number.isFinite(c.props?.y) ? Math.round(c.props.y) : undefined, waypoints: (c.waypoints || []).map((p) => p.map(Math.round).join(',')).join(' ') || undefined, 'nc:styles': connectorStyles(c) })),
   ])]);
   let content;
   const name = model.name || DIAGRAMS[model.diagram].label;
@@ -360,6 +399,7 @@ export function importXmi(text) {
       k.e.bounds = ['x', 'y', 'width', 'height'].map((a) => Number(s.attrs[a]));
       if (s.attrs.type && ELEMENTS[s.attrs.type]) k.e.type = s.attrs.type;
       if (s.attrs.parent) k.e.parent = elementByX.get(s.attrs.parent)?.e.id || k.e.parent;
+      if (s.attrs['nc:styles']) applyElementStyles(k.e, s.attrs['nc:styles']);
     }
     for (const s of ncDiagram.children.filter((c) => c.name === 'nc:connector')) {
       const c = model.connectors.find((q) => model.source.ids[q.id] === s.attrs.element);
@@ -367,6 +407,7 @@ export function importXmi(text) {
       if (s.attrs.type && CONNECTORS[s.attrs.type]) c.type = s.attrs.type;
       if (s.attrs.y) c.props.y = Number(s.attrs.y);
       if (s.attrs.waypoints) c.waypoints = s.attrs.waypoints.split(' ').map((p) => p.split(',').map(Number));
+      if (s.attrs['nc:styles']) applyConnectorStyles(c, s.attrs['nc:styles']);
     }
   }
   if (!model.elements.length) throw Error('No UML elements found in this XMI file.');

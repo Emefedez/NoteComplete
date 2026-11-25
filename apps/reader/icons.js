@@ -49,6 +49,10 @@ export const paths = {
  restore:'M9 9h9v9H9ZM6 15V6h9',
  sun:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4',
  text:'M5 6V4h14v2M12 4v16M9 20h6',
+ // Text styles (the UML editor's B / I / U toggles): drawn letters in the same line weight.
+ bold:'M7 4h6a4 4 0 0 1 0 8H7zM7 12h7.5a4 4 0 0 1 0 8H7z',
+ italic:'M10 4h8M6 20h8M14.5 4l-5 16',
+ underline:'M7 4v7a5 5 0 0 0 10 0V4M5 20h14',
  pdfedit:'M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8l-5-5ZM14 3v5h5M9 13h6M12 13v6',
  lock:'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4M12 15v2',
  unlock:'M6 11h12v10H6zM8 11V7a4 4 0 0 1 7.5-1.9M12 15v2',

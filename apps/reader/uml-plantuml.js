@@ -4,7 +4,7 @@
 // What PlantUML cannot hold (where each box sits, the bends of a line) is kept in one comment
 // line, `' notecomplete-layout {…}`, which PlantUML ignores. Lines that only style the drawing
 // (skinparam, !include, hide…) are kept as they were, above the diagram.
-import { ELEMENTS, CONNECTORS, DIAGRAMS, CODE_DIAGRAMS, normalizeModel, parseLine, formatLine, UML_VERSION, headsOf } from './uml.js';
+import { ELEMENTS, CONNECTORS, DIAGRAMS, CODE_DIAGRAMS, normalizeModel, parseLine, formatLine, UML_VERSION, headsOf, cleanStyle, hasEndTexts, nameItalicReason, rowItalicReason } from './uml.js';
 
 const LAYOUT = /^'\s*notecomplete-layout\s+(\{.*\})\s*$/;
 // Lines kept verbatim: they style or configure the drawing and mean nothing to the model.
@@ -12,6 +12,41 @@ const KEPT = /^(!|skinparam\b|hide\b|show\b|left to right direction|top to botto
 // Lines of diagrams this does not turn into a model (activity, sequence, state…): those files
 // stay as PlantUML, drawn as a picture.
 const OTHER = /^(start|stop|end|if\s*\(|else|endif|while\s*\(|endwhile|repeat|fork|split|partition\b|\|[^|]+\||:.*;$|participant\b|boundary\b|control\b|database\b|collections\b|queue\b|activate\b|deactivate\b|alt\b|loop\b|state\b|\[\*\]|object\b|map\b|json\b|component\b|node\b|artifact\b|frame\b|cloud\b|storage\b|folder\b|file\b|card\b|agent\b|stack\b|label\b|@startmindmap|@startgantt|@startwbs)/i;
+
+// Text styles as PlantUML's Creole: **bold**, //italic//, <u>underline</u> (also read: __x__,
+// <b>, <i>), around a whole name, member or label; each line on its own for several lines.
+export function creole(text, style) {
+  const s = cleanStyle(style), t = String(text ?? '');
+  if (!s || !t.trim()) return t;
+  if (t.includes('\n')) return t.split('\n').map((l) => creole(l, s)).join('\n');
+  let out = t;
+  if (s.underline) out = `<u>${out}</u>`;
+  if (s.italic) out = `//${out}//`;
+  if (s.bold) out = `**${out}**`;
+  return out;
+}
+const WRAPS = [['**', '**', 'bold'], ['<b>', '</b>', 'bold'], ['//', '//', 'italic'], ['<i>', '</i>', 'italic'], ['<u>', '</u>', 'underline'], ['__', '__', 'underline']];
+// The text without the Creole around all of it, and the style that was: { text, style }.
+export function uncreole(text) {
+  const raw = String(text ?? '');
+  if (raw.includes('\n')) {
+    const parts = raw.split('\n').map(uncreole);
+    const styled = parts.filter((p) => p.text.trim());
+    const same = styled.length && styled.every((p) => JSON.stringify(p.style) === JSON.stringify(styled[0].style));
+    return same ? { text: parts.map((p) => p.text).join('\n'), style: styled[0].style } : { text: raw, style: null };
+  }
+  let t = raw.trim();
+  const st = {};
+  for (let again = true; again;) {
+    again = false;
+    for (const [a, b, k] of WRAPS) {
+      if (t.length > a.length + b.length && t.startsWith(a) && t.endsWith(b) && !t.slice(a.length, -b.length).includes(a === b ? a : b)) { t = t.slice(a.length, -b.length).trim(); st[k] = true; again = true; }
+    }
+  }
+  const style = cleanStyle(st);
+  return { text: style ? t : raw, style };
+}
+const withStyle = (props, key, style) => { if (style) props[key] = style; return props; };
 
 const unquote = (s) => String(s ?? '').trim().replace(/^"(.*)"$/s, '$1');
 const spaced = (s) => unquote(s).replace(/\\n/g, ' ').replace(/\s+/g, ' ').trim();
@@ -33,7 +68,10 @@ export function parsePlantUml(text) {
   const stack = []; // open packages / boundaries
   let i = 0;
   const parentId = () => stack.at(-1) || null;
-  const add = (type, key, label, props = {}) => {
+  const add = (type, key, rawLabel, props = {}) => {
+    // A name in Creole (//Shape//): the words, and the style kept as the name's own.
+    const { text: label, style } = rawLabel == null ? { text: rawLabel, style: null } : uncreole(rawLabel);
+    if (style) props = { ...props, nameStyle: style };
     if (byKey.has(key)) { const e = byKey.get(key); if (label && e.name === e.id) e.name = label; Object.assign(e.props, props); return e; }
     const def = ELEMENTS[type];
     const e = { id: key, type, name: label ?? key, props: { ...props }, bounds: [NaN, NaN, def.size[0], def.size[1]], parent: parentId() };
@@ -71,11 +109,15 @@ export function parsePlantUml(text) {
     for (let raw of out) {
       raw = raw.trim();
       if (!raw || /^(--|==|\.\.|__)/.test(raw) || raw.startsWith("'")) continue;
-      if (e.type === 'enumeration') { literals.push({ name: raw.replace(/[,;]$/, '') }); continue; }
+      if (e.type === 'enumeration') { const { text, style } = uncreole(raw.replace(/[,;]$/, '')); literals.push(withStyle({ name: text }, 'style', style)); continue; }
       const isStatic = /\{(static|classifier)\}/i.test(raw), isAbstract = /\{abstract\}/i.test(raw);
-      const line = raw.replace(/\{(static|classifier|abstract|field|method)\}\s*/gi, '');
-      if (/\(.*\)/.test(line)) operations.push({ ...parseLine('operation', operationLine(line)), static: isStatic, abstract: isAbstract });
-      else attributes.push({ ...parseLine('attribute', line), static: isStatic });
+      // The visibility stays outside the Creole (+ //draw(): void//), so PlantUML still sees it.
+      const bare = raw.replace(/\{(static|classifier|abstract|field|method)\}\s*/gi, '');
+      const vis = /^([+\-#~])\s*/.exec(bare);
+      const { text, style } = uncreole(vis ? bare.slice(vis[0].length) : bare);
+      const line = `${vis ? `${vis[1]} ` : ''}${text}`;
+      if (/\(.*\)/.test(line)) operations.push(withStyle({ ...parseLine('operation', operationLine(line)), static: isStatic, abstract: isAbstract }, 'style', style));
+      else attributes.push(withStyle({ ...parseLine('attribute', line), static: isStatic }, 'style', style));
     }
     if (e.type === 'enumeration') e.props.literals = literals;
     else { e.props.attributes = attributes; e.props.operations = operations; }
@@ -184,6 +226,9 @@ export function parsePlantUml(text) {
   return { model, preamble, laidOut: Boolean(layout?.e) };
 }
 
+// What reads as a multiplicity at a relation's end (1, 0..*, 1..n, *, 2,4).
+const MULTIPLICITY = /^\s*(\d+|\*|[nm])(\s*\.\.\s*(\d+|\*|[nm]))?(\s*,\s*(\d+|\*|[nm])(\s*\.\.\s*(\d+|\*|[nm]))?)*\s*$/i;
+
 // "+ lend(to: Member) : void" (PlantUML) → "+ lend(to: Member): void" (the editor's line form).
 function operationLine(line) {
   return line.replace(/\)\s*:\s*/, '): ');
@@ -220,14 +265,34 @@ function relation(left, right, arrow, leftMult, rightMult, label, kind) {
     reading = text.endsWith('>') ? 'right' : 'left';
     text = text.replace(/\s*>$/, '').replace(/^<\s*/, '').trim();
   }
-  if (CONNECTORS[type]?.ends) {
-    const end = (mult) => ({ role: '', multiplicity: mult || '', navigable: false });
-    props.fromEnd = end(flipped ? rightMult : leftMult);
-    props.toEnd = end(flipped ? leftMult : rightMult);
+  const named = uncreole(spaced(text));
+  // The quoted text at each end: a multiplicity, free text, or both (one per line).
+  const [fromQuote, toQuote] = flipped ? [rightMult, leftMult] : [leftMult, rightMult];
+  const ends = CONNECTORS[type]?.ends;
+  const endParts = (q) => {
+    const parts = String(q ?? '').split('\\n').map((x) => x.trim()).filter(Boolean);
+    if (!ends) return { text: parts.join('\n') };
+    if (parts.length > 1) return { mult: parts[0], text: parts.slice(1).join('\n') };
+    const one = parts[0] || '';
+    return MULTIPLICITY.test(uncreole(one).text) ? { mult: one } : { text: one };
+  };
+  const fq = endParts(fromQuote), tq = endParts(toQuote);
+  if (ends) {
+    const end = (mult) => { const u = uncreole(mult || ''); return withStyle({ role: '', multiplicity: u.text, navigable: false }, 'style', u.style); };
+    props.fromEnd = end(fq.mult);
+    props.toEnd = end(tq.mult);
     if (type === 'association' && (rh === '>' || lh === '<')) props.toEnd.navigable = true;
-    if (text) props.name = spaced(text);
-    if (reading) props.reading = (reading === 'right') !== flipped ? 'forward' : 'backward';
-  } else if (text && 'name' in (CONNECTORS[type]?.fields || {})) props.name = spaced(text);
+  }
+  if (hasEndTexts(type)) {
+    for (const [side, q] of [['from', fq], ['to', tq]]) {
+      if (!q.text) continue;
+      const u = uncreole(q.text);
+      props[`${side}Text`] = u.text;
+      withStyle(props, `${side}TextStyle`, u.style);
+    }
+  }
+  if (named.text && 'name' in (CONNECTORS[type]?.fields || {})) { props.name = named.text; withStyle(props, 'labelStyle', named.style); }
+  if (reading && props.name && 'reading' in (CONNECTORS[type]?.fields || {})) props.reading = (reading === 'right') !== flipped ? 'forward' : 'backward';
   return { type, from: from.id, to: to.id, props };
 }
 
@@ -243,6 +308,8 @@ function applyLayout(model, layout) {
     if (Array.isArray(w)) c.waypoints = w.filter((p) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite));
     const o = layout.l?.[keys.get(c)];
     if (Array.isArray(o) && o.length === 2 && o.every(Number.isFinite)) c.props.labelOffset = o;
+    const t = layout.t?.[keys.get(c)];
+    if (Array.isArray(t)) ['from', 'to'].forEach((side, k) => { if (Array.isArray(t[k]) && t[k].length === 2 && t[k].every(Number.isFinite)) c.props[`${side}TextOffset`] = t[k]; });
   }
 }
 // A connector's key in the layout comment: its ends and type, numbered when repeated.
@@ -357,7 +424,15 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
   const kids = (parent) => model.elements.filter((e) => (e.parent || null) === parent && e.type !== 'note');
   const pad = (depth) => '  '.repeat(depth);
   // `Name` alone when the name is the id, else `"Shown name" as Id`.
-  const named = (e, id, name = e.name) => (name === id && plainId(id) ? id : `${quoted(name)} as ${id}`);
+  // A name in its chosen style (italic is left out where UML makes it italic anyway).
+  const nameIn = (e, name = e.name) => creole(name, nameItalicReason(e) ? { ...e.props?.nameStyle, italic: false } : e.props?.nameStyle);
+  const named = (e, id, name = e.name) => { const shown = nameIn(e, name); return shown === id && plainId(id) ? id : `${quoted(shown)} as ${id}`; };
+  // A member: modifiers and visibility, then the rest in its style.
+  const member = (list, r) => {
+    const st = rowItalicReason(list, r) ? { ...r.style, italic: false } : r.style;
+    const rest = formatLine(list, { ...r, visibility: '' }, { keywords: false });
+    return `${r.visibility ? `${r.visibility} ` : ''}${creole(list === 'operation' ? rest.replace(/\):\s*/, ') : ') : rest, st)}`;
+  };
   const emit = (e, depth) => {
     const id = ids.get(e.id), p = e.props || {};
     const st = (p.stereotypes || []).map((s) => ` <<${s}>>`).join('');
@@ -372,29 +447,34 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
     if (e.type === 'useCase') return out.push(`${pad(depth)}usecase ${named(e, id, wrapped(e.name))}${st}`);
     if (e.type === 'enumeration') {
       out.push(`${pad(depth)}enum ${named(e, id)} {`);
-      for (const l of p.literals || []) out.push(`${pad(depth + 1)}${l.name}`);
+      for (const l of p.literals || []) out.push(`${pad(depth + 1)}${creole(l.name, l.style)}`);
       out.push(`${pad(depth)}}`);
       return;
     }
     if (e.type === 'class' || e.type === 'interface') {
       const word = e.type === 'interface' ? 'interface' : p.abstract ? 'abstract class' : 'class';
       const rows = [
-        ...(p.attributes || []).map((a) => `${a.static ? '{static} ' : ''}${formatLine('attribute', a)}`),
-        ...(p.operations || []).map((o) => `${o.abstract ? '{abstract} ' : ''}${o.static ? '{static} ' : ''}${formatLine('operation', o).replace(/\):\s*/, ') : ')}`),
+        ...(p.attributes || []).map((a) => `${a.static ? '{static} ' : ''}${member('attribute', a)}`),
+        ...(p.operations || []).map((o) => `${o.abstract ? '{abstract} ' : ''}${o.static ? '{static} ' : ''}${member('operation', o)}`),
       ];
       out.push(`${pad(depth)}${word} ${named(e, id)}${st}${rows.length ? ' {' : ''}`);
       if (rows.length) { for (const r of rows) out.push(`${pad(depth + 1)}${r}`); out.push(`${pad(depth)}}`); }
       return;
     }
-    out.push(`${pad(depth)}rectangle ${quoted(e.name)} as ${id}`);
+    out.push(`${pad(depth)}rectangle ${quoted(nameIn(e))} as ${id}`);
   };
   for (const e of kids(null)) emit(e, 0);
-  for (const e of model.elements.filter((q) => q.type === 'note')) out.push(`note ${quoted(e.name)} as ${ids.get(e.id)}`);
+  for (const e of model.elements.filter((q) => q.type === 'note')) out.push(`note ${quoted(nameIn(e))} as ${ids.get(e.id)}`);
   const byConnector = new Map(model.connectors.map((c) => [c.id, c]));
   for (const c of model.connectors) {
     const p = c.props || {}, a = ids.get(c.from), b = ids.get(c.to);
-    const m = (end) => (end?.multiplicity ? ` "${end.multiplicity}"` : '');
-    const name = p.name ? ` : ${p.name}${p.reading === 'forward' ? ' >' : p.reading === 'backward' ? ' <' : ''}` : '';
+    // The quoted text at an end: its multiplicity and its free text, one per line.
+    const m = (side) => {
+      const parts = [CONNECTORS[c.type]?.ends ? creole(p[`${side}End`]?.multiplicity, p[`${side}End`]?.style) : '', hasEndTexts(c.type) ? creole(String(p[`${side}Text`] ?? '').trim(), p[`${side}TextStyle`]) : ''].filter(Boolean);
+      return parts.length ? ` ${quoted(parts.join('\n'))}` : '';
+    };
+    const reads = 'reading' in (CONNECTORS[c.type]?.fields || {}) ? p.reading : '';
+    const name = p.name ? ` : ${reads === 'backward' ? '< ' : ''}${creole(p.name, p.labelStyle)}${reads === 'forward' ? ' >' : ''}` : '';
     if (c.type === 'associationClass') {
       const line = byConnector.get(c.to);
       if (line) out.push(`(${ids.get(line.from)}, ${ids.get(line.to)}) .. ${a}`);
@@ -415,9 +495,7 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
     let label = name;
     if (c.type === 'include') label = ' : <<include>>';
     if (c.type === 'extend') label = ` : <<extend>>${p.condition ? `\\n(${p.condition})` : ''}`;
-    if (c.type === 'dependency' && p.name) label = ` : ${p.name}`;
-    const ends = CONNECTORS[c.type]?.ends;
-    out.push(`${a}${ends ? m(p.fromEnd) : ''} ${arrow}${ends ? m(p.toEnd) : ''} ${b}${['generalization', 'realization', 'anchor'].includes(c.type) ? '' : label}`);
+    out.push(`${a}${m('from')} ${arrow}${m('to')} ${b}${['generalization', 'realization', 'anchor'].includes(c.type) ? '' : label}`);
   }
   // Where everything sits in the editor, for the next time it opens (PlantUML ignores it).
   if (!withLayout) { out.push('@enduml', ''); return out.join('\n'); }
@@ -428,6 +506,8 @@ export function toPlantUml(input, { preamble = [], layout: withLayout = true } =
   if (ways.length) layout.w = Object.fromEntries(ways.map((c) => [keyFor(keys.get(c), ids), c.waypoints]));
   const offsets = model.connectors.filter((c) => c.props?.labelOffset);
   if (offsets.length) layout.l = Object.fromEntries(offsets.map((c) => [keyFor(keys.get(c), ids), c.props.labelOffset]));
+  const moved = model.connectors.filter((c) => c.props?.fromTextOffset || c.props?.toTextOffset);
+  if (moved.length) layout.t = Object.fromEntries(moved.map((c) => [keyFor(keys.get(c), ids), [c.props.fromTextOffset || null, c.props.toTextOffset || null]]));
   out.push(`' notecomplete-layout ${JSON.stringify(layout)}`, '@enduml', '');
   return out.join('\n');
 }

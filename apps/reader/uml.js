@@ -10,6 +10,11 @@
 //     source: { format, ids: { ourId: theirId }, extra: { ourId: { theirAttr: value } } } }
 // Variables (attributes, operations, literals, actions) are lists of records whose fields are
 // described in LISTS; each record also has a one-line UML text form (parseLine / formatLine).
+// Text styles picked by hand (bold, italic, underline) are kept sparsely, only where set:
+// an element's name in props.nameStyle, a variable's line in its record's `style`, a
+// connector's middle label in props.labelStyle, its role and multiplicity at each end in
+// props.fromEnd.style / props.toEnd.style, and its free text at each end (props.fromText,
+// props.toText) in props.fromTextStyle / props.toTextStyle. See TEXT_STYLES below.
 
 export const UML_VERSION = 1;
 
@@ -48,8 +53,9 @@ export const ENUMS = {
   operator: ['alt', 'opt', 'loop', 'par', 'break', 'critical', 'neg', 'ref', 'seq', 'strict'],
   orientation: ['horizontal', 'vertical'],
   historyKind: ['shallow', 'deep'],
-  // Which way an association's name reads: ▸ toward its target end, ◂ toward its source.
-  reading: ['forward', 'backward'],
+  // Which way a connector's name reads, shown as a small filled triangle beside it: none,
+  // toward its target end (forward) or toward its source (backward).
+  reading: ['none', 'forward', 'backward'],
 };
 
 // Records of variables: their fields and their one-line form. `line` names fields in braces;
@@ -138,7 +144,7 @@ export const CONNECTORS = {
   composition: { label: 'Composition', line: 'solid', start: 'filledDiamond', end: 'none', ends: true, fields: { name: 'text', reading: 'reading' }, vp: { element: 'Association', aggregation: 'composite' }, xmi: { type: 'uml:Association', aggregation: 'composite' } },
   generalization: { label: 'Generalization', line: 'solid', start: 'none', end: 'hollowTriangle', fields: {}, vp: { element: 'Generalization' }, xmi: { type: 'uml:Generalization' } },
   realization: { label: 'Realization', line: 'dashed', start: 'none', end: 'hollowTriangle', fields: {}, vp: { element: 'Realization' }, xmi: { type: 'uml:InterfaceRealization' } },
-  dependency: { label: 'Dependency', line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', stereotypes: 'tags' }, vp: { element: 'Dependency' }, xmi: { type: 'uml:Dependency' } },
+  dependency: { label: 'Dependency', line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', reading: 'reading', stereotypes: 'tags' }, vp: { element: 'Dependency' }, xmi: { type: 'uml:Dependency' } },
   include: { label: 'Include', line: 'dashed', start: 'none', end: 'open', keyword: 'include', fields: {}, vp: { element: 'Include' }, xmi: { type: 'uml:Include' } },
   extend: { label: 'Extend', line: 'dashed', start: 'none', end: 'open', keyword: 'extend', drawnBack: true, fields: { condition: 'text' }, vp: { element: 'Extend' }, xmi: { type: 'uml:Extend' } },
   transition: { label: 'Transition', line: 'solid', start: 'none', end: 'open', fields: { trigger: 'text', guard: 'text', effect: 'text' }, vp: { element: 'Transition2' }, xmi: { type: 'uml:Transition' } },
@@ -148,13 +154,53 @@ export const CONNECTORS = {
   asyncMessage: { label: 'Asynchronous message', message: true, line: 'solid', start: 'none', end: 'open', fields: { name: 'text', args: 'text', y: 'number' }, vp: { element: 'Message', kind: 'asynchCall' }, xmi: { type: 'uml:Message', sort: 'asynchCall' } },
   replyMessage: { label: 'Reply', message: true, line: 'dashed', start: 'none', end: 'open', fields: { name: 'text', y: 'number' }, vp: { element: 'Message', kind: 'reply' }, xmi: { type: 'uml:Message', sort: 'reply' } },
   createMessage: { label: 'Create message', message: true, line: 'dashed', start: 'none', end: 'open', keyword: 'create', fields: { name: 'text', y: 'number' }, vp: { element: 'Message', kind: 'createMessage' }, xmi: { type: 'uml:Message', sort: 'createMessage' } },
-  edge: { label: 'Arrow', line: 'solid', start: 'none', end: 'filled', fields: { name: 'text' }, vp: { element: 'NCEdge' }, xmi: { type: 'nc:Edge' } },
-  line: { label: 'Line', line: 'solid', start: 'none', end: 'none', fields: { name: 'text' }, vp: { element: 'NCLine' }, xmi: { type: 'nc:Line' } },
+  edge: { label: 'Arrow', line: 'solid', start: 'none', end: 'filled', fields: { name: 'text', reading: 'reading' }, vp: { element: 'NCEdge' }, xmi: { type: 'nc:Edge' } },
+  line: { label: 'Line', line: 'solid', start: 'none', end: 'none', fields: { name: 'text', reading: 'reading' }, vp: { element: 'NCLine' }, xmi: { type: 'nc:Line' } },
   anchor: { label: 'Note link', line: 'dashed', start: 'none', end: 'none', fields: {}, vp: { element: 'Anchor' }, xmi: { type: 'nc:Anchor' } },
   // A class that is an association's own (Evaluation between Article and Reviewer): a dashed line
   // from the class to the middle of that association. `to` is the association (a connector).
   associationClass: { label: 'Association class', line: 'dashed', start: 'none', end: 'none', toConnector: true, fields: {}, vp: { element: 'AssociationClass' }, xmi: { type: 'nc:AssociationClass' } },
 };
+
+// Connectors that can carry free text at each end (props.fromText / props.toText): every
+// relation line, not messages, note links or an association class's dashed line.
+export const hasEndTexts = (type) => { const d = CONNECTORS[type]; return !!d && !d.message && !d.toConnector && type !== 'anchor'; };
+
+// ---------------------------------------------------------------------------------------
+// Text styles (the B / I / U toggles)
+
+export const TEXT_STYLES = ['bold', 'italic', 'underline'];
+// A style object with only the styles that are on, or null when none is.
+export function cleanStyle(s) {
+  if (!s || typeof s !== 'object') return null;
+  const out = {};
+  for (const k of TEXT_STYLES) if (s[k] === true) out[k] = true;
+  return Object.keys(out).length ? out : null;
+}
+// Turns one style of obj[key] on or off (flips it when `on` is not given); the key goes when
+// nothing is left, so the spec stays sparse.
+export function toggleStyle(obj, key, which, on = !obj?.[key]?.[which]) {
+  const next = cleanStyle({ ...(obj[key] || {}), [which]: on });
+  if (next) obj[key] = next; else delete obj[key];
+  return obj;
+}
+// Why a name or a line is italic whatever is chosen (UML's own rule), or ''.
+export function nameItalicReason(e) {
+  const def = ELEMENTS[e?.type];
+  if (def?.shape !== 'compartments') return '';
+  if (e.props?.abstract) return 'Abstract is shown in italics';
+  if (def.keyword === 'interface') return 'Interfaces are shown in italics';
+  return '';
+}
+export const rowItalicReason = (list, r) => (list === 'operation' && r?.abstract ? 'Abstract is shown in italics' : '');
+// Drawing options with a style added (bold, italic, underline on top of what they had).
+function styled(opts = {}, st) {
+  const s = cleanStyle(st);
+  if (!s) return opts;
+  const deco = [...new Set([...(opts.deco ? opts.deco.split(' ') : []), ...(s.underline ? ['underline'] : [])])].join(' ');
+  return { ...opts, weight: s.bold ? 'bold' : opts.weight, style: s.italic ? 'italic' : opts.style, deco };
+}
+const nameStyleOf = (e) => e?.props?.nameStyle;
 
 // ---------------------------------------------------------------------------------------
 // One-line forms of variables
@@ -437,7 +483,9 @@ export const umlName = (model) => {
 // Drawing
 
 const FONT = 13, LINE = 17, PAD = 8, CHAR = 0.55;
-const textWidth = (s, size = FONT) => String(s ?? '').length * size * CHAR;
+// Italic takes the same room as upright text (Helvetica's oblique keeps its widths); bold is
+// a little wider.
+const textWidth = (s, size = FONT, st = null) => String(s ?? '').length * size * CHAR * (st?.bold ? 1.08 : 1);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const n = (v) => Math.round(v * 10) / 10;
 const INK = '#1f2328', FILL = '#ffffff', SOFT = '#fff8dc', MUTED = '#57606a';
@@ -462,11 +510,13 @@ function wrap(s, width, size = FONT) {
   return out;
 }
 const lines = (arr, x, y, opts) => arr.map((s, i) => text(x, y + i * LINE, s, opts)).join('');
+// A state's internal actions, each line in its own style.
+const actionLines = (acts, x, y) => acts.map((a, i) => text(x, y + i * LINE, formatLine('action', a), styled({ anchor: 'start' }, a.style))).join('');
 
 // The lines a compartment shows.
 function compartmentLines(e, key) {
   const list = { attributes: 'attribute', operations: 'operation', literals: 'literal' }[key];
-  return (e.props?.[key] || []).map((r) => ({ text: formatLine(list, r, { keywords: false }), underline: !!r.static, italic: !!r.abstract }));
+  return (e.props?.[key] || []).map((r) => ({ text: formatLine(list, r, { keywords: false }), underline: !!r.static, italic: !!r.abstract, style: cleanStyle(r.style) }));
 }
 
 // The size an element needs for what it shows (it never draws smaller than its bounds).
@@ -500,15 +550,15 @@ function fitRaw(e) {
   if (def?.shape === 'compartments') {
     const head = [def.keyword ? `«${def.keyword}»` : '', stereo(e.props?.stereotypes), e.name].filter(Boolean);
     const comps = (def.compartments || []).map((k) => compartmentLines(e, k));
-    const widest = Math.max(...head.map((s) => textWidth(s) + 2 * PAD), ...comps.flat().map((l) => textWidth(l.text) + 2 * PAD), 60);
+    const widest = Math.max(...head.map((s) => textWidth(s) + 2 * PAD), ...comps.flat().map((l) => textWidth(l.text, FONT, l.style) + 2 * PAD), 60);
     w = Math.max(w, widest);
     h = Math.max(h, head.length * LINE + PAD + comps.reduce((s, c) => s + Math.max(1, c.length) * LINE + PAD, 0) + 4);
   } else if (def?.shape === 'state') {
     const acts = (e.props?.actions || []).length;
-    w = Math.max(w, textWidth(e.name) + 2 * PAD + 10, ...(e.props?.actions || []).map((a) => textWidth(formatLine('action', a)) + 2 * PAD));
+    w = Math.max(w, textWidth(e.name, FONT, { bold: true }) + 2 * PAD + 10, ...(e.props?.actions || []).map((a) => textWidth(formatLine('action', a), FONT, a.style) + 2 * PAD));
     h = Math.max(h, LINE + 2 * PAD + (acts ? acts * LINE + PAD : 0));
   } else if (def?.shape === 'node') {
-    const need = textWidth(e.name) + 14;
+    const need = textWidth(e.name, FONT, nameStyleOf(e)) + 14;
     if (need > w) { w = need; h = Math.max(h, Math.min(need, h * 1.4)); }
   } else if (def?.shape === 'ellipse' || def?.shape === 'rounded' || def?.shape === 'note' || def?.shape === 'box') {
     const tight = def.shape === 'rounded' || def.shape === 'box';
@@ -543,15 +593,15 @@ function clip(e, b, toward) {
 
 const SHAPES = {
   compartments(e, [x, y, w, h], def) {
-    const head = [def.keyword ? { s: `«${def.keyword}»` } : null, e.props?.stereotypes?.length ? { s: stereo(e.props.stereotypes) } : null, { s: e.name, bold: true, italic: !!e.props?.abstract || def.keyword === 'interface' }].filter(Boolean);
+    const head = [def.keyword ? { s: `«${def.keyword}»` } : null, e.props?.stereotypes?.length ? { s: stereo(e.props.stereotypes) } : null, { s: e.name, bold: true, italic: !!nameItalicReason(e), st: nameStyleOf(e) }].filter(Boolean);
     let out = `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>`;
     let cy = y + PAD + FONT - 2;
-    for (const l of head) { out += text(x + w / 2, cy, l.s, { weight: l.bold ? 'bold' : '', style: l.italic ? 'italic' : '' }); cy += LINE; }
+    for (const l of head) { out += text(x + w / 2, cy, l.s, styled({ weight: l.bold ? 'bold' : '', style: l.italic ? 'italic' : '' }, l.st)); cy += LINE; }
     cy += PAD / 2 - LINE + 4;
     for (const key of def.compartments || []) {
       out += `<line x1="${n(x)}" y1="${n(cy)}" x2="${n(x + w)}" y2="${n(cy)}" stroke="${INK}" stroke-width="1"/>`;
       const ls = compartmentLines(e, key);
-      ls.forEach((l, i) => { out += text(x + PAD, cy + LINE * (i + 1) - 2, l.text, { anchor: 'start', deco: l.underline ? 'underline' : '', style: l.italic ? 'italic' : '' }); });
+      ls.forEach((l, i) => { out += text(x + PAD, cy + LINE * (i + 1) - 2, l.text, styled({ anchor: 'start', deco: l.underline ? 'underline' : '', style: l.italic ? 'italic' : '' }, l.style)); });
       cy += Math.max(1, ls.length) * LINE + PAD;
     }
     return out;
@@ -559,38 +609,39 @@ const SHAPES = {
   stickman(e, [x, y, w, h]) {
     const cx = x + w / 2, fig = Math.max(30, h - LINE - 4), r = fig * 0.13, top = y + 2;
     const neck = top + 2 * r, hip = top + fig * 0.62, arm = top + fig * 0.38, foot = top + fig;
-    return `<g fill="none" stroke="${INK}" stroke-width="1.5"><circle cx="${n(cx)}" cy="${n(top + r)}" r="${n(r)}" fill="${FILL}"/><path d="M${n(cx)} ${n(neck)}V${n(hip)}M${n(cx - fig * 0.25)} ${n(arm)}H${n(cx + fig * 0.25)}M${n(cx - fig * 0.22)} ${n(foot)}L${n(cx)} ${n(hip)}L${n(cx + fig * 0.22)} ${n(foot)}"/></g>` + text(cx, y + h, e.name);
+    return `<g fill="none" stroke="${INK}" stroke-width="1.5"><circle cx="${n(cx)}" cy="${n(top + r)}" r="${n(r)}" fill="${FILL}"/><path d="M${n(cx)} ${n(neck)}V${n(hip)}M${n(cx - fig * 0.25)} ${n(arm)}H${n(cx + fig * 0.25)}M${n(cx - fig * 0.22)} ${n(foot)}L${n(cx)} ${n(hip)}L${n(cx + fig * 0.22)} ${n(foot)}"/></g>` + text(cx, y + h, e.name, styled({}, nameStyleOf(e)));
   },
   ellipse(e, [x, y, w, h]) {
     const ls = wrap(e.name, w - 2 * PAD - 20);
     const st = stereo(e.props?.stereotypes);
     const all = st ? [st, ...ls] : ls;
-    return `<ellipse cx="${n(x + w / 2)}" cy="${n(y + h / 2)}" rx="${n(w / 2)}" ry="${n(h / 2)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(all, x + w / 2, y + h / 2 - ((all.length - 1) * LINE) / 2 + 4.5);
+    const top = y + h / 2 - ((all.length - 1) * LINE) / 2 + 4.5;
+    return `<ellipse cx="${n(x + w / 2)}" cy="${n(y + h / 2)}" rx="${n(w / 2)}" ry="${n(h / 2)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (st ? text(x + w / 2, top, st) : '') + lines(ls, x + w / 2, top + (st ? LINE : 0), styled({}, nameStyleOf(e)));
   },
   boundary(e, [x, y, w, h]) {
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + w / 2, y + LINE, e.name, { weight: 'bold' });
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + w / 2, y + LINE, e.name, styled({ weight: 'bold' }, nameStyleOf(e)));
   },
   folder(e, [x, y, w, h]) {
     const tw = Math.min(w * 0.45, Math.max(50, textWidth(e.name, FONT) + 2 * PAD)), th = 18;
-    return `<path d="M${n(x)} ${n(y + th)}V${n(y)}H${n(x + tw)}V${n(y + th)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/><rect x="${n(x)}" y="${n(y + th)}" width="${n(w)}" height="${n(h - th)}" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + PAD, y + th - 5, e.name, { anchor: 'start', weight: 'bold' });
+    return `<path d="M${n(x)} ${n(y + th)}V${n(y)}H${n(x + tw)}V${n(y + th)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/><rect x="${n(x)}" y="${n(y + th)}" width="${n(w)}" height="${n(h - th)}" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + PAD, y + th - 5, e.name, styled({ anchor: 'start', weight: 'bold' }, nameStyleOf(e)));
   },
   note(e, [x, y, w, h]) {
     const k = 12, ls = wrap(e.name, w - 2 * PAD - 6);
-    return `<path d="M${n(x)} ${n(y)}H${n(x + w - k)}L${n(x + w)} ${n(y + k)}V${n(y + h)}H${n(x)}Z" fill="${SOFT}" stroke="${INK}" stroke-width="1.1"/><path d="M${n(x + w - k)} ${n(y)}V${n(y + k)}H${n(x + w)}" fill="none" stroke="${INK}" stroke-width="1.1"/>` + lines(ls, x + PAD, y + PAD + FONT - 2, { anchor: 'start', size: FONT - 1 });
+    return `<path d="M${n(x)} ${n(y)}H${n(x + w - k)}L${n(x + w)} ${n(y + k)}V${n(y + h)}H${n(x)}Z" fill="${SOFT}" stroke="${INK}" stroke-width="1.1"/><path d="M${n(x + w - k)} ${n(y)}V${n(y + k)}H${n(x + w)}" fill="none" stroke="${INK}" stroke-width="1.1"/>` + lines(ls, x + PAD, y + PAD + FONT - 2, styled({ anchor: 'start', size: FONT - 1 }, nameStyleOf(e)));
   },
   state(e, [x, y, w, h]) {
-    const acts = (e.props?.actions || []).map((a) => formatLine('action', a));
+    const acts = e.props?.actions || [];
+    const nameOpts = styled({ weight: 'bold' }, nameStyleOf(e));
     let out = `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="12" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>`;
-    if (!acts.length) return out + text(x + w / 2, y + h / 2 + 4.5, e.name, { weight: 'bold' });
-    out += text(x + w / 2, y + PAD + FONT - 1, e.name, { weight: 'bold' });
+    if (!acts.length) return out + text(x + w / 2, y + h / 2 + 4.5, e.name, nameOpts);
+    out += text(x + w / 2, y + PAD + FONT - 1, e.name, nameOpts);
     const ly = y + PAD + LINE + 2;
     out += `<line x1="${n(x)}" y1="${n(ly)}" x2="${n(x + w)}" y2="${n(ly)}" stroke="${INK}"/>`;
-    return out + lines(acts, x + PAD, ly + LINE - 2, { anchor: 'start' });
+    return out + actionLines(acts, x + PAD, ly + LINE - 2);
   },
   composite(e, [x, y, w, h]) {
-    const acts = (e.props?.actions || []).map((a) => formatLine('action', a));
     const ly = y + LINE + 6;
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="14" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + w / 2, y + LINE, e.name, { weight: 'bold' }) + `<line x1="${n(x)}" y1="${n(ly)}" x2="${n(x + w)}" y2="${n(ly)}" stroke="${INK}"/>` + lines(acts, x + PAD, ly + LINE - 2, { anchor: 'start' });
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="14" fill="${FILL}" fill-opacity="0.6" stroke="${INK}" stroke-width="1.3"/>` + text(x + w / 2, y + LINE, e.name, styled({ weight: 'bold' }, nameStyleOf(e))) + `<line x1="${n(x)}" y1="${n(ly)}" x2="${n(x + w)}" y2="${n(ly)}" stroke="${INK}"/>` + actionLines(e.props?.actions || [], x + PAD, ly + LINE - 2);
   },
   dot(e, [x, y, w, h]) {
     return `<circle cx="${n(x + w / 2)}" cy="${n(y + h / 2)}" r="${n(Math.min(w, h) / 2)}" fill="${INK}"/>`;
@@ -609,14 +660,14 @@ const SHAPES = {
   },
   diamond(e, [x, y, w, h]) {
     const cx = x + w / 2, cy = y + h / 2;
-    return `<path d="M${n(cx)} ${n(y)}L${n(x + w)} ${n(cy)}L${n(cx)} ${n(y + h)}L${n(x)} ${n(cy)}Z" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(cx, y - 6, e.name, { size: FONT - 1 }) : '');
+    return `<path d="M${n(cx)} ${n(y)}L${n(x + w)} ${n(cy)}L${n(cx)} ${n(y + h)}L${n(x)} ${n(cy)}Z" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(cx, y - 6, e.name, styled({ size: FONT - 1 }, nameStyleOf(e))) : '');
   },
   // A pin on the edge of an action: a small square, its name beside it.
   pin(e, [x, y, w, h]) {
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(x + w + 4, y - 3, e.name, { anchor: 'start', size: FONT - 2 }) : '');
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + (e.name ? text(x + w + 4, y - 3, e.name, styled({ anchor: 'start', size: FONT - 2 }, nameStyleOf(e))) : '');
   },
   region(e, [x, y, w, h]) {
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="10" fill="none" stroke="${INK}" stroke-width="1.3" stroke-dasharray="7 5"/>` + (e.name ? text(x + PAD, y + LINE, e.name, { anchor: 'start', size: FONT - 1 }) : '');
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="10" fill="none" stroke="${INK}" stroke-width="1.3" stroke-dasharray="7 5"/>` + (e.name ? text(x + PAD, y + LINE, e.name, styled({ anchor: 'start', size: FONT - 1 }, nameStyleOf(e))) : '');
   },
   // An execution on a lifeline: a narrow white bar over its dashed line.
   activation(e, [x, y, w, h]) {
@@ -627,19 +678,20 @@ const SHAPES = {
   },
   rounded(e, [x, y, w, h]) {
     const ls = wrap(e.name, w - PAD);
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(16, h / 2))}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, y + h / 2 - ((ls.length - 1) * LINE) / 2 + 4.5);
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(Math.min(16, h / 2))}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, y + h / 2 - ((ls.length - 1) * LINE) / 2 + 4.5, styled({}, nameStyleOf(e)));
   },
   box(e, [x, y, w, h]) {
     const ls = wrap(e.name, w - PAD);
-    if (e.props?.type) ls.push(`[${e.props.type}]`);
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, y + h / 2 - ((ls.length - 1) * LINE) / 2 + 4.5);
+    const all = e.props?.type ? [...ls, `[${e.props.type}]`] : ls;
+    const top = y + h / 2 - ((all.length - 1) * LINE) / 2 + 4.5;
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + lines(ls, x + w / 2, top, styled({}, nameStyleOf(e))) + (e.props?.type ? text(x + w / 2, top + ls.length * LINE, `[${e.props.type}]`) : '');
   },
   lane(e, [x, y, w, h]) {
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="${INK}" stroke-width="1.3"/><line x1="${n(x)}" y1="${n(y + 28)}" x2="${n(x + w)}" y2="${n(y + 28)}" stroke="${INK}"/>` + text(x + w / 2, y + 19, e.name, { weight: 'bold' });
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="${INK}" stroke-width="1.3"/><line x1="${n(x)}" y1="${n(y + 28)}" x2="${n(x + w)}" y2="${n(y + 28)}" stroke="${INK}"/>` + text(x + w / 2, y + 19, e.name, styled({ weight: 'bold' }, nameStyleOf(e)));
   },
   lifeline(e, [x, y, w, h]) {
     const head = 40, cx = x + w / 2, label = e.props?.type ? `${e.name}: ${e.props.type}` : e.name;
-    return `<line x1="${n(cx)}" y1="${n(y + head)}" x2="${n(cx)}" y2="${n(y + h)}" stroke="${INK}" stroke-dasharray="6 4"/><rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${head}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + text(cx, y + head / 2 + 4.5, label, { deco: 'underline' });
+    return `<line x1="${n(cx)}" y1="${n(y + head)}" x2="${n(cx)}" y2="${n(y + h)}" stroke="${INK}" stroke-dasharray="6 4"/><rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${head}" fill="${FILL}" stroke="${INK}" stroke-width="1.3"/>` + text(cx, y + head / 2 + 4.5, label, styled({ deco: 'underline' }, nameStyleOf(e)));
   },
   actorLifeline(e, [x, y, w, h]) {
     const cx = x + w / 2, head = 70;
@@ -652,11 +704,11 @@ const SHAPES = {
     // A start state: an arrow coming in from the left.
     if (e.props?.start) out += `<path d="M${n(x - 28)} ${n(cy)}H${n(x - 1)}" stroke="${INK}" stroke-width="1.3"/>` + mark('filled', [x - 1, cy], 1, 0);
     const ls = wrap(e.name, w - 8);
-    return out + lines(ls, cx, cy - ((ls.length - 1) * LINE) / 2 + 4.5);
+    return out + lines(ls, cx, cy - ((ls.length - 1) * LINE) / 2 + 4.5, styled({}, nameStyleOf(e)));
   },
   fragment(e, [x, y, w, h]) {
     const op = e.props?.operator || 'alt', tw = Math.max(44, textWidth(op) + 18), th = 20;
-    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="${INK}" stroke-width="1.3"/><path d="M${n(x)} ${n(y + th)}H${n(x + tw - 8)}L${n(x + tw)} ${n(y + th - 8)}V${n(y)}" fill="${FILL}" stroke="${INK}" stroke-width="1.1"/>` + text(x + 6, y + 14, op, { anchor: 'start', weight: 'bold' }) + (e.props?.guard ? text(x + tw + 8, y + 14, `[${e.props.guard}]`, { anchor: 'start' }) : '') + (e.name ? text(x + 8, y + th + LINE, e.name, { anchor: 'start', fill: MUTED }) : '');
+    return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="none" stroke="${INK}" stroke-width="1.3"/><path d="M${n(x)} ${n(y + th)}H${n(x + tw - 8)}L${n(x + tw)} ${n(y + th - 8)}V${n(y)}" fill="${FILL}" stroke="${INK}" stroke-width="1.1"/>` + text(x + 6, y + 14, op, { anchor: 'start', weight: 'bold' }) + (e.props?.guard ? text(x + tw + 8, y + 14, `[${e.props.guard}]`, { anchor: 'start' }) : '') + (e.name ? text(x + 8, y + th + LINE, e.name, styled({ anchor: 'start', fill: MUTED }, nameStyleOf(e))) : '');
   },
 };
 
@@ -690,24 +742,60 @@ export function connectorLabel(c) {
   } else if (def.message) {
     if (p.name) parts.push(`${p.name}${'args' in (def.fields || {}) ? `(${p.args || ''})` : ''}`);
   } else {
-    if (p.name) parts.push(p.reading === 'forward' ? `${p.name} ▸` : p.reading === 'backward' ? `◂ ${p.name}` : p.name);
+    if (p.name) parts.push(p.name);
     if (c.type === 'extend' && p.condition) parts.push(`[${p.condition}]`);
   }
   return parts.join(' ');
 }
 
+// Which way a connector's name reads ('forward' toward its target, 'backward' toward its
+// source), or null: shown only beside a name, on the connectors that have the field.
+export function connectorReading(c) {
+  const p = c?.props || {};
+  if (!('reading' in (CONNECTORS[c?.type]?.fields || {})) || !p.name) return null;
+  return p.reading === 'forward' || p.reading === 'backward' ? p.reading : null;
+}
+const ARROW_ROOM = 13; // the reading triangle and the gap before it
+
 // Where a connector's label goes: beside the middle of its longest segment (above a level
 // line, right of an upright one), moved by `offset` ([dx, dy], dragged in the editor).
-// { x, y (baseline), w }.
-export function labelBox(pts, label, offset = null) {
+// `extra`: room for more than the words (the reading triangle). { x, y (baseline), w, dir },
+// `dir` the unit direction of that segment, from the connector's start toward its end.
+export function labelBox(pts, label, offset = null, { style = null, extra = 0 } = {}) {
   let best = 1, bl = -1;
   for (let i = 1; i < pts.length; i++) { const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (l > bl) { bl = l; best = i; } }
   const mx = (pts[best][0] + pts[best - 1][0]) / 2, my = (pts[best][1] + pts[best - 1][1]) / 2;
   const horizontal = Math.abs(pts[best][1] - pts[best - 1][1]) < Math.abs(pts[best][0] - pts[best - 1][0]);
-  const w = textWidth(label, FONT - 1);
+  const w = textWidth(label, FONT - 1, style) + extra;
   let x = horizontal ? mx - w / 2 : mx + 9, y = horizontal ? my - 7 : my + 4;
   if (Array.isArray(offset) && offset.length === 2 && offset.every(Number.isFinite)) { x += offset[0]; y += offset[1]; }
-  return { x, y, w };
+  const dx = pts[best][0] - pts[best - 1][0], dy = pts[best][1] - pts[best - 1][1], l = Math.hypot(dx, dy) || 1;
+  return { x, y, w, dir: [dx / l, dy / l] };
+}
+// UML's name-direction arrow: a small filled triangle centred at (cx, cy) pointing along (ux, uy).
+function readingTriangle(cx, cy, ux, uy, fill) {
+  const px = -uy, py = ux, L = 5, B = 4.2;
+  const pt = (a, b) => `${n(cx + ux * a + px * b)} ${n(cy + uy * a + py * b)}`;
+  return `<path class="uml-reading" d="M${pt(L, 0)}L${pt(-L * 0.8, B)}L${pt(-L * 0.8, -B)}Z" fill="${fill}"/>`;
+}
+const validOffset = (o) => Array.isArray(o) && o.length === 2 && o.every(Number.isFinite);
+// Where the free text at one end of a connector goes (props.fromText / props.toText): where
+// the role and multiplicity go (along the line from that end, below a level line, right of an
+// upright one: away from the middle label), on the line under them when the end shows them
+// (`under`), moved by props.fromTextOffset / toTextOffset. `end`: 'from' or 'to'.
+// { x, y (baseline), anchor, w, left }.
+export function endTextBox(pts, end, text, { style = null, offset = null, under = false } = {}) {
+  const at = end === 'from' ? pts[0] : pts[pts.length - 1];
+  const next = end === 'from' ? pts[1] : pts[pts.length - 2];
+  const l = Math.hypot(next[0] - at[0], next[1] - at[1]) || 1;
+  const u = (next[0] - at[0]) / l, v = (next[1] - at[1]) / l;
+  let nx = -v, ny = u;
+  if (ny < -0.1 || (Math.abs(ny) <= 0.1 && nx < 0)) { nx = -nx; ny = -ny; }
+  let x = at[0] + u * 14 + nx * 12, y = at[1] + v * 14 + ny * 12 + 4 + (under ? LINE - 2 : 0);
+  const w = textWidth(text, FONT - 1, style);
+  const anchor = Math.abs(u) > Math.abs(v) ? (u > 0 ? 'start' : 'end') : 'start';
+  if (validOffset(offset)) { x += offset[0]; y += offset[1]; }
+  return { x, y, anchor, w, left: anchor === 'start' ? x : x - w };
 }
 
 // The point halfway along a polyline (where an association class's dashed line meets it).
@@ -815,21 +903,45 @@ export function renderUml(input, { ids = false, selected = [], margin = 16, badg
     // own background, so a line never hides it.
     const label = connectorLabel(c);
     if (label) {
-      const at = labelBox(pts, label, c.props?.labelOffset);
+      const reading = connectorReading(c), labelStyle = cleanStyle(c.props?.labelStyle);
+      const at = labelBox(pts, label, c.props?.labelOffset, { style: labelStyle, extra: reading ? ARROW_ROOM : 0 });
       const grown = k === 1 ? '' : ` transform="translate(${n(at.x + at.w / 2)} ${n(at.y - FONT / 2)}) scale(${n(k * 1000) / 1000}) translate(${n(-(at.x + at.w / 2))} ${n(-(at.y - FONT / 2))})"`;
-      labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="label"` : ''}${grown}><rect x="${n(at.x - 3)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 6)}" height="${FONT + 3}" rx="2" fill="${FILL}"${sel.has(c.id) ? ' stroke="#0a84ff" stroke-width="1"' : ''}/>${text(at.x + at.w / 2, at.y, label, { anchor: 'middle', size: FONT - 1, fill: tone || INK })}</g>`;
+      let words = text(at.x + at.w / 2, at.y, label, styled({ anchor: 'middle', size: FONT - 1, fill: tone || INK }, labelStyle));
+      if (reading) {
+        // The triangle points along the line (toward its end, or back for 'backward'), after
+        // the words when it points right (or up or down), before them when it points left.
+        const [ux, uy] = reading === 'forward' ? at.dir : [-at.dir[0], -at.dir[1]];
+        const after = ux > -0.35;
+        const tw = at.w - ARROW_ROOM;
+        words = text(after ? at.x + tw / 2 : at.x + ARROW_ROOM + tw / 2, at.y, label, styled({ anchor: 'middle', size: FONT - 1, fill: tone || INK }, labelStyle))
+          + readingTriangle(after ? at.x + at.w - 5 : at.x + 5, at.y - 4, ux, uy, tone || INK);
+      }
+      labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="label"` : ''}${grown}><rect x="${n(at.x - 3)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 6)}" height="${FONT + 3}" rx="2" fill="${FILL}"${sel.has(c.id) ? ' stroke="#0a84ff" stroke-width="1"' : ''}/>${words}</g>`;
       grow(at.x + at.w / 2 - (at.w / 2 + 3) * k, at.y - FONT / 2 - (FONT / 2) * k - 1); grow(at.x + at.w / 2 + (at.w / 2 + 3) * k, at.y - FONT / 2 + (FONT / 2 + 3) * k);
+    }
+    // Free text at each end (props.fromText / toText), on its own background, draggable.
+    if (hasEndTexts(c.type)) {
+      for (const end of ['from', 'to']) {
+        const s = String(c.props?.[`${end}Text`] ?? '').trim();
+        if (!s) continue;
+        const st = cleanStyle(c.props?.[`${end}TextStyle`]);
+        const side = c.props?.[`${end}End`];
+        const at = endTextBox(pts, end, s, { style: st, offset: c.props?.[`${end}TextOffset`], under: !!(def.ends && (side?.role || side?.multiplicity)) });
+        labels += `<g${ids ? ` data-uml-id="${esc(c.id)}" data-uml-kind="endText" data-uml-end="${end}"` : ''}><rect x="${n(at.left - 2)}" y="${n(at.y - FONT + 1)}" width="${n(at.w + 4)}" height="${FONT + 3}" rx="2" fill="${FILL}" fill-opacity="0.85"/>${text(at.x, at.y, s, styled({ anchor: at.anchor, size: FONT - 1, fill: tone || INK }, st))}</g>`;
+        grow(at.left - 2, at.y - FONT); grow(at.left + at.w + 2, at.y + 3);
+      }
     }
     // Role and multiplicity at each end.
     if (def.ends) {
       for (const [end, at, u, v] of [[c.props?.fromEnd, pts[0], -su, -sv], [c.props?.toEnd, pts[pts.length - 1], -eu, -ev]]) {
         const s = [end?.role, end?.multiplicity].filter(Boolean).join('  ');
         if (!s) continue;
+        const st = cleanStyle(end?.style);
         // Along the line from the end, on the side away from the middle label (below or right).
         let nx = -v, ny = u;
         if (ny < -0.1 || (Math.abs(ny) <= 0.1 && nx < 0)) { nx = -nx; ny = -ny; }
         const ex = at[0] + u * 14 + nx * 12, ey = at[1] + v * 14 + ny * 12 + 4;
-        g += text(ex, ey, s, { size: FONT - 1, anchor: Math.abs(u) > Math.abs(v) ? (u > 0 ? 'start' : 'end') : 'start' });
+        g += text(ex, ey, s, styled({ size: FONT - 1, anchor: Math.abs(u) > Math.abs(v) ? (u > 0 ? 'start' : 'end') : 'start' }, st));
         grow(ex - textWidth(s, FONT - 1), ey - FONT); grow(ex + textWidth(s, FONT - 1), ey + 2);
       }
     }

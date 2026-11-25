@@ -295,3 +295,140 @@ test('the full editor: every element and connector, no UML files, and other kind
   assert.throws(() => exportVp(m), /full editor/);
   assert.ok(clipFitsDiagram(normalizeModel(starterModel('state')), 'full'));
 });
+
+// Text styles (bold, italic, underline) chosen by hand, kept sparsely in the spec.
+function styledClassModel() {
+  const m = starterModel('class');
+  const [book, member, ebook] = m.elements;
+  book.props.nameStyle = { italic: true };
+  book.props.attributes[1].style = { italic: true, underline: true };
+  book.props.operations[0].style = { bold: true };
+  member.props.nameStyle = { bold: true };
+  const assoc = m.connectors.find((c) => c.type === 'association');
+  Object.assign(assoc.props, { labelStyle: { italic: true }, reading: 'backward', fromText: 'lender', fromTextStyle: { italic: true }, toText: 'borrower', toTextOffset: [4, -6] });
+  assoc.props.fromEnd.style = { italic: true };
+  m.elements.push(makeElement('note', [420, 200], { name: 'A remark\non two lines', props: { nameStyle: { italic: true } } }, m));
+  return { m, book, member, ebook, assoc };
+}
+
+test('text styles: italic, bold and underline are drawn where they are chosen', async () => {
+  const { cleanStyle, toggleStyle } = await import('./uml.js');
+  assert.equal(cleanStyle({ italic: false, bold: 0 }), null);
+  assert.deepEqual(cleanStyle({ italic: true, size: 3 }), { italic: true });
+  const o = {};
+  toggleStyle(o, 'nameStyle', 'italic');
+  assert.deepEqual(o, { nameStyle: { italic: true } });
+  toggleStyle(o, 'nameStyle', 'italic');
+  assert.deepEqual(o, {}, 'the key goes when nothing is left (sparse)');
+  const { m } = styledClassModel();
+  const svg = renderUml(normalizeModel(m)).svg;
+  const textOf = (s) => [...svg.matchAll(/<text([^>]*)>([^<]*)<\/text>/g)].find((t) => t[2] === s)?.[1] || '';
+  assert.match(textOf('Book'), /font-style="italic"/);
+  assert.match(textOf('Book'), /font-weight="bold"/, 'a class name stays bold');
+  assert.doesNotMatch(textOf('EBook'), /italic/);
+  assert.match(textOf('- title: String'), /font-style="italic"/);
+  assert.match(textOf('- title: String'), /text-decoration="underline"/);
+  assert.match(textOf('+ lend(to: Member): void'), /font-weight="bold"/);
+  assert.match(textOf('borrows'), /font-style="italic"/);
+  assert.match(textOf('0..*'), /font-style="italic"/, 'the role and multiplicity at the start');
+  assert.match(textOf('lender'), /font-style="italic"/);
+  assert.doesNotMatch(textOf('borrower'), /italic/);
+  assert.match(textOf('A remark'), /font-style="italic"/);
+  assert.match(textOf('on two lines'), /font-style="italic"/);
+});
+
+test('text styles: every kind of element draws its name in its style', () => {
+  for (const kind of Object.keys(DIAGRAMS)) {
+    const m = starterModel(kind);
+    const named = m.elements.filter((e) => e.name && !ELEMENTS[e.type].noName);
+    for (const e of named) e.props.nameStyle = { italic: true };
+    const svg = renderUml(m).svg;
+    for (const e of named) {
+      const first = e.name.split(/\s+/)[0];
+      assert.ok([...svg.matchAll(/<text([^>]*)>([^<]*)<\/text>/g)].some((t) => t[2].includes(first) && /italic/.test(t[1])), `${kind}: ${e.type} ${e.name}`);
+    }
+  }
+  // States' internal actions, and enumeration literals, line by line.
+  const s = starterModel('state');
+  s.elements.find((e) => e.props.actions?.length).props.actions[0].style = { italic: true };
+  assert.match(renderUml(s).svg, /font-style="italic"[^>]*>entry \/ start timer</);
+  const en = makeElement('enumeration', [0, 0], { name: 'Color', props: { literals: [{ name: 'RED', style: { italic: true } }, { name: 'BLUE' }] } });
+  const svg = renderUml({ type: 'uml', version: 1, diagram: 'class', elements: [en], connectors: [] }).svg;
+  assert.match(svg, /font-style="italic"[^>]*>RED</);
+  assert.doesNotMatch(svg, /font-style="italic"[^>]*>BLUE</);
+});
+
+test('text styles: abstract stays italic whatever is chosen', async () => {
+  const { nameItalicReason, rowItalicReason } = await import('./uml.js');
+  const e = makeElement('class', [0, 0], { name: 'Shape', props: { abstract: true, operations: [parseLine('operation', 'abstract + draw(): void')] } });
+  assert.equal(nameItalicReason(e), 'Abstract is shown in italics');
+  assert.equal(rowItalicReason('operation', e.props.operations[0]), 'Abstract is shown in italics');
+  assert.equal(nameItalicReason(makeElement('class', [0, 0])), '');
+  const svg = renderUml({ type: 'uml', version: 1, diagram: 'class', elements: [e], connectors: [] }).svg;
+  assert.match(svg, /font-style="italic"[^>]*>Shape</);
+  assert.match(svg, /font-style="italic"[^>]*>\+ draw\(\): void</);
+});
+
+test('text styles, end texts and reading survive XMI (NoteComplete extension) and stay out of VP XML', () => {
+  const { m } = styledClassModel();
+  const back = importXmi(exportXmi(m));
+  const by = Object.fromEntries(back.elements.map((e) => [e.name, e]));
+  assert.deepEqual(by.Book.props.nameStyle, { italic: true });
+  assert.deepEqual(by.Book.props.attributes[1].style, { italic: true, underline: true });
+  assert.deepEqual(by.Book.props.operations[0].style, { bold: true });
+  assert.deepEqual(by.Member.props.nameStyle, { bold: true });
+  const assoc = back.connectors.find((c) => c.type === 'association');
+  assert.deepEqual(assoc.props.labelStyle, { italic: true });
+  assert.deepEqual(assoc.props.fromEnd.style, { italic: true });
+  assert.equal(assoc.props.fromText, 'lender');
+  assert.deepEqual(assoc.props.fromTextStyle, { italic: true });
+  assert.equal(assoc.props.toText, 'borrower');
+  assert.deepEqual(assoc.props.toTextOffset, [4, -6]);
+  assert.equal(assoc.props.reading, 'backward');
+  // Visual Paradigm's XML has no place for them: written without them, and read back as before.
+  const vp = exportVp(m);
+  assert.doesNotMatch(vp, /italic|nameStyle|lender/);
+  assert.equal(importVp(vp).elements.length, m.elements.length);
+});
+
+test('reading direction: a filled triangle beside the name, pointing along the line', async () => {
+  const { connectorReading, labelBox } = await import('./uml.js');
+  const a = makeElement('class', [0, 0], { name: 'A', bounds: [0, 0, 100, 60] }), b = makeElement('class', [0, 0], { name: 'B', bounds: [400, 0, 100, 60] });
+  const c = makeConnector('association', a.id, b.id, { props: { name: 'owns' } });
+  const m = { type: 'uml', version: 1, diagram: 'class', elements: [a, b], connectors: [c] };
+  assert.equal(c.props.reading, 'none', 'new connectors show no direction');
+  assert.equal(connectorReading(c), null);
+  assert.doesNotMatch(renderUml(m).svg, /uml-reading/);
+  c.props.reading = 'forward';
+  const tri = (svg) => svg.match(/class="uml-reading" d="M([\d.-]+) ([\d.-]+)L([\d.-]+) ([\d.-]+)/).slice(1).map(Number);
+  const [tipX, , baseX] = tri(renderUml(m).svg);
+  assert.ok(tipX > baseX, 'forward points right, toward B');
+  c.props.reading = 'backward';
+  const [tipX2, , baseX2] = tri(renderUml(m).svg);
+  assert.ok(tipX2 < baseX2, 'backward points left, toward A');
+  // Without a name there is nothing to read.
+  c.props.name = '';
+  assert.equal(connectorReading(c), null);
+  assert.deepEqual(labelBox([[0, 0], [0, 100]], 'x').dir, [0, 1]);
+  // Dependencies and graph edges have it too.
+  assert.ok('reading' in CONNECTORS.dependency.fields && 'reading' in CONNECTORS.edge.fields);
+});
+
+test('end texts: by each end, under the multiplicity, away from the middle label', async () => {
+  const { endTextBox, hasEndTexts } = await import('./uml.js');
+  assert.ok(hasEndTexts('association') && hasEndTexts('dependency') && hasEndTexts('transition'));
+  assert.ok(!hasEndTexts('anchor') && !hasEndTexts('syncMessage') && !hasEndTexts('associationClass'));
+  const a = makeElement('class', [0, 0], { name: 'A', bounds: [0, 0, 100, 60] }), b = makeElement('class', [0, 0], { name: 'B', bounds: [400, 0, 100, 60] });
+  const c = makeConnector('association', a.id, b.id, { props: { fromText: 'start words', toText: 'end words', fromEnd: { role: '', multiplicity: '1', navigable: false }, toEnd: { role: '', multiplicity: '*', navigable: false } } });
+  const svg = renderUml({ type: 'uml', version: 1, diagram: 'class', elements: [a, b], connectors: [c] }, { ids: true }).svg;
+  const y = (s) => Number([...svg.matchAll(/<text x="[\d.]+" y="([\d.]+)"[^>]*>([^<]*)</g)].find((t) => t[2] === s)[1]);
+  assert.ok(y('1') > 30 && y('start words') > y('1') + 10, 'below a level line, on the line under the multiplicity');
+  assert.ok(y('end words') > y('*') + 10);
+  assert.match(svg, /data-uml-kind="endText" data-uml-end="from"/);
+  const moved = endTextBox([[0, 0], [100, 0]], 'from', 'x', { offset: [5, 7] });
+  const home = endTextBox([[0, 0], [100, 0]], 'from', 'x');
+  assert.deepEqual([moved.x - home.x, moved.y - home.y], [5, 7]);
+  // A dependency (no roles) shows them too.
+  const d = makeConnector('dependency', a.id, b.id, { props: { toText: 'uses' } });
+  assert.match(renderUml({ type: 'uml', version: 1, diagram: 'class', elements: [a, b], connectors: [d] }).svg, />uses</);
+});

@@ -3,7 +3,7 @@
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
 import { imageReady } from './image-ready.js';
-import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout } from './uml.js';
+import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout, TEXT_STYLES, cleanStyle, toggleStyle, nameItalicReason, rowItalicReason, hasEndTexts } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { parsePlantUml, toPlantUml, layoutFromPlantuml } from './uml-plantuml.js';
 import { writeUmlClip, readUmlClipFromText, getSharedUmlClip, clipFitsDiagram } from './uml-clipboard.js';
@@ -245,7 +245,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const was = old.get(e.id);
         if (was) {
           if (!parsed.laidOut) e.bounds = [...was.bounds];
+          // The name's style is written in the text (Creole): taken from there, also when removed.
+          const own = e.props.nameStyle;
           e.props = { ...was.props, ...e.props, color: was.props?.color, textScale: was.props?.textScale };
+          if (!own) delete e.props.nameStyle;
         }
       }
       const seenOld = new Map(), ways = new Map();
@@ -264,6 +267,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         if (was) {
           if (!c.waypoints.length && was.waypoints.length) c.waypoints = was.waypoints;
           if (!c.props?.labelOffset && was.props?.labelOffset) c.props.labelOffset = was.props.labelOffset;
+          for (const k of ['fromTextOffset', 'toTextOffset']) if (!c.props?.[k] && was.props?.[k] && c.props?.[k.replace('Offset', '')]) c.props[k] = was.props[k];
           if (was.props?.color && !c.props?.color) c.props.color = was.props.color;
         }
       }
@@ -631,6 +635,14 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       changed();
       return;
     }
+    // Free text at a connector's end: dragged anywhere near it.
+    if (kind === 'endText') {
+      selected = { kind: 'connector', id };
+      const c = model.connectors.find((q) => q.id === id), key = `${hit.dataset.umlEnd}TextOffset`;
+      drag = { mode: 'endText', c, key, start: pt, offset: [...(c.props[key] || [0, 0])], snapped: false };
+      changed();
+      return;
+    }
     // A connector's label: dragged anywhere around its line (double-click to edit it).
     if (kind === 'label') {
       selected = { kind: 'connector', id };
@@ -732,6 +744,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       once();
       drag.c.props.labelOffset = [Math.round(drag.offset[0] + dx), Math.round(drag.offset[1] + dy)];
       draw();
+    } else if (drag.mode === 'endText') {
+      if (!drag.snapped && Math.hypot(dx, dy) < 2) return;
+      once();
+      drag.c.props[drag.key] = [Math.round(drag.offset[0] + dx), Math.round(drag.offset[1] + dy)];
+      draw();
     } else if (drag.mode === 'connect') rubber(drag, pt);
   });
   // Which stretch of a connector's line is nearest `pt` (where a new bend goes in the waypoints).
@@ -764,7 +781,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   }
   // The connector line under the pointer (not an association class's own link).
   function connectorUnder(ev, except = null) {
-    const hit = document.elementsFromPoint(ev.clientX, ev.clientY).map((n) => n.closest?.('[data-uml-kind="connector"],[data-uml-kind="label"]')).find(Boolean);
+    const hit = document.elementsFromPoint(ev.clientX, ev.clientY).map((n) => n.closest?.('[data-uml-kind="connector"],[data-uml-kind="label"],[data-uml-kind="endText"]')).find(Boolean);
     const c = hit && model.connectors.find((q) => q.id === hit.dataset.umlId);
     return c && c.id !== except && !CONNECTORS[c.type]?.toConnector ? c : null;
   }
@@ -840,6 +857,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (hit?.dataset.umlKind === 'label') {
       const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
       if (c) { selected = { kind: 'connector', id: c.id }; changed(); return rename(c); }
+    }
+    // Free text at an end: edited in the properties, opened on its field.
+    if (hit?.dataset.umlKind === 'endText') {
+      const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
+      if (c) { selected = { kind: 'connector', id: c.id }; showPanel(true); changed(); panel.querySelector(`[data-end-text="${hit.dataset.umlEnd}"]`)?.focus(); }
+      return;
     }
     if (hit?.dataset.umlKind === 'connector') {
       const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
@@ -1006,13 +1029,66 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function field(label, input, wide = false) {
     return make('label', { className: wide ? 'uml-field wide' : 'uml-field' }, make('span', { textContent: label }), input);
   }
+  // Bold, italic and underline for one text: obj[key] holds its style (uml.js TEXT_STYLES).
+  // `locked`: why italic is on whatever is chosen (abstract), shown checked and disabled.
+  // Every group of the same text is refreshed together (a label typed in several fields).
+  const STYLE_KEYS = { bold: 'B', italic: 'I', underline: 'U' };
+  const STYLE_NAMES = { bold: 'Bold', italic: 'Italic', underline: 'Underline' };
+  let styleGroups = [];
+  function styleToggles(obj, key, { locked = '', what = '' } = {}) {
+    const group = make('span', { className: 'uml-styles', role: 'group' });
+    group.setAttribute('aria-label', `Text style${what ? ` of ${what}` : ''}`);
+    const buttons = TEXT_STYLES.map((which) => {
+      const b = iconButton(which, `${STYLE_NAMES[which]} (Ctrl ${STYLE_KEYS[which]})`);
+      b.classList.add('uml-style');
+      b.dataset.style = which;
+      b.onclick = () => flipStyle(obj, key, which);
+      return b;
+    });
+    group.append(...buttons);
+    const refresh = () => {
+      for (const b of buttons) {
+        const lockedHere = b.dataset.style === 'italic' && locked;
+        b.setAttribute('aria-pressed', String(!!lockedHere || !!obj[key]?.[b.dataset.style]));
+        b.disabled = !!lockedHere;
+        b.title = lockedHere ? locked : `${STYLE_NAMES[b.dataset.style]} (Ctrl ${STYLE_KEYS[b.dataset.style]})`;
+      }
+    };
+    refresh();
+    styleGroups.push({ obj, key, refresh, locked });
+    return group;
+  }
+  function flipStyle(obj, key, which) {
+    if (which === 'italic' && styleGroups.some((g) => g.obj === obj && g.key === key && g.locked)) return say(styleGroups.find((g) => g.obj === obj && g.key === key && g.locked).locked);
+    snapshot();
+    toggleStyle(obj, key, which);
+    for (const g of styleGroups) if (g.obj === obj && g.key === key) g.refresh();
+    changed({ panel: false });
+  }
+  // Ctrl B / I / U in a text field: that field's style.
+  function styleKeys(input, obj, key) {
+    input.addEventListener('keydown', (ev) => {
+      if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+      const which = { b: 'bold', i: 'italic', u: 'underline' }[ev.key.toLowerCase()];
+      if (!which) return;
+      ev.preventDefault(); ev.stopPropagation();
+      flipStyle(obj, key, which);
+    });
+    return input;
+  }
+  // A field with the style toggles beside its name (a div: in a label, a click on the words
+  // would press the first button).
+  function styledField(label, input, obj, key, { wide = false, locked = '' } = {}) {
+    styleKeys(input, obj, key);
+    return make('div', { className: wide ? 'uml-field wide' : 'uml-field' }, make('div', { className: 'uml-field-head' }, make('span', { textContent: label }), styleToggles(obj, key, { locked, what: label.toLowerCase() })), input);
+  }
   // An input for a field kind, bound to obj[key].
   function inputFor(kindOf, obj, key, label) {
     const id = `${selected?.id || 'diagram'}:${key}`;
     const set = (v, redrawPanel = false) => { snapshot(id); obj[key] = v; changed({ panel: redrawPanel }); };
     if (kindOf === 'bool') {
       const box = make('input', { type: 'checkbox', checked: !!obj[key] });
-      box.onchange = () => set(box.checked);
+      box.onchange = () => set(box.checked, key === 'abstract');
       return make('label', { className: 'uml-check' }, box, ` ${label}`);
     }
     if (typeof kindOf === 'string' && ENUMS[kindOf]) {
@@ -1034,16 +1110,86 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (kindOf && typeof kindOf === 'object' && kindOf.list) {
       const list = kindOf.list, def = LISTS[list];
       const area = make('textarea', { rows: Math.max(2, Math.min(10, (obj[key] || []).length + 1)), spellcheck: false, value: (obj[key] || []).map((r) => formatLine(list, r)).join('\n'), placeholder: `One per line, e.g. ${def.example}` });
-      area.oninput = () => set(area.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => parseLine(list, l)));
-      return field(`${def.label} (one per line, as in UML)`, area, true);
+      // Each line's style (B / I / U) below the text, one row per line.
+      const rows = make('div', { className: 'uml-rows' });
+      const drawRows = () => {
+        styleGroups = styleGroups.filter((g) => g.list !== rows);
+        rows.replaceChildren(...(obj[key] || []).map((r) => {
+          const line = formatLine(list, r);
+          const g = styleToggles(r, 'style', { locked: rowItalicReason(list, r), what: line });
+          styleGroups.at(-1).list = rows;
+          return make('div', { className: 'uml-row-style' }, make('span', { className: 'uml-row-text', textContent: line, title: line }), g);
+        }));
+      };
+      area.oninput = () => {
+        // Lines that stay the same keep their style; with as many lines as before, a line
+        // edited in place keeps the style it had.
+        const old = obj[key] || [], oldText = old.map((r) => formatLine(list, r)), used = new Set();
+        const next = area.value.split('\n').map((l) => l.trim()).filter(Boolean).map((l) => parseLine(list, l));
+        next.forEach((r, i) => {
+          const same = oldText.findIndex((t, j) => !used.has(j) && t === formatLine(list, r));
+          const from = same >= 0 ? same : next.length === old.length && !used.has(i) ? i : -1;
+          if (from < 0) return;
+          used.add(from);
+          const st = cleanStyle(old[from].style);
+          if (st) r.style = st;
+        });
+        set(next);
+        drawRows();
+      };
+      // Ctrl B / I / U: the style of the lines the cursor or selection is on.
+      area.addEventListener('keydown', (ev) => {
+        if (!(ev.ctrlKey || ev.metaKey) || ev.altKey || ev.shiftKey) return;
+        const which = { b: 'bold', i: 'italic', u: 'underline' }[ev.key.toLowerCase()];
+        if (!which) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const all = area.value.split('\n');
+        const lineAt = (pos) => area.value.slice(0, pos).split('\n').length - 1;
+        const first = lineAt(area.selectionStart), last = lineAt(area.selectionEnd);
+        const recIndex = (k) => all.slice(0, k).filter((l) => l.trim()).length;
+        const recs = [];
+        for (let k = first; k <= last; k++) if (all[k]?.trim()) recs.push((obj[key] || [])[recIndex(k)]);
+        const targets = recs.filter((r) => r && !(which === 'italic' && rowItalicReason(list, r)));
+        if (!targets.length) return recs.length && say(rowItalicReason(list, recs[0]));
+        snapshot();
+        const on = !targets.every((r) => r.style?.[which]);
+        for (const r of targets) toggleStyle(r, 'style', which, on);
+        changed({ panel: false });
+        drawRows();
+      });
+      drawRows();
+      const box = field(`${def.label} (one per line, as in UML)`, area, true);
+      return make('div', { className: 'uml-list' }, box, rows);
     }
     const inp = make('input', { type: 'text', value: obj[key] ?? '' });
     inp.oninput = () => set(inp.value);
     return field(label, inp);
   }
   const titleCase = (k) => k.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase());
+  // The words a connector's middle label is made of (one style for all of them).
+  const LABEL_FIELDS = ['name', 'trigger', 'guard', 'effect', 'condition', 'args'];
+  // A plain text input bound to obj[key], undone as one step per field.
+  function textInput(obj, key, placeholder = '') {
+    const inp = make('input', { type: 'text', value: obj[key] ?? '', placeholder });
+    inp.oninput = () => { snapshot(`${selected?.id}:${key}`); if (inp.value === '' && key.endsWith('Text')) delete obj[key]; else obj[key] = inp.value; changed({ panel: false }); };
+    return inp;
+  }
+  // Show direction: a triangle beside the name pointing along the line, toward its end or
+  // its start (props.reading: none, forward, backward).
+  function readingInput(c) {
+    const box = make('input', { type: 'checkbox', checked: c.props.reading === 'forward' || c.props.reading === 'backward' });
+    const way = make('select', { title: 'Which way the triangle points' }, make('option', { value: 'forward', textContent: 'Toward the end ▶' }), make('option', { value: 'backward', textContent: 'Toward the start ◀' }));
+    way.value = c.props.reading === 'backward' ? 'backward' : 'forward';
+    way.disabled = !box.checked;
+    box.onchange = () => { snapshot(); c.props.reading = box.checked ? way.value : 'none'; way.disabled = !box.checked; changed({ panel: false }); };
+    way.onchange = () => { snapshot(); c.props.reading = way.value; changed({ panel: false }); };
+    const row = make('div', { className: 'uml-reading-row' }, make('label', { className: 'uml-check', title: 'A small triangle beside the name shows which way it reads' }, box, ' Show direction'), way);
+    if (!c.props.name) row.append(make('span', { className: 'uml-hint', textContent: 'Shown once it has a name.' }));
+    return row;
+  }
   function buildPanel() {
     const out = [];
+    styleGroups = [];
     if (!selected) {
       out.push(make('h3', { textContent: DIAGRAMS[model.diagram].label }));
       const name = make('input', { type: 'text', value: model.name, placeholder: 'Name of the diagram' });
@@ -1069,11 +1215,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const name = def.longName ? make('textarea', { rows: 3, value: e.name }) : make('input', { type: 'text', value: e.name });
         name.className = 'uml-name';
         name.oninput = () => { snapshot(`${e.id}:name`); e.name = name.value; changed({ panel: false }); };
-        out.push(field(def.longName ? 'Text' : 'Name', name, def.longName));
+        out.push(styledField(def.longName ? 'Text' : 'Name', name, e.props, 'nameStyle', { wide: def.longName, locked: nameItalicReason(e) }));
       }
       for (const [key, kindOf] of Object.entries(def.fields || {})) out.push(inputFor(kindOf, e.props, key, titleCase(key)));
       // Fields that came from a file and have no input here: shown, so nothing is hidden.
-      const extra = Object.keys(e.props).filter((k) => !(k in (def.fields || {})));
+      const extra = Object.keys(e.props).filter((k) => !(k in (def.fields || {})) && k !== 'nameStyle');
       if (extra.length) out.push(make('p', { className: 'uml-hint', textContent: `Also kept from the file: ${extra.join(', ')}.` }));
     } else {
       const c = model.connectors.find((q) => q.id === selected.id);
@@ -1093,15 +1239,38 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       out.push(field('Kind', type));
       const from = model.elements.find((q) => q.id === c.from), to = model.elements.find((q) => q.id === c.to);
       out.push(make('p', { className: 'uml-hint', textContent: `From ${from?.name || ELEMENTS[from?.type]?.label || '?'} to ${to?.name || ELEMENTS[to?.type]?.label || '?'}.` }));
-      for (const [key, kindOf] of Object.entries(def.fields || {})) out.push(inputFor(kindOf, c.props, key, titleCase(key)));
+      // The label's words: the first field carries the B / I / U toggles, every one Ctrl B / I / U.
+      const firstLabel = LABEL_FIELDS.find((k) => def.fields?.[k] === 'text');
+      for (const [key, kindOf] of Object.entries(def.fields || {})) {
+        if (key === 'reading') { out.push(readingInput(c)); continue; }
+        const input = inputFor(kindOf, c.props, key, titleCase(key));
+        if (kindOf === 'text' && LABEL_FIELDS.includes(key)) {
+          const inp = input.querySelector('input');
+          if (key === firstLabel) { input.remove?.(); out.push(styledField(titleCase(key), inp, c.props, 'labelStyle')); continue; }
+          styleKeys(inp, c.props, 'labelStyle');
+        }
+        out.push(input);
+      }
+      // What each end shows: role and multiplicity (one style for both, as drawn together),
+      // and free text on the other side of the line.
+      const endText = (side, label) => {
+        const inp = textInput(c.props, `${side}Text`, side === 'from' ? 'Shown by the start' : 'Shown by the end');
+        inp.dataset.endText = side;
+        return styledField(label, inp, c.props, `${side}TextStyle`);
+      };
       if (def.ends) {
         for (const [side, label] of [['fromEnd', 'At the start'], ['toEnd', 'At the end']]) {
           c.props[side] ||= { role: '', multiplicity: '', navigable: false };
-          out.push(make('h4', { textContent: label }), inputFor('text', c.props[side], 'role', 'Role'), inputFor('text', c.props[side], 'multiplicity', 'Multiplicity'), inputFor('bool', c.props[side], 'navigable', 'Navigable (arrow)'));
+          const role = inputFor('text', c.props[side], 'role', 'Role').querySelector('input');
+          const mult = inputFor('text', c.props[side], 'multiplicity', 'Multiplicity');
+          styleKeys(mult.querySelector('input'), c.props[side], 'style');
+          out.push(make('h4', { textContent: label }), styledField('Role', role, c.props[side], 'style'), mult, endText(side === 'fromEnd' ? 'from' : 'to', 'Text'), inputFor('bool', c.props[side], 'navigable', 'Navigable (arrow)'));
         }
+      } else if (hasEndTexts(c.type)) {
+        out.push(make('h4', { textContent: 'Text at the ends' }), endText('from', 'At the start'), endText('to', 'At the end'));
       }
       const swap = make('button', { type: 'button', textContent: 'Swap direction' });
-      swap.onclick = () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; if (c.props.headFrom || c.props.headTo) { const h = headsOf(c); c.props.headFrom = h.end; c.props.headTo = h.start; } c.waypoints.reverse(); changed(); };
+      swap.onclick = () => { snapshot(); swapEnds(c); changed(); };
       const straight = make('button', { type: 'button', textContent: 'Straighten', disabled: !c.waypoints.length });
       straight.onclick = () => { snapshot(); c.waypoints = []; changed(); };
       // A plain line (no arrow, no ends) looks the same either way round: no Swap direction.
@@ -1138,6 +1307,15 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       const p = new DOMPoint(box[0], box[1]).matrixTransform(m);
       const area = make('textarea', { className: 'uml-rename', value: isEl ? target.name : target.props.name || '', spellcheck: false });
       Object.assign(area.style, { left: `${p.x - r.left}px`, top: `${p.y - r.top}px`, width: `${Math.max(80, box[2] * k)}px`, height: `${Math.max(24, box[3] * k)}px`, fontSize: `${Math.max(11, 13 * k)}px` });
+      // The text's style while it is typed, and Ctrl B / I / U to change it (as in the panel).
+      const styleObj = isEl ? target.props : target.props, styleKey = isEl ? 'nameStyle' : 'labelStyle';
+      const showStyle = () => {
+        const st = styleObj[styleKey] || {};
+        area.style.fontWeight = st.bold ? 'bold' : '';
+        area.style.fontStyle = st.italic || (isEl && nameItalicReason(target)) ? 'italic' : '';
+        area.style.textDecoration = st.underline ? 'underline' : '';
+      };
+      showStyle();
       canvas.append(area);
       area.focus();
       area.select();
@@ -1157,6 +1335,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       editing = { area, done };
       area.addEventListener('keydown', (ev) => {
         ev.stopPropagation();
+        const which = (ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && { b: 'bold', i: 'italic', u: 'underline' }[ev.key.toLowerCase()];
+        if (which) {
+          ev.preventDefault();
+          if (which === 'italic' && isEl && nameItalicReason(target)) { say(nameItalicReason(target)); return; }
+          snapshot(); toggleStyle(styleObj, styleKey, which); showStyle(); changed({ panel: true });
+          return;
+        }
         if (ev.key === 'Escape') { ev.preventDefault(); done(false); }
         else if (ev.key === 'Enter' && !(ev.shiftKey && def.longName)) { ev.preventDefault(); done(true); }
       });
@@ -1239,12 +1424,28 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (line === 'dashed') svg.querySelector('path').setAttribute('stroke-dasharray', '3 2.5');
     return svg;
   }
-  // A connector made another type, keeping its name, label place, colour and text size.
+  // A connector turned the other way round: its ends, what each end shows, its bends.
+  function swapEnds(c) {
+    const def = CONNECTORS[c.type] || {}, p = c.props;
+    [c.from, c.to] = [c.to, c.from];
+    if (def.ends) [p.fromEnd, p.toEnd] = [p.toEnd, p.fromEnd];
+    for (const k of ['Text', 'TextStyle', 'TextOffset']) {
+      const a = p[`from${k}`], b = p[`to${k}`];
+      if (b === undefined) delete p[`from${k}`]; else p[`from${k}`] = b;
+      if (a === undefined) delete p[`to${k}`]; else p[`to${k}`] = a;
+    }
+    if (p.headFrom || p.headTo) { const h = headsOf(c); p.headFrom = h.end; p.headTo = h.start; }
+    c.waypoints.reverse();
+  }
+  // A connector made another type, keeping its name, label place and style, end texts, colour
+  // and text size.
   function retype(c, t) {
     if (c.type === t) return;
     snapshot();
     const keep = c.props || {};
-    const fresh = makeConnector(t, c.from, c.to, { props: Object.fromEntries(Object.entries({ name: keep.name, labelOffset: keep.labelOffset, color: keep.color, textScale: keep.textScale, y: CONNECTORS[t].message ? keep.y : undefined }).filter(([, v]) => v !== undefined)) }, model);
+    const ends = hasEndTexts(t) ? Object.fromEntries(['fromText', 'toText', 'fromTextStyle', 'toTextStyle', 'fromTextOffset', 'toTextOffset'].map((k) => [k, keep[k]])) : {};
+    const reading = 'reading' in (CONNECTORS[t].fields || {}) ? keep.reading : undefined;
+    const fresh = makeConnector(t, c.from, c.to, { props: Object.fromEntries(Object.entries({ name: keep.name, labelOffset: keep.labelOffset, labelStyle: keep.labelStyle, reading, ...ends, color: keep.color, textScale: keep.textScale, y: CONNECTORS[t].message ? keep.y : undefined }).filter(([, v]) => v !== undefined)) }, model);
     c.type = t;
     c.props = fresh.props;
     changed();
@@ -1357,7 +1558,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   function menuAt(x, y, pt) {
     const hit = document.elementFromPoint(x, y)?.closest?.('[data-uml-id]');
     const e = hit?.dataset.umlKind === 'element' ? model.elements.find((q) => q.id === hit.dataset.umlId) : !hit && pt ? elementAt(pt) : null;
-    const c = ['connector', 'label'].includes(hit?.dataset.umlKind) ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null;
+    const c = ['connector', 'label', 'endText'].includes(hit?.dataset.umlKind) ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null;
     if (e || c) { selected = { kind: e ? 'element' : 'connector', id: (e || c).id }; changed(); }
     else if (selected) { selected = null; changed(); }
     const props = { label: 'Properties…', icon: 'settings', run: () => showPanel(true) };
@@ -1381,7 +1582,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
         props,
         !def.toConnector && { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.filter((t) => !CONNECTORS[t].toConnector).map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
-        directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); [c.from, c.to] = [c.to, c.from]; if (def.ends) [c.props.fromEnd, c.props.toEnd] = [c.props.toEnd, c.props.fromEnd]; if (c.props.headFrom || c.props.headTo) { const h = headsOf(c); c.props.headFrom = h.end; c.props.headTo = h.start; } c.waypoints.reverse(); changed(); } },
+        directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); swapEnds(c); changed(); } },
         // Any head at either end, and the line: an arrow of any kind from this connector.
         !def.message && { label: 'Start head', iconEl: headIcon(headsOf(c).start, true), submenu: () => Object.entries(HEADS).map(([h, label]) => ({ label, iconEl: headIcon(h, true), checked: headsOf(c).start === h, run: () => setProp(c, 'headFrom', h) })) },
         !def.message && { label: 'End head', iconEl: headIcon(headsOf(c).end), submenu: () => Object.entries(HEADS).map(([h, label]) => ({ label, iconEl: headIcon(h), checked: headsOf(c).end === h, run: () => setProp(c, 'headTo', h) })) },
@@ -1391,6 +1592,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
         !def.message && { label: 'Make rectilinear', icon: 'layers', run: () => { snapshot(); c.waypoints = rectilinear(c); changed(); } },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
+        (c.props.fromTextOffset || c.props.toTextOffset) && { label: 'End texts back by their ends', icon: 'restart', run: () => { snapshot(); delete c.props.fromTextOffset; delete c.props.toTextOffset; changed(); } },
         '-', ...styleEntries(c),
         '-', del,
       ], { title: c.props.name || def.label });
@@ -1451,6 +1653,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
           { keys: '← ↑ → ↓', does: 'Move the selected element (Shift: ten times as far)' },
           { keys: 'Ctrl Z / Ctrl Shift Z / Ctrl Y', does: 'Undo · redo' },
           { keys: 'Ctrl C / Ctrl X / Ctrl V / Ctrl D', does: 'Copy · cut · paste · duplicate' },
+          { keys: 'Ctrl B / Ctrl I / Ctrl U', does: 'Typing a name, a line or a label: bold · italic · underline' },
           { keys: 'Ctrl + / Ctrl − / Ctrl 0', does: 'Zoom in · out · the whole diagram' },
           { keys: 'Shift F10 / Menu', does: 'The selection\'s menu' },
           { keys: 'N', does: 'Notes on the diagram' },
