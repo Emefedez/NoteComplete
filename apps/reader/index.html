@@ -12,7 +12,7 @@
   <meta name="google-drive-api-key" content="" />
   <meta name="dropbox-app-key" content="" />
   <!-- Copied from tools/reader-csp.mjs (node tools/reader-csp.mjs prints it); a test keeps them equal. Delete this meta tag to switch the policy off. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data: https://cdn.jsdelivr.net https://translate.google.com https://dict.youdao.com; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: data: blob:; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com/gsi/; object-src 'none'; base-uri 'none'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' blob: https://accounts.google.com/gsi/client http://127.0.0.1:* 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' data: blob: https://accounts.google.com/gsi/style; img-src 'self' data: blob: https:; media-src 'self' blob: data: https://cdn.jsdelivr.net https://translate.google.com https://dict.youdao.com; font-src 'self' data: blob:; connect-src 'self' https: wss: ws: http://127.0.0.1:* data: blob:; worker-src 'self' blob:; frame-src 'self' blob: https://accounts.google.com/gsi/ http://127.0.0.1:*; object-src 'none'; base-uri 'none'" />
   <title>NoteComplete</title
   ><link rel="manifest" href="./manifest.webmanifest" /><link
     rel="icon"
