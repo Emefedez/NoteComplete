@@ -186,6 +186,20 @@ contextBridge.exposeInMainWorld('notecompleteUpdates', {
   setCheckOnOpen: on => ipcRenderer.invoke('update:check-on-open', on === true),
   openPage: url => ipcRenderer.invoke('update:page', url),
   restart: () => ipcRenderer.invoke('update:restart'),
+  // Back to the newest release from a beta branch build (then install() as usual).
+  stable: () => ipcRenderer.invoke('update:stable'),
+  // Help → Update from a branch… (desktop branch-build.js).
+  branch: {
+    info: () => ipcRenderer.invoke('branch:info'),
+    list: () => ipcRenderer.invoke('branch:list'),
+    status: name => ipcRenderer.invoke('branch:status', String(name ?? '')),
+    missing: () => ipcRenderer.invoke('branch:missing'),
+    build: name => ipcRenderer.invoke('branch:build', String(name ?? '')),
+    cancel: () => ipcRenderer.invoke('branch:cancel'),
+    openLog: () => ipcRenderer.invoke('branch:log'),
+    onLine: callback => { const l = (_e, lines) => callback(lines); ipcRenderer.on('branch:line', l); return () => ipcRenderer.removeListener('branch:line', l); },
+    onStep: callback => { const l = (_e, step) => callback(step); ipcRenderer.on('branch:step', l); return () => ipcRenderer.removeListener('branch:step', l); },
+  },
 });
 contextBridge.exposeInMainWorld('notecompleteDrive', {
   signIn: (options = {}) => ipcRenderer.invoke('drive:sign-in', { write: options.write === true, silent: options.silent === true }),

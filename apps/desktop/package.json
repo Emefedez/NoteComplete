@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "1.2.93",
+  "version": "1.2.94",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -43,6 +43,7 @@
       "terminate-process.js",
       "tabs.js",
       "updater.js",
+      "branch-build.js",
       "session.js",
       "prefab-folder.js",
       "png-clipboard.js",

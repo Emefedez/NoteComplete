@@ -95,7 +95,10 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     const release = latestRelease(await fetchReleases());
     await remember({ lastCheck: now() });
     const current = app.getVersion();
-    if (!release || !newer(release.tag_name, current)) { found = null; await remember({ available: null }); return { current }; }
+    // A beta built from a branch (branch-build.js, "X.Y.Z-branch.…") is offered only releases
+    // newer than its X.Y.Z: the release of the same number is usually older code.
+    const beta = parseVersion(current)?.pre.startsWith('branch.') ? parseVersion(current).parts.join('.') : null;
+    if (!release || !newer(release.tag_name, beta || current)) { found = null; await remember({ available: null }); return { current }; }
     const asset = pickAsset(release, platform, arch);
     const version = release.tag_name.replace(/^v/i, '');
     found = { release, asset };
@@ -105,6 +108,14 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
       // Self-update only for a writable AppImage with a matching installer.
       install: platform === 'linux' && !!appImage && !!asset ? 'appimage' : 'page',
     };
+  }
+  // Back from a beta branch build to the newest release, whatever its number.
+  async function stable() {
+    const release = latestRelease(await fetchReleases());
+    if (!release) throw Error('GitHub lists no release.');
+    const asset = pickAsset(release, platform, arch);
+    found = { release, asset };
+    return { current: app.getVersion(), version: release.tag_name.replace(/^v/i, ''), page: release.html_url, install: platform === 'linux' && !!appImage && !!asset ? 'appimage' : 'page' };
   }
   async function install(progress = () => {}) {
     if (!found?.asset || !appImage) throw Error('This copy cannot update itself; download the new version from the release page.');
@@ -131,7 +142,7 @@ export function updater({ app, fetch = globalThis.fetch, stateFile, appImage = p
     return { version: release.tag_name.replace(/^v/i, '') };
   }
   return {
-    check, install,
+    check, install, stable,
     skip: version => remember({ skip: version }),
     setCheckOnOpen: on => remember({ checkOnOpen: !!on }),
     settings: async () => ({ checkOnOpen: (await state()).checkOnOpen !== false, current: app.getVersion() }),
