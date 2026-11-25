@@ -148,7 +148,7 @@ All of these are covered by `prefabs_e2e`, `charts_e2e` and `uml_e2e` today or g
 - Exercises: fill in, check, solution for states, timeline and bars, and the empty prefab to fill on paper.
 - Notes on a figure (N); references to look at (a picture, PDF or note, or a pasted snippet); JSON mode.
 - Palettes: number keys, a dragged order that is kept, the Shift S ring, the cheat sheet, resizable panels.
-- UML: every diagram kind, PlantUML code beside the drawing (both ways), the PlantUML rendering, `.puml` files opened as documents, XMI and VP import, copy and paste between editors and pages, Insert into note.
+- UML: every diagram kind, text styles (B / I / U: `nameStyle`, a line's `style`, `labelStyle`, end `style`, `fromTextStyle` / `toTextStyle`), reading direction and end texts (`fromText` / `toText`), PlantUML code beside the drawing (both ways), the PlantUML rendering, `.puml` files opened as documents, XMI and VP import, copy and paste between editors and pages, Insert into note.
 - Export as PNG and send by QR; Noteful export as a picture; collaboration; the MCP `add_prefab`; exams generated with these figures.
 - Graph and table: ink and text boxes on the page, cells edited in place.
 
