@@ -105,6 +105,12 @@ Opening a dialog makes the rest of the window inert, and Chrome restyles every e
 
 At full CPU speed the times are about a quarter of these: dialogs go from 40 to 55 ms to 15 to 30 ms. Menus, a colour tap (25 ms) and the right-click menu (about 60 ms) were already within a few frames.
 
+## Euro-Office editor frame rate (1.2.93)
+
+Euro-Office's Word, Slides and Visio editors (sdkjs) draw from `AscCommon.PaintMessageLoop`. On desktop it runs on `requestAnimationFrame` but only paints when 40 ms have passed since the last paint (`isUseInterval`; the mobile editor turns it off), so scrolling, zoom and the caret ran at 20 frames a second on a 60 Hz screen and about 24 on 120 Hz, while the toolbar, being plain DOM, felt quick. The desktop preload (`officePaintHook` in `apps/desktop/preload.cjs`) runs in the DocumentServer's frames before the editor's scripts and makes `isUseInterval` false for one second after each wheel, key, pointer press, drag or touch move, then true again. `nodeIntegrationInSubFrames` lets the preload reach those frames; sub-frames get no bridge (`office-paint.test.mjs`). The editor's bundle keeps property names (sdkjs `build/webpack.sdk.factory.mjs`, `mangle: false`), so the hook finds them by name.
+
+Measured with sdkjs 9.3.8's own `WorkEvents.js` in an iframe of an Electron 44 window (xvfb, 60 Hz): idle 20 paints a second before and after; while scrolling 20 before, 59 after. Spreadsheets paint synchronously on scroll and were not capped.
+
 ## Not measured here
 
 - Safari (iPad, iPhone): not available in this container. WebKit renders, composites and caches pictures differently; the changes keep to standard APIs and fall back where one is missing (`OffscreenCanvas`, `createImageBitmap`, `bitmaprenderer`).

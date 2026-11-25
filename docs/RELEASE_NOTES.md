@@ -1,6 +1,10 @@
-## What's new in 1.2.93
+## What's new in 1.2.94
 
 - **Beta updates from a branch (Linux AppImage).** **Help → Update from a branch (beta)…** builds any branch of the repository on this computer (git, Rust, Node.js, Python and squashfs-tools needed) and installs it in place of this copy, to try changes before they are released. Nothing is replaced unless the build succeeds, the previous copy is kept as `NoteComplete.AppImage.previous`, the top bar shows the build's progress, and **Back to the latest release** returns to normal releases. Normal release updates are unchanged.
+
+## What's new in 1.2.93
+
+- **Smooth Euro-Office scrolling and typing.** Euro-Office's Word, Slides and Visio editors repaint from a loop that waits at least 40 ms between frames on desktop, so scrolling and the caret moved at 20 to 25 frames a second whatever the screen. NoteComplete now lifts that wait while you scroll, type, click or drag (and for a second after), so the editor follows the screen's refresh rate; idle, it keeps its old pace, so an open document costs no more CPU or memory than before. Measured against Euro-Office 9.3.8's own paint loop in Electron: 20 → 59 frames a second while scrolling on a 60 Hz screen, idle unchanged. Spreadsheets already painted on every scroll.
 
 ## What's new in 1.2.92
 
