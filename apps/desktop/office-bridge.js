@@ -23,7 +23,7 @@ const CONTAINER_NAME = 'notecomplete-euro-office';
 const WSL_DISTRO = 'NoteComplete-EuroOffice';
 const PASTA_HOST_GW = '169.254.1.2';
 const DEFAULT_IDLE_MS = 10 * 60 * 1000;
-const CONVERTER_CONFIG = JSON.stringify({ FileConverter: { converter: { maxprocesscount: 0.25 } } }, null, 2) + '\n';
+const CONVERTER_CONFIG = JSON.stringify({ FileConverter: { converter: { maxprocesscount: 0.5 } } }, null, 2) + '\n';
 
 const FALLBACK_DOC_TYPE = {
   docx: 'word', docm: 'word', dotx: 'word', dotm: 'word', doc: 'word', dot: 'word',
@@ -736,13 +736,21 @@ export function createOfficeBridge({
       editorConfig: {
         mode: editable ? 'edit' : 'view',
         lang: String(lang || 'en').split('-')[0] || 'en',
+        region: 'es-ES',
         callbackUrl: `http://${srv.hostAlias}:${cbPort}/cb/${cbToken}`,
         user: { id: String(user?.id || 'nc-owner'), name: String(user?.name || 'NoteComplete') },
+        coEditing: { mode: 'fast', change: false },
         customization: {
           uiTheme: theme === 'dark' ? 'theme-dark' : 'theme-light',
           forcesave: true,
           autosave: true,
           compactHeader: true,
+          compactToolbar: true,
+          hideRightMenu: true,
+          help: false,
+          feedback: false,
+          about: false,
+          features: { spellcheck: { mode: false, change: true } },
         },
       },
     };
@@ -801,6 +809,19 @@ export function createOfficeBridge({
     for (const id of ids) await closeDocument(id, { save: false });
   }
 
+  async function blankTemplate(ext = 'docx', lang = 'es-ES') {
+    const cleanExt = ['docx', 'xlsx', 'pptx'].includes(String(ext || '').toLowerCase()) ? String(ext).toLowerCase() : 'docx';
+    const base = path.join(rootfsDir, 'var/www/euro-office/documentserver/document-templates/new');
+    const candidates = [String(lang || 'es-ES'), 'es-ES', 'en-US'];
+    for (const loc of candidates) {
+      try {
+        const bytes = await readFile(path.join(base, loc, `new.${cleanExt}`));
+        if (bytes?.length) return { bytes: new Uint8Array(bytes), name: `Untitled.${cleanExt}` };
+      } catch { /* try next locale */ }
+    }
+    throw Error(`Could not find a blank .${cleanExt} template in the Euro-Office module.`);
+  }
+
   return {
     status,
     install,
@@ -808,6 +829,7 @@ export function createOfficeBridge({
     start,
     stop,
     openDocument,
+    blankTemplate,
     forcesave,
     closeDocument,
     closeOwner,

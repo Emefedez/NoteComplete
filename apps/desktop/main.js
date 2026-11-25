@@ -467,8 +467,24 @@ if (!primary) app.quit();
 // Launching the app again (menu, dock, terminal) opens a new window; Ctrl+T
 // and + make tabs from inside a window. A launch with files (Open with… on Windows and
 // Linux) opens them in tabs of the open window instead.
+function openEuroOfficeLauncher() {
+  const focused = BaseWindow.getFocusedWindow();
+  const win = (focused && windows.get(focused.id)) || [...windows.values()].at(-1) || createWindow({ tab: true });
+  const view = win && views.get(tabs.active(win.id));
+  if (win.isMinimized()) win.restore();
+  win.focus();
+  if (view && !view.webContents.isDestroyed()) {
+    if (view.webContents.isLoading()) view.webContents.once('did-finish-load', () => { if (!view.webContents.isDestroyed()) view.webContents.send('app:euro-office-launch'); });
+    else view.webContents.send('app:euro-office-launch');
+  }
+}
 app.on('second-instance', (_event, argv, workingDirectory) => {
-  if (!openSystemFiles(launchFiles(argv, { cwd: workingDirectory, packaged: app.isPackaged })) && started) createWindow();
+  const euro = Array.isArray(argv) && argv.includes('--euro-office');
+  const opened = openSystemFiles(launchFiles(argv, { cwd: workingDirectory, packaged: app.isPackaged }));
+  if (!opened && started) {
+    if (euro) openEuroOfficeLauncher();
+    else createWindow();
+  }
 });
 app.whenReady().then(async () => {
   if (!primary) return;
@@ -690,6 +706,7 @@ app.whenReady().then(async () => {
     event.sender.once('destroyed', () => { void officeBridge.closeOwner(ownerId); });
     return officeBridge.openDocument({ ...(request || {}), ownerId });
   }));
+  ipcMain.handle('office:template', guarded((_event, ext, lang) => officeBridge.blankTemplate(ext, lang)));
   ipcMain.handle('office:forcesave', guarded((_event, sessionId) => officeBridge.forcesave(String(sessionId || ''))));
   ipcMain.handle('office:close', guarded((_event, sessionId, options) => officeBridge.closeDocument(String(sessionId || ''), options || {})));
   // Internet Archive files for the reader: only archive.org, with a size limit, and stopped
@@ -983,18 +1000,21 @@ app.whenReady().then(async () => {
     } finally { pendingDropboxAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
   started = true;
+  const launchedEuroOffice = process.argv.includes('--euro-office');
   // Back from a restart for an update: the windows and tabs that were open, each opening its
   // document again; files the system handed over join the first window.
   const restored = await takeSession(sessionFile()).catch(() => null);
+  const initialFiles = launchQueue.splice(0);
   if (restored) {
     restored.windows.forEach((w, i) => {
       const win = createWindow({ tab: false });
       const ids = w.tabs.map((state) => { openTab(win, null, state); return tabs.list(win.id).at(-1)?.id; });
       if (!ids.length) openTab(win);
-      if (i === 0) for (const file of launchQueue.splice(0)) openTab(win, file);
+      if (i === 0) for (const file of initialFiles) openTab(win, file);
       if (ids[w.active] != null) activate(win, ids[w.active]);
     });
-  } else createWindow({ files: launchQueue.splice(0) });
+  } else createWindow({ files: initialFiles });
+  if (launchedEuroOffice && !initialFiles.length) openEuroOfficeLauncher();
   app.on('activate', () => { if (!windows.size) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('notecompleteWindows', {
   focus: id => ipcRenderer.invoke('windows:focus', id),
   // Help ▸ Setup wizard… in the native menu (app-menu.js): the tab in front opens it.
   onSetupWizard: callback => ipcRenderer.on('app:setup-wizard', () => callback()),
+  onEuroOfficeLaunch: callback => ipcRenderer.on('app:euro-office-launch', () => callback()),
 });
 // Tabs in this window: the reader draws the strip and reports its title and
 // unsaved state; closing asks the reader first (onCloseRequest).
@@ -188,6 +189,7 @@ contextBridge.exposeInMainWorld('notecompleteOffice', {
   },
   uninstall: options => ipcRenderer.invoke('office:uninstall', options || {}),
   open: request => ipcRenderer.invoke('office:open', request || {}),
+  blankTemplate: (ext, lang) => ipcRenderer.invoke('office:template', ext, lang),
   forcesave: sessionId => ipcRenderer.invoke('office:forcesave', String(sessionId || '')),
   close: (sessionId, options) => ipcRenderer.invoke('office:close', String(sessionId || ''), options || {}),
   onSaved: callback => {

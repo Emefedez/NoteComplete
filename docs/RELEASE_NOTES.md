@@ -1,3 +1,8 @@
+## What's new in 1.2.90
+
+- **Euro-Office Start menu launcher.** Launching **Euro-Office (NoteComplete)** from the Linux app menu now opens a quick launcher to create a new `.docx`, `.xlsx`, or `.pptx` (from Euro-Office's built-in templates) or open an existing Office file directly.
+- **Compact, faster Euro-Office layout.** Euro-Office keeps its English GUI, defaults new documents to Spanish (`es-ES`) with live spellcheck underlining off (toggleable), uses the compact single-row ribbon (`compactToolbar`), hides the right panel and top brand bar, trims the NoteComplete header bar, and raises converter concurrency (`maxprocesscount: 0.5`).
+
 ## What's new in 1.2.89
 
 - **Fix Euro-Office Linux rootless startup race.** `run.sh` now waits for `inner.sh` to finish entering its user/network namespaces before attaching `pasta`, retries transient `pasta` attachment races, and cleans up the `unshare` parent on failure.

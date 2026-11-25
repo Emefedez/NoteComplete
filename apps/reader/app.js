@@ -4935,7 +4935,7 @@ const officeView = officeViewer({
   saveBtn: $("officeSave"),
   textBtn: $("officeOpenText"),
   getTheme: () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"),
-  getLang: () => navigator.language || "en",
+  getLang: () => "en",
   onOpenAsText: (file) => void reopenWith(file, "text"),
   onDirtyChange: (isDirty, name) => {
     dirty = changed = isDirty;
@@ -8226,6 +8226,56 @@ $("uiReset").onclick = () => applyUiSize(0);
   setOpenSetupModules(() => { closeMenus(); wizard.open("modules"); });
   // The desktop app's own Help menu asks the tab in front.
   window.notecompleteWindows?.onSetupWizard?.(() => wizard.open());
+  // Start-menu "Euro-Office (NoteComplete)" entry: open a quick launcher for new or existing Office files.
+  async function openEuroOfficeLauncher() {
+    const bridge = window.notecompleteOffice;
+    if (!bridge?.blankTemplate) return;
+    const make = (tag, props = {}, ...kids) => { const el = Object.assign(document.createElement(tag), props); el.append(...kids); return el; };
+    const dlg = make("dialog", { className: "ocr-dialog open-with-dialog" });
+    const startBlank = async (ext) => {
+      dlg.close();
+      try {
+        const tpl = await bridge.blankTemplate(ext, "es-ES");
+        const file = new File([tpl.bytes], tpl.name, { type: "application/octet-stream" });
+        openOnceWith(file.name, "euro-office");
+        await load(file);
+      } catch (err) {
+        status(`Euro-Office: ${err.message}`, true);
+      }
+    };
+    const items = [
+      { key: "1", ext: "docx", label: "Document (.docx)", about: "New Word document in Euro-Office" },
+      { key: "2", ext: "xlsx", label: "Spreadsheet (.xlsx)", about: "New Excel spreadsheet in Euro-Office" },
+      { key: "3", ext: "pptx", label: "Presentation (.pptx)", about: "New PowerPoint presentation in Euro-Office" },
+    ];
+    const choices = make("div", { className: "open-with-choices" }, ...items.map((it) => {
+      const b = make("button", { type: "button", className: "open-with-choice" },
+        make("span", { className: "open-with-choice-head" }, icon("office"), make("kbd", { textContent: it.key })),
+        make("strong", { textContent: it.label }),
+        make("span", { className: "open-with-choice-about", textContent: it.about }));
+      b.onclick = () => void startBlank(it.ext);
+      return b;
+    }));
+    const openBtn = make("button", { type: "button", textContent: "Open file…" });
+    openBtn.onclick = () => { dlg.close(); $("open")?.click(); };
+    const cancel = make("button", { type: "button", textContent: "Cancel" });
+    cancel.onclick = () => dlg.close();
+    dlg.append(
+      make("h2", { textContent: "Euro-Office" }),
+      make("p", { className: "muted open-with-name", textContent: "Create a new Office document or open an existing file." }),
+      choices,
+      make("div", { className: "ocr-actions" }, openBtn, make("span", { className: "spacer" }), cancel),
+    );
+    dlg.addEventListener("keydown", (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const hit = items.find((it) => it.key === e.key);
+      if (hit) { e.preventDefault(); void startBlank(hit.ext); }
+    });
+    dlg.addEventListener("close", () => dlg.remove());
+    document.body.append(dlg);
+    dlg.showModal();
+  }
+  window.notecompleteWindows?.onEuroOfficeLaunch?.(() => void openEuroOfficeLauncher());
   // ?setup=1 (or =<step>) opens it at once: for checking it, and for links from the docs.
   const asked = new URLSearchParams(location.search).get("setup");
   if (asked) setTimeout(() => wizard.open(asked === "1" ? "" : asked), 300);

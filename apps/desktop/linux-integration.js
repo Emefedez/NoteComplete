@@ -59,7 +59,7 @@ Version=1.0
 Name=Euro-Office (NoteComplete)
 GenericName=Office Suite
 Comment=Edit Word, Excel and PowerPoint files locally in NoteComplete
-Exec=env ELECTRON_OZONE_PLATFORM_HINT=auto ${execQuote(appImage)} %U
+Exec=env ELECTRON_OZONE_PLATFORM_HINT=auto ${execQuote(appImage)} --euro-office %U
 StartupNotify=true
 StartupWMClass=NoteComplete
 Terminal=false
