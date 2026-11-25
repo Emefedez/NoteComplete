@@ -14,7 +14,8 @@ in the desktop app); sprints 2 onwards in progress.
 
 - Page tables: `table.js` (spec + drawing as ink and text boxes), editor `editTable` in
   `compound-dialogs.js`, stored as items with `Part{kind:"table"}` (`part.rs`). A spec is a
-  rectangular grid of strings, equal row heights, relative column widths, up to 30 × 12.
+  rectangular grid of strings, equal row heights, relative column widths, up to 30 × 12
+  (sprint 1b: 50 × 20, row heights, cell looks; see Phase 1).
 - Office files: `media-import.js` sends `isOfficeName` / `isTableName` files to
   `office.js` `officeDocument`, which writes Markdown (+ a `<name>_files` picture folder) for the
   text view. Merged cells, formulas and layout are lost; the result is read-only.
@@ -33,7 +34,43 @@ in the desktop app); sprints 2 onwards in progress.
 - [ ] MCP: page tables are not in `add_prefab` yet (SHAPES-TABLES-MATH.md T2); when T2 is done,
       its spec text documents `merges`.
 - [D] Tests in `table.test.mjs` (model, drawing, resize with merges, v1 compatibility).
-- Open question: per-cell alignment, row heights that follow content, header column.
+- Answered in sprint 1b: per-cell alignment, row heights that follow content, header column.
+
+### Sprint 1b: a better table and editor (branch feat/table-editor-plus)
+
+Spec `v: 3` only when one of the new fields is used; v1 and v2 specs read and draw exactly as
+before (`table.golden.json`, drawn by the 6fa98cc table.js, pins it). `tableSpec`, `MAX_ROWS`,
+`MAX_COLUMNS` and `mergeCells` keep their behaviour.
+
+- [D] Rows: `fit: true` (rows as tall as their text; new tables start with it) or `heights`
+      (relative, like `widths`). A table grows on the page with the rows and lines added in the
+      editor (`tableNaturalSize`, figures.js). Inserted and deleted rows and columns keep the
+      widths and heights (`insertLines` / `deleteLines`); the editor no longer resets widths.
+- [D] Cell looks, sparse: `format: { "r,c": { bold, italic, align, valign, fill } }`, a merge
+      under its first cell. Fills are highlighter bands under the ink (the row's band leaves the
+      cell out); align also sets the text box's own `align` (Noteful keeps it). Merged cells stay
+      centred by default.
+- [D] `headerColumn`: the first column bold and tinted, with a thicker rule.
+- [D] `borders`: all, outline, rows only, none (the frame stays, clear, so the table can be
+      selected); the header row's and column's rules stay in all of them.
+- [D] `size`: auto (as before), small 10, medium 13, large 17.
+- [!] Editor format bar: bold (Ctrl+B), italic (Ctrl+I), align left / centre / right and top /
+      middle / bottom, fill, clear looks, on the chosen cells or the cursor's. Delete or
+      Backspace clears several chosen cells.
+- [!] Paste a range (`table-paste.js`): an HTML table (with colspan / rowspan as merges), TSV,
+      or CSV of two or more consistent lines, from the cursor; the table grows up to the limits.
+- [!] Column letters and row numbers: drag their edges for widths and heights (arrow keys on
+      the focused edge; double-click: all equal); a click chooses the whole column or row.
+- [!] Undo / redo in the editor (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y, and buttons) over the whole table.
+- [!] Live preview of the table as drawn (`previewSvg` of `tableItems`), toggled with the eye
+      button and remembered on the device.
+- [!] Sort rows by the cursor's column, up or down; the header row stays; off when a merge spans
+      body rows (`sortRows`, `canSort`).
+- [D] Limits 50 rows × 20 columns (a 50 × 20 table: about 1,070 items, drawn by the core in
+      ~10 ms, page view ~100 ms; the editor opens it in ~60 ms).
+- [D] Tests: `table.test.mjs` (golden, v3 fields, ops, sort, paste, 50 × 20 through the WASM core
+      and Noteful export), `table-paste.test.mjs`.
+- Not done: text in a cell does not wrap on the page (as before); a long line runs past its cell.
 
 ## Phase 2: tables in the native (Markdown) path
 

@@ -113,6 +113,20 @@ export const paths = {
  // Cells joined into one, and a joined cell split again.
  cellsMerge:'M3 5h18v14H3zM4 12h5M7 10l2 2-2 2M20 12h-5M17 10l-2 2 2 2',
  cellsSplit:'M3 5h18v14H3zM12 5v14M10 12H5M7 10l-2 2 2 2M14 12h5M17 10l2 2-2 2',
+ // Cell looks in the table editor: bold, italic, the text left / centred / right and at the top /
+ // middle / bottom, a fill, looks cleared; rows sorted up or down by a column.
+ bold:'M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z',
+ italic:'M10 4h8M6 20h8M14 4l-4 16',
+ alignLeft:'M4 6h16M4 10h10M4 14h16M4 18h10',
+ alignCenter:'M4 6h16M7 10h10M4 14h16M7 18h10',
+ alignRight:'M4 6h16M10 10h10M4 14h16M10 18h10',
+ alignTop:'M4 4h16M8 8h3v11H8zM13 8h3v6h-3z',
+ alignMiddle:'M4 12h16M8 6.5h3v11H8zM13 9h3v6h-3z',
+ alignBottom:'M4 20h16M8 5h3v11H8zM13 10h3v6h-3z',
+ fillColor:'m5 11 6-6 7 7-6 6a1.5 1.5 0 0 1-2 0l-5-5a1.5 1.5 0 0 1 0-2ZM8.5 3.5l2.5 2.5M5 12.5h12.5M20 15s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3Z',
+ clearFormat:'M5 6V4h12v2M11 4 8 20M6 20h5M15 14l6 6M21 14l-6 6',
+ sortAsc:'M7 4v16M3.5 7.5 7 4l3.5 3.5M13 6h4M13 12h6M13 18h8',
+ sortDesc:'M7 20V4M3.5 16.5 7 20l3.5-3.5M13 6h8M13 12h6M13 18h4',
  chat:'M4 5h16v11H9l-5 4V5Z',
  // UML diagrams (uml.js): a class box tied to an actor.
  uml:'M10 3h11v12H10zM10 7h11M10 11h11M5 13.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM5 13.5V18M2.5 15.5h5M3 21l2-3 2 3M7.5 15.5H10',
