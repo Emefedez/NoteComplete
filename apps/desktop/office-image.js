@@ -83,7 +83,10 @@ export async function pullImage({ arch, dir, image = OFFICE_IMAGE, fetch = globa
     }
     const partial = `${target}.partial`;
     if (localDir) {
-      const from = path.join(localDir, 'blobs', hex);
+      let from = path.join(localDir, 'blobs', hex);
+      if (i === 0 && !(await exists(from)) && await exists(path.join(localDir, 'config.json'))) {
+        from = path.join(localDir, 'config.json');
+      }
       if (path.resolve(from) === path.resolve(target)) throw Error('The local image folder is the install folder.');
       await pipeline(createReadStream(from), createWriteStream(partial));
       report('verifying', blob.size);
