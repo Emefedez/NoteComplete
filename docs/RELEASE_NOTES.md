@@ -1,3 +1,10 @@
+## What's new in 1.2.85
+
+- **Euro-Office editor loads reliably in the desktop app.** Local Euro-Office loopback responses now send the cross-origin headers required by Electron's `COEP: credentialless` isolation, fixing the blank white screen after startup, and the editor tab now appears immediately with a first-launch font-building hint.
+- **Turn Markdown into Euro-Office documents (`.docx`).** Open any `.md` file as a Euro-Office document directly from the Markdown editor bar or the Recents right-click menu.
+- **Real previews for Word and ODF documents.** Home cards for `.docx`, `.doc`, `.odt`, and `.rtf` files now render a page preview of their opening text instead of a static icon.
+- **Editor & dialog polish.** Added a top-right `×` close button to the Setup wizard, made the Prefabs "Hide not installed" toggle icon-only, gave the rich table editor a collapsible **On the page** preview bar (like process timelines), clipped Custom R figure code previews inside their card, fixed `Ctrl+A` in graph prefab and dialog text boxes, and fixed `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` undo/redo while typing in Textual Analysis.
+
 ## What's new in 1.2.84
 
 - **Euro-Office installs from packaged builds.** The Euro-Office runner scripts are now unpacked outside `app.asar` so installing and launching the module works from the Linux AppImage, macOS app, and Windows installer.
