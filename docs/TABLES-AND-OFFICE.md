@@ -87,8 +87,17 @@ a Node `docservice`, and the native C++ `x2t` converter. AGPL-3.0, so it is a se
 that NoteComplete (MIT) talks to over HTTP, with its source offered; never bundled in the
 AppImage.
 
-- [ ] Spike first: build or obtain an aarch64 build (Asahi) of docservice + x2t and open one
-      .xlsx in a plain page. Everything below waits on this.
+- [D] Spike (2026-11-25, report in `~/Work/euro-office-spike/REPORT.md`): feasible with caveats.
+      The official `ghcr.io/euro-office/documentserver:v9.3.8-arm64` image ran rootless
+      (`unshare --map-auto` + `pasta`, no docker, no sudo) on 127.0.0.1 with JWT; DocsAPI opened an
+      .xlsx and .docx (dark, es/en, desktop/mobile/embedded) and the save callbacks (forcesave
+      status 6, close status 2) returned files with the edits. Cost: 989 MB download, 3.2 GB on
+      disk, ~750 MB RAM idle with one converter worker, 27 s first start / 7.7 s warm. The server
+      exists only for Linux (amd64 + arm64): Windows x64 needs WSL2 (`wsl --import`, no Docker),
+      macOS arm64 needs a container runtime. Pin v9.3.8+ (NOTICE per the licence terms). Formats
+      come from the module's own manifest (86 entries).
+      Decision: phase 3c builds Linux x64 + arm64 first; Windows and macOS shown as
+      "requires WSL2 / a container runtime" until tested on real machines.
 - [ ] Desktop main starts and stops it on localhost on demand (like `r-bridge.js`), with a
       random port and a JWT secret it generates.
 - [ ] Editor tab: `DocsAPI.DocEditor` in a NoteComplete tab, themed light/dark, language from
@@ -186,7 +195,7 @@ than writing new ones.
 3. **Tables in documents** (phase 2): merges kept on import, filter / sort bar, sheet range to
    page table.
 4. **Open with** (phase 3a): menus, per-type defaults, switch button in the tab bar.
-5. **Euro-Office spike** (phase 3b): aarch64 build, one .xlsx opened.
+5. **Euro-Office spike** (phase 3b): done, see the phase 3 checklist and REPORT.md.
 6. **Euro-Office module** (phase 3c): install from the wizard and the modules UI, launcher,
    editor tab, save-back.
 7. **Textual Analysis** (phase 5): Markdown highlighting first, then the mode and the prefab.
