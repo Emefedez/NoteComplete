@@ -1,3 +1,7 @@
+## What's new in 1.2.84
+
+- **Euro-Office installs from packaged builds.** The Euro-Office runner scripts are now unpacked outside `app.asar` so installing and launching the module works from the Linux AppImage, macOS app, and Windows installer.
+
 ## What's new in 1.2.83
 
 - **Richer page tables and table editor.** Cells can now span multiple rows and columns (Merge / Split, range selection), rows grow to fit their text, and cells support per-cell bold, italic, alignment, fill colour, header column, border styles, and text size. The editor adds a format bar, paste from spreadsheets (HTML/TSV/CSV), draggable column widths and row heights, undo/redo, live preview, row sorting, and tables up to 50 × 20.
