@@ -226,16 +226,65 @@ them, which can go on to UML elements. Reuse NoteComplete's text and highlightin
 (`rich-text.js`, `rich-spans.js`, `text-highlight.js`, the Markdown editor, the prefab kit) rather
 than writing new ones.
 
-- [ ] Highlighting in Markdown, extended: several colours and an underline style, kept in the
+- [!] Highlighting in Markdown, extended: several colours and an underline style, kept in the
       Markdown (`==text=={.colour}` or a `<mark data-kind>` form, to choose), shown in the text view
       and the Markdown editor. Useful on its own for any Markdown note.
-- [ ] Textual Analysis mode: the Markdown viewer with a classify bar (candidate kinds with their
+
+      **Syntax chosen** (`apps/reader/md-highlight.js`): `==text==` (yellow), `=={pink}text==`
+      (a colour: yellow, pink, mint, lavender, peach, blue, red, their other names green, teal,
+      purple, orange, sky, amber, coral, or `#rrggbb`), `=={_blue}text==` (an underline in that
+      colour: `_` = underline) and `=={.red}text==` (the text itself in that colour, no fill:
+      `.` = text colour, for remarks such as "(la aplicación NO es una clase)"). Why the tag goes *before* the
+      text: it is the form the handwriting pages already read (`crates/noteful-core/src/ink`,
+      `=={pink}phrase==`, and `convert.js`'s cheat sheet), so notes and ink pages share one
+      dialect and AI already writes it; a reader that does not know it shows the words with `==`
+      around them; it cannot clash with links, footnotes or attributes (`{…}` right after `==`
+      means nothing else in CommonMark/GFM); and a trailing `=={…}` would be read as the start of
+      the next highlight. Rules as Obsidian/Pandoc `==mark==`: no space just inside the
+      delimiters, `===` is never one, no blank line or code inside. The core renders Markdown
+      without it (raw text), and the reader marks it after (`rich-text.js` → `highlightElement`),
+      so the wasm core is unchanged and Markdown without `==x==` renders byte for byte as before
+      (tested on every doc in `docs/`). TinyMDE shows it through its `customInlineGrammar`, and
+      the format bar has a Highlight button (colours, Underline ▸, Text colour ▸, Remove highlight).
+- [!] Textual Analysis mode: the Markdown viewer with a classify bar (candidate kinds with their
       colours), select text → classify; a side table of candidates (name, kind, occurrences,
       description), duplicates merged, order editable.
-- [ ] A prefab module (`prefabs/textual-analysis/`, module.json, ai.md) so it goes on pages,
+
+      **Design after the owner's Visual Paradigm screenshot (2026-11-25)**: the colour belongs to
+      the *candidate*, not the kind (each new candidate takes the next colour of a palette;
+      editable), and every place its extracted text appears is highlighted and counted
+      automatically (whole words, any case; plurals -s/-es and accent-insensitive matching are
+      options, off by default; where two overlap the longer text wins). So the statement stays
+      the owner's own Markdown: candidates are *found* in it, not marked in it, and no candidate
+      syntax is needed (the text's own `==highlights==` and `=={.red}remarks==` are kept and
+      drawn). Layout as VP: the text on top (TinyMDE with the format bar: bold, italic, nested
+      lists, highlight / underline / text colour; Find, Ctrl F, the app's `text-find.js`), the
+      candidate table under it in a resizable split with VP's columns **No. | Candidate Class |
+      Extracted Text | Type | Description | Occurrence | Highlight**; the model name is
+      suggested from the extracted text (CamelCase for classes, camelCase for attributes and
+      operations, articles and prepositions dropped: "Nombre de cliente" → `nombreCliente`) and
+      editable. The right panel has the title, what goes on the page, the matching options, the
+      candidates' tree by folder (VP's Model Explorer "Candidate Items" > "Clases") and the
+      selected candidate's folder, owner (the class of an attribute/operation, the actor of a
+      use case) and *Merge into*. Occurrences in the editor are drawn with the CSS Custom
+      Highlight API over TinyMDE's own text, so typing and the caret are untouched. Not done:
+      text alignment (Markdown has none) and fonts.
+- [!] A prefab module (`prefabs/textual-analysis/`, module.json, ai.md) so it goes on pages,
       saves its spec, and AI can write one through `add_prefab`.
-- [ ] "Create UML elements": candidates of kind class / actor / use case become elements of a new
+- [!] "Create UML elements": candidates of kind class / actor / use case become elements of a new
       UML prefab (`uml.js` kinds).
+
+      Done as *Create UML diagrams* (`prefabs/textual-analysis/uml-from.js`): classes with the
+      attributes/operations whose owner they are → a class diagram; actors and use cases → a
+      use case diagram (use case → its actor by an association, inside a system boundary named
+      after the analysis). The editor hands them to the app through `host.insert` (new in
+      `prefab-host.js`, placed by `figures.js` after the analysis: each opens in the diagram
+      editor first, then goes on the page, one undo step each). For the later Model Explorer:
+      candidates have stable `id`s, each candidate keeps `uml: [{ diagram, element, list? }]`,
+      each diagram has its own `id` and `origin: { module, id, candidates: { elementId:
+      candidateId } }` (kept by `uml.js normalizeModel`). Limits: a link to a diagram that was
+      cancelled in its editor stays dangling; editing the diagram as PlantUML text renews
+      element ids.
 
 ## Sprints
 

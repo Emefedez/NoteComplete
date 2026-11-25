@@ -280,6 +280,11 @@ export function normalizeModel(input) {
   });
   const out = { type: 'uml', version: UML_VERSION, diagram, name: String(m.name ?? ''), title: String(m.title ?? ''), badge: m.badge === undefined ? !DIAGRAMS[diagram].notUml : m.badge !== false, elements, connectors, source: m.source && typeof m.source === 'object' ? m.source : null };
   if (!out.source) delete out.source;
+  // A diagram's own stable id, and where it was made from (a Textual Analysis: its id and the
+  // candidate each element came from), so a model explorer can follow a candidate to its
+  // elements and back. Kept as they are; never drawn.
+  if (typeof m.id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(m.id)) out.id = m.id;
+  if (m.origin && typeof m.origin === 'object' && !Array.isArray(m.origin)) out.origin = m.origin;
   // Notes on the diagram (Markdown, uml-editor.js), kept with it and never drawn.
   if (typeof m.notes === 'string' && m.notes.trim()) out.notes = m.notes;
   // PlantUML preamble (!include, skinparam…) and optional PlantUML-rendered SVG when toggled.

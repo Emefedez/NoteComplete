@@ -3,6 +3,7 @@
 // fenced code coloured by its language (code-highlight.js).
 import { decorateCodeBlocks } from './code-highlight.js';
 import { htmlTablesToPipes, applyTableMerges } from './html-table.js';
+import { highlightElement, stripHighlights } from './md-highlight.js';
 
 let katex = null;
 const aiFiles = new Map();
@@ -115,6 +116,8 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
     if (own && src) note.title = `${path}: this picture is not available here`;
     img.replaceWith(note);
   }));
+  // ==highlights== (md-highlight.js): the core leaves them as text; marked here.
+  highlightElement(inert);
   element.replaceChildren(...inert.childNodes);
   for (const a of element.querySelectorAll('a')) {
     const resolved = own ? (/^(https?:|mailto:)/i.test(a.getAttribute('href') || '') ? { external: true } : null) : resolveAiLink(a.textContent, a.getAttribute('href') || '');
@@ -178,7 +181,7 @@ export function texToText(tex) {
 // Markdown as plain text for a text box: list bullets kept, emphasis marks,
 // headings and code fences dropped, math turned into characters.
 export function plainText(markdown) {
-  return normalizeMarkdown(markdown)
+  return stripHighlights(normalizeMarkdown(markdown))
     .replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => texToText(tex))
     .replace(/\$([^$\n]+?)\$/g, (_, tex) => texToText(tex))
     .split('\n')

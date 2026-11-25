@@ -84,13 +84,15 @@ export function figureNotes({ get, set, toHtml = null, placeholder = 'Notes (Mar
     if (editor || loading) return loading;
     loading = (async () => {
       try {
-        const { loadEditor } = await import('./notes.js');
+        const { loadEditor, MARKDOWN_GRAMMAR, decorateTinyMdeLines } = await import('./notes.js');
         const TinyMDE = await loadEditor();
         if (!shown || reading) return;
         const host = make('div', { className: 'fig-notes-editor' });
         body.replaceChildren(host);
-        editor = new TinyMDE.Editor({ element: host, content: get() || '', placeholder });
-        editor.addEventListener('change', (e) => { if ((get() || '') !== e.content) set(e.content); });
+        editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: host, content: get() || '', placeholder });
+        const paint = () => decorateTinyMdeLines(host.querySelector('.TinyMDE'));
+        editor.addEventListener('change', (e) => { if ((get() || '') !== e.content) set(e.content); requestAnimationFrame(paint); });
+        paint();
       } catch {
         if (!shown || reading) return;
         // Without the Markdown editor: a plain text box.

@@ -7,10 +7,10 @@ import { keepInside } from './prefabs/kit/window.js';
 
 test('the shipped modules give the picker every prefab it had, in its groups', () => {
   const ids = cards().map((c) => c.id);
-  for (const id of ['graph', 'table', 'stickynote', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'r-normal', 'r-custom', 'numberline', 'truthtable']) assert.ok(ids.includes(id), id);
+  for (const id of ['graph', 'table', 'stickynote', 'histogram', 'bar', 'states', 'timeline', 'states-exercise', 'plot', 'tree', 'uml-class', 'uml-useCase', 'uml-full', 'r-normal', 'r-custom', 'numberline', 'truthtable', 'textual-analysis']) assert.ok(ids.includes(id), id);
   assert.deepEqual(groups().map(([g]) => g), ['basic', 'exam', 'diagram', 'notes', 'stats', 'maths', 'algorithms', 'languages']);
   assert.deepEqual(Object.fromEntries(cards().map((c) => [c.id, c.kind])), { ...Object.fromEntries(cards().map((c) => [c.id, c.kind])), graph: 'graph', table: 'table', stickynote: 'prefab', histogram: 'prefab', tree: 'uml', 'uml-class': 'uml', 'r-normal': 'prefab' });
-  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'stickynote', 'table', 'charts', 'uml', 'r-math', 'numberline', 'truthtable', 'algorithms', 'hanzi']);
+  assert.deepEqual(listModules().map((m) => m.manifest.id), ['graph', 'stickynote', 'table', 'charts', 'uml', 'r-math', 'textual-analysis', 'numberline', 'truthtable', 'algorithms', 'hanzi']);
   assert.ok(cards().some((c) => c.id === 'algorithm-dijkstra' && c.label === 'Greedy: Dijkstra' && c.group === 'algorithms' && c.kind === 'prefab'));
   const sticky = renderSpec({ type: 'stickynote', color: '#fae778', title: 'Idea', text: 'Note body', author: 'Ana', fold: true });
   assert.ok(sticky?.svg.startsWith('<svg') && sticky.transparent === true && sticky.svg.includes('Idea') && sticky.svg.includes('Ana'));

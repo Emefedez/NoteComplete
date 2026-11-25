@@ -2,6 +2,8 @@
 // (![alt](data:image/svg+xml…)), with the prefab's menu (Edit…, Copy Markdown, Delete) in the
 // editor and the preview. Shared by the Notes panel (notes.js, loaded on first use) and the
 // document view's Markdown editor (text-view.js), so neither pulls in the other.
+import { paintEditorHighlights } from './md-highlight.js';
+
 export const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
 // A prefab picture on a line of its own: ![alt](data:image/svg+xml…). The URI runs to the line's
 // last ")" (older notes have unescaped parentheses inside it), and the alt may hold "]" (older
@@ -13,6 +15,8 @@ const prefabPattern = () => new RegExp(`!\\[${PREFAB_ALT}\\]\\((data:image\\/svg
 
 export function decorateTinyMdeLines(root) {
   if (!root) return;
+  // ==highlights== in their colours (md-highlight.js).
+  paintEditorHighlights(root);
   for (const line of root.children || []) {
     const raw = line.textContent || '';
     const page = raw.match(MARKER)?.[1];

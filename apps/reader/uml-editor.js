@@ -268,7 +268,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         }
       }
       snapshot('code');
-      model = normalizeModel({ ...next, name: model.name || next.name, title: next.title, notes: model.notes, badge: model.badge });
+      model = normalizeModel({ ...next, name: model.name || next.name, title: next.title, notes: model.notes, badge: model.badge, id: model.id, origin: model.origin });
       if (selected && ![...model.elements, ...model.connectors].some((q) => q.id === selected.id)) selected = null;
       draw();
       if (panelOpen) buildPanel();

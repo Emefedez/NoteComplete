@@ -465,8 +465,8 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       commands.className = 'notes-commands';
       area.className = 'notes-editor';
       editorHost.append(commands, area);
-      const editor = new TinyMDE.Editor({ element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, $math$, - list)…' });
-      const { MARKDOWN_COMMANDS } = await import('./notes.js');
+      const { MARKDOWN_COMMANDS, MARKDOWN_GRAMMAR } = await import('./notes.js');
+      const editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, ==highlight==, $math$, - list)…' });
       const bar = new TinyMDE.CommandBar({ element: commands, editor, commands: MARKDOWN_COMMANDS });
       const markEditorLines = () => decorateTinyMdeLines(area.querySelector('.TinyMDE'));
       editor.addEventListener('change', (event) => {
