@@ -95,6 +95,12 @@
 .wizard-segmented button[aria-checked="true"] { background: var(--surface); color: var(--accent); font-weight: 600; box-shadow: 0 0 0 1px var(--line); }
 .wizard-office-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 13px; }
 .wizard-office-row > span { display: grid; }
+.wizard-office-licence { display: grid; gap: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.wizard-office-licence a { color: var(--accent); text-decoration: none; }
+.wizard-office-licence a:hover { text-decoration: underline; }
+.wizard-office-notice summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.wizard-office-notice pre { margin-top: 6px; max-height: 150px; overflow: auto; padding: 8px; border-radius: var(--radius); background: var(--chrome); }
+.wizard-module-actions { display: inline-flex; gap: 6px; align-items: center; }
 /* Status cards: a coloured left edge says how it stands. */
 .wizard-status-card {
   display: grid;

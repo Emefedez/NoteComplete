@@ -140,13 +140,47 @@ test('modules: R Commander Studio states from the bridge', async () => {
   assert.deepEqual(await M.rStudioModule({ status: async () => { throw Error('down'); } }).status(), { state: 'error', detail: 'down' });
 });
 
-test('modules: Euro-Office is coming soon; its open-with choices are kept', async () => {
-  const office = M.euroOfficeModule({ storage: memory() });
-  const status = await office.status();
-  assert.equal(status.state, 'soon');
-  assert.deepEqual(M.moduleButton(status), { label: 'Coming soon', disabled: true });
-  assert.equal(M.showsSettings(office, status), true);
-  await assert.rejects(office.install());
+test('modules: Euro-Office states (desktop-only, missing with size, unavailable, installed with remove & licence) and open-with prefs', async () => {
+  const webOffice = M.euroOfficeModule({ storage: memory(), bridge: null });
+  const webStatus = await webOffice.status();
+  assert.equal(webStatus.state, 'desktop');
+  assert.equal(webStatus.detail, M.NEEDS_DESKTOP);
+  assert.equal(M.moduleButton(webStatus), null);
+  assert.equal(M.showsSettings(webOffice, webStatus), true);
+  await assert.rejects(webOffice.install(), /desktop app/);
+
+  // Desktop missing state shows ~1 GB download size and Install action.
+  const missing = M.euroOfficeState({ installed: false, state: 'missing', version: '9.3.8', tag: 'v9.3.8', downloadBytes: 1036902674, diskBytes: 3.2e9, detail: 'Built-in rootless runner' });
+  assert.equal(missing.state, 'missing');
+  assert.equal(missing.action, 'Install');
+  assert.match(missing.detail, /Download ~1\.0 GB \(~3\.2 GB on disk\)/);
+
+  // Unavailable state surfaces platform guidance (e.g. Ubuntu AppArmor or missing macOS runtime).
+  const unavail = M.euroOfficeState({ installed: false, state: 'unavailable', detail: 'Install Podman' });
+  assert.equal(unavail.state, 'unavailable');
+  assert.equal(unavail.detail, 'Install Podman');
+
+  // Installed state carries version, licence, NOTICE, sourceUrl, and canRemove.
+  const installed = M.euroOfficeState({ installed: true, state: 'installed', version: '9.3.8', tag: 'v9.3.8', detail: 'Ready (rootless)', notice: 'NOTICE text', sourceUrl: 'https://github.com/Euro-Office/DocumentServer/tree/v9.3.8' });
+  assert.equal(installed.state, 'installed');
+  assert.equal(installed.version, '9.3.8');
+  assert.equal(installed.canRemove, true);
+  assert.equal(installed.notice, 'NOTICE text');
+
+  // Install & uninstall delegate to the desktop bridge and forward progress.
+  const seen = [];
+  const office = M.euroOfficeModule({
+    storage: memory(),
+    bridge: {
+      status: async () => ({ installed: false, state: 'missing', version: '9.3.8', downloadBytes: 1e9, diskBytes: 3.2e9 }),
+      install: async (onProgress) => { onProgress({ phase: 'downloading', received: 50, total: 100 }); return { ok: true, version: '9.3.8' }; },
+      uninstall: async () => ({ ok: true }),
+    },
+  });
+  assert.deepEqual(await office.install((p) => seen.push(p)), { ok: true, text: 'Installed Euro-Office 9.3.8' });
+  assert.equal(seen[0].fraction, 0.5);
+  assert.deepEqual(await office.uninstall(), { ok: true, text: 'Euro-Office removed' });
+
   const store = memory();
   assert.deepEqual(O.openWithPrefs(store), { documents: 'text', spreadsheets: 'text', presentations: 'text' });
   O.setOpenWith('spreadsheets', 'ask', store);

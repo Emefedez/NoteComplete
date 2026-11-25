@@ -99,19 +99,84 @@ export function mathModule({ rBridge = globalThis.notecompleteRBridge } = {}) {
   };
 }
 
-// ---- Office suite (Euro-Office: phase 3c, a separate install not released yet) ----
+// ---- Office suite (Euro-Office: desktop office-bridge.js through notecompleteOffice) ----
 
 export const OFFICE_NAMES = { documents: ['Documents', '.docx, .odt, .rtf'], spreadsheets: ['Spreadsheets', '.xlsx, .ods, .csv'], presentations: ['Presentations', '.pptx, .odp'] };
 
-export function euroOfficeModule({ storage = globalThis.localStorage } = {}) {
+function formatSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  if (bytes >= 1e9) return `~${(bytes / 1e9).toFixed(1)} GB`;
+  return `~${Math.round(bytes / 1e6)} MB`;
+}
+
+// The card's state from notecompleteOffice.status(): see office-bridge.js status().
+export function euroOfficeState(status, { bridge = true } = {}) {
+  if (!bridge) return { state: 'desktop', detail: NEEDS_DESKTOP };
+  if (!status) return { state: 'error', detail: 'Could not check Euro-Office.' };
+  const meta = {
+    version: status.version || '',
+    tag: status.tag || '',
+    licence: status.licence || 'AGPL-3.0-only; illustrations and icons CC BY-SA 4.0',
+    notice: status.notice || '',
+    sourceUrl: status.sourceUrl || '',
+    downloadBytes: status.downloadBytes || 0,
+    diskBytes: status.diskBytes || 0,
+    runner: status.runner || '',
+    formats: status.formats || null,
+  };
+  if (status.installed) {
+    return { ...meta, state: 'installed', detail: status.detail || 'Ready', canRemove: true };
+  }
+  if (status.state === 'unavailable') {
+    return { ...meta, state: 'unavailable', detail: status.detail || 'Not available on this device' };
+  }
+  const dl = formatSize(status.downloadBytes) || '~1 GB';
+  const disk = formatSize(status.diskBytes) || '~3.2 GB';
+  const extra = status.detail && !/^Built-in|^Using /.test(status.detail) ? ` · ${status.detail}` : '';
+  return {
+    ...meta,
+    state: 'missing',
+    detail: `Download ${dl} (${disk} on disk)${extra}`,
+    action: 'Install',
+  };
+}
+
+export function euroOfficeProgress(p = {}) {
+  const fraction = Number.isFinite(p.fraction) ? Math.max(0, Math.min(1, p.fraction)) : (p.total > 0 ? Math.min(1, p.received / p.total) : undefined);
+  if (p.text) return { text: p.text, fraction };
+  if (p.phase === 'downloading') return { text: `Downloading Euro-Office${fraction === undefined ? '' : ` ${Math.round(fraction * 100)}%`}`, fraction };
+  if (p.phase === 'verifying') return { text: 'Verifying download', fraction };
+  if (p.phase === 'unpacking') return { text: 'Unpacking Euro-Office', fraction };
+  if (p.phase === 'enabling') return { text: 'Enabling WSL2', fraction };
+  return { text: 'Preparing Euro-Office', fraction };
+}
+
+export function euroOfficeModule({ storage = globalThis.localStorage, bridge = globalThis.notecompleteOffice } = {}) {
   const module = {
     id: 'euro-office', kind: 'install',
     icon: 'office',
     name: 'Office suite (Euro-Office)',
     summary: 'Edit Word, Excel and PowerPoint files',
-    async status() { return { state: 'soon', detail: 'A separate install' }; },
-    async install() { throw Error('Euro-Office is not available yet.'); },
-    // The default way to open each kind, wanted before Euro-Office exists too (Text view or
+    async status() {
+      if (!bridge) return euroOfficeState(null, { bridge: false });
+      try { return euroOfficeState(await bridge.status()); } catch (e) { return { state: 'error', detail: e.message }; }
+    },
+    async install(onProgress = () => {}) {
+      if (!bridge?.install) throw Error('Installing Euro-Office needs the desktop app.');
+      const res = await bridge.install((p) => onProgress(euroOfficeProgress(p)));
+      if (!res?.ok) {
+        if (res?.rebootNeeded) return { ok: false, text: res.text || 'Restart Windows, then click Install again.' };
+        throw Error(res?.error || 'Could not install Euro-Office.');
+      }
+      return { ok: true, text: `Installed Euro-Office${res.version ? ` ${res.version}` : ''}` };
+    },
+    async uninstall() {
+      if (!bridge?.uninstall) throw Error('Removing Euro-Office needs the desktop app.');
+      const res = await bridge.uninstall();
+      if (!res?.ok) throw Error(res?.error || 'Could not remove Euro-Office.');
+      return { ok: true, text: 'Euro-Office removed' };
+    },
+    // The default way to open each kind, wanted before Euro-Office is installed too (Text view or
     // Ask each time): drawn always. Euro-Office is offered once it is installed.
     settingsAlways: true,
     settings(el, ui, status = {}) {
@@ -123,6 +188,36 @@ export function euroOfficeModule({ storage = globalThis.localStorage } = {}) {
           { value: 'euro-office', label: 'Euro-Office', disabled: !installed, title: installed ? '' : 'Once Euro-Office is installed' },
           { value: 'ask', label: 'Ask each time' },
         ], prefs[kind], (v) => setOpenWith(kind, v, storage)), OFFICE_NAMES[kind][1]));
+      }
+      if (status.licence || status.sourceUrl || status.notice) {
+        const doc = el.ownerDocument;
+        const info = doc.createElement('div');
+        info.className = 'wizard-office-licence';
+        const line = doc.createElement('p');
+        line.className = 'wizard-hint';
+        line.textContent = `${status.tag ? `Euro-Office ${status.tag} · ` : ''}${status.licence || ''}`;
+        if (status.sourceUrl) {
+          line.append(' · ');
+          const link = doc.createElement('a');
+          link.href = status.sourceUrl;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          link.textContent = 'Source code';
+          line.append(link);
+        }
+        info.append(line);
+        if (status.notice) {
+          const details = doc.createElement('details');
+          details.className = 'wizard-office-notice';
+          const summary = doc.createElement('summary');
+          summary.textContent = 'Licence & NOTICE';
+          const pre = doc.createElement('pre');
+          pre.className = 'wizard-mono';
+          pre.textContent = status.notice;
+          details.append(summary, pre);
+          info.append(details);
+        }
+        el.append(info);
       }
     },
   };
@@ -196,10 +291,10 @@ export function agentsModule(api = globalThis.notecompleteAgents) {
 }
 
 // The built-in cards, in the order the wizard shows them.
-export function registerBuiltInModules({ rBridge = globalThis.notecompleteRBridge, agents = globalThis.notecompleteAgents, storage = globalThis.localStorage } = {}) {
+export function registerBuiltInModules({ rBridge = globalThis.notecompleteRBridge, office = globalThis.notecompleteOffice, agents = globalThis.notecompleteAgents, storage = globalThis.localStorage } = {}) {
   registry.clear();
   registerModule(mathModule({ rBridge }));
-  registerModule(euroOfficeModule({ storage }));
+  registerModule(euroOfficeModule({ storage, bridge: office }));
   registerModule(chineseModule());
   registerModule(agentsModule(agents));
   return moduleList();

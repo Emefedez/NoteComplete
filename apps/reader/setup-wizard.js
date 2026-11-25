@@ -322,8 +322,13 @@ function moduleCard(module, memory, env, sub = false) {
       action = box;
     } else {
       const button = mem.busy ? null : moduleButton(st || {});
-      action = button ? make('button', { type: 'button', className: button.recheck || button.disabled ? '' : 'primary', textContent: button.label, disabled: button.disabled }) : null;
-      if (action && !button.disabled) action.onclick = () => (button.recheck ? check() : run());
+      const primary = button ? make('button', { type: 'button', className: button.recheck || button.disabled ? '' : 'primary', textContent: button.label, disabled: button.disabled }) : null;
+      if (primary && !button.disabled) primary.onclick = () => (button.recheck ? check() : run());
+      const remove = !mem.busy && st?.canRemove && typeof module.uninstall === 'function'
+        ? make('button', { type: 'button', textContent: 'Remove', title: `Remove ${module.name}` })
+        : null;
+      if (remove) remove.onclick = () => removeModule();
+      action = primary && remove ? make('span', { className: 'wizard-module-actions' }, primary, remove) : (primary || remove);
     }
     const inside = st && showsSettings(module, st) ? make('div', { className: 'wizard-module-settings' }) : null;
     if (inside) module.settings(inside, moduleUi, st);
@@ -349,6 +354,16 @@ function moduleCard(module, memory, env, sub = false) {
       const res = await module.install((p) => { mem.progress = p; draw(); }, mem.status || {});
       mem.note = res?.text || '';
       env.status?.(`${module.name}: ${res?.text || 'done'}`);
+    } catch (e) { mem.error = e.message || String(e); }
+    mem.busy = false;
+    await check();
+  }
+  async function removeModule() {
+    mem.busy = true; mem.error = ''; mem.note = ''; mem.progress = { text: 'Removing…' }; draw();
+    try {
+      const res = await module.uninstall();
+      mem.note = res?.text || 'Removed';
+      env.status?.(`${module.name}: ${mem.note}`);
     } catch (e) { mem.error = e.message || String(e); }
     mem.busy = false;
     await check();
