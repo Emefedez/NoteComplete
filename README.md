@@ -16,7 +16,7 @@
 
 # NoteComplete
 
-**Handwritten notes, PDFs, Markdown, Chinese tools, and AI study — local-first, on every screen.**
+**Handwritten notes, PDFs, text documents, Chinese tools, and AI study — local-first, on every screen.**
 
 Everything runs on your device with no account required. Try it in the browser at **[emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/)**. Technical notes on third-party notebook compatibility (`.noteful`, `.goodnotes`, `.ntb`) live in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
 
@@ -41,10 +41,8 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Page text boxes:** Rich formatting, live KaTeX math (`∑` or `$...$`) with touch math keypad, direct move without leaving Text mode (hold/drag box, drag `⋮⋮` grip, or drag outside with no selection).
 - **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, extended `==highlighting==` (colours, underline, text colour), live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
-- **Office documents — Native Markdown or Euro-Office:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown (keeping merged cells, with a filter/sort bar and **Put on page as table**), or edit them natively inside NoteComplete via the optional **Euro-Office** desktop module (right-click **Open with ▸**, `1`/`2` chooser, **Open as text** switch, save-back).
+- **Documents, slides, spreadsheets & e-books:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown — keeping merged cells, with a table filter/sort bar and **Put on page as table** (Save writes a `.md` copy and never modifies the original) — or edit Office files natively with the optional **Euro-Office** desktop module below.
 - **Side Notes (`N`):** Per-document Markdown notes linked to pages with `+ Page`.
-
-<p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab with Open as text and Save" width="100%"></p>
 
 </details>
 
@@ -83,6 +81,15 @@ Everything runs on your device with no account required. Try it in the browser a
 - **Global-bar audio player:** Opening any audio file (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus` — from a folder, `File → Open…`, drag-and-drop, archive, or cloud) or closing an active note Audio window docks a compact accent-colored player onto the top bar (headset mute, back/play-pause/forward, scrub bar, speed `0.5×–2×`, close). Click `×` on the top bar—or `Shift+×` on the Audio window—to stop and close completely.
 - **Video handoff & media card icons:** Clicking any video (`.mp4`, `.mkv`, `.mov`, `.webm`, `.avi`, `.m4v`) opens it in your computer's default media player; audio, video, Office, EPUB, and notebook cards show color-coded icons on Home, Folders, and Cloud views.
 - **Synced note recordings:** Record or import audio into a note with timed ink playback (tap ink to seek), segment trimming, and audio enhancement.
+
+</details>
+
+<details open>
+<summary><b>Office Suite (Optional Euro-Office Module)</b></summary>
+
+- **Native Office editing on desktop:** Install the optional **Euro-Office** module from **Setup ▸ Modules** to edit Word, Excel, PowerPoint, and ODF files directly inside a NoteComplete tab with save-back, right-click **Open with ▸**, `1`/`2` chooser (`R` to remember), and **Open as text** switching. Runs locally on demand and stops when idle.
+
+<p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab with Open as text and Save" width="100%"></p>
 
 </details>
 
