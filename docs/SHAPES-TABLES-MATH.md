@@ -227,9 +227,17 @@ rows and columns, a header band (highlighter under the ink, so the header's text
 typed text box per filled cell (bold in the header, math when it has `$…$`). The table editor is
 a grid of cells: Tab and the arrows move, Enter goes down, Tab in the last cell or Enter in the
 last row adds a row; buttons insert rows above/below and columns left/right of the cursor, or
-delete them; Header row on or off. Up to 30 rows and 12 columns. Opens from Insert table
-(Shift Y), the Shapes tool's Table (drag its box), and Edit table. Not yet: dragging a single
-column's width on the page (widths are kept in the spec for it).
+delete them; Header row on or off. Opens from Insert table (Shift Y), the Shapes tool's Table
+(drag its box), and Edit table.
+
+Since sprint 1b (docs/TABLES-AND-OFFICE.md, Phase 1): up to 50 rows and 20 columns; cells merged
+(spec v2); spec v3 adds row heights (`fit` to the text, or relative `heights`), sparse cell looks
+(`format`: bold, italic, align, valign, fill as a highlighter band), a header column, border
+styles (all, outline, rows only, none) and a text size (auto, small, medium, large). Older specs
+draw exactly as they did. The editor has a format bar, column letters and row numbers whose
+edges size columns and rows, paste of a range from a spreadsheet / CSV / TSV / HTML table, undo
+and redo, a live preview and sorting by a column. Not yet: dragging a column's width on the
+page itself (done in the editor), wrapping long lines inside a cell.
 
 ## T2 Tables and graphs from the MCP (planned)
 
