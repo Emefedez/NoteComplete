@@ -29,7 +29,7 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Drawing &amp; Pages</b></summary>
 
-- **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock.
+- **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock, and z-order stacking (**Bring to front / forward / backward / to back**, `Ctrl ]` / `Ctrl [`).
 - **Quick menu & gestures:** `Shift+S`, pen side button, or two-finger hold; two-finger pinch/scroll/undo, three-finger redo; drag tools to reorder; dockable toolbar (top, bottom, left, right).
 - **Pages & canvas:** Infinite canvas or fixed pages; insert blank/PDF pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
 - **Auto-save & export:** Automatic local recovery slots; export pages to PDF, SVG, PNG/JPEG, or Anki study decks.
@@ -40,9 +40,11 @@ Everything runs on your device with no account required. Try it in the browser a
 <summary><b>Text &amp; Markdown</b></summary>
 
 - **Page text boxes:** Rich formatting, live KaTeX math (`∑` or `$...$`) with touch math keypad, direct move without leaving Text mode (hold/drag box, drag `⋮⋮` grip, or drag outside with no selection).
-- **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
-- **Documents, slides, spreadsheets & e-books as Markdown:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown with extracted images — Save writes a `.md` copy and never modifies the original.
+- **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, extended `==highlighting==` (colours, underline, text colour), live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
+- **Office documents — Native Markdown or Euro-Office:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown (keeping merged cells, with a filter/sort bar and **Put on page as table**), or edit them natively inside NoteComplete via the optional **Euro-Office** desktop module (right-click **Open with ▸**, `1`/`2` chooser, **Open as text** switch, save-back).
 - **Side Notes (`N`):** Per-document Markdown notes linked to pages with `+ Page`.
+
+<p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab with Open as text and Save" width="100%"></p>
 
 </details>
 
@@ -61,14 +63,16 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Prefabs &amp; Diagrams</b></summary>
 
-- **Editable exam figures, sticky notes & R statistics plots (`Shift+X`):** Sticky notes (coloured cards with anti-aliased folded corner, optional title/body/lines, and click-top-strip peek/hide that smoothly fades both the card and its owned ink/text to reveal anything underneath — also imported directly from Goodnotes sticky notes with parented strokes & author text), function graphs, histograms, bar charts, process states & CPU timelines (tap-to-paint exercises), trees, node graphs, tables (`Shift+Y`), stroke-order sheets, UML diagrams (Visual Paradigm XML & XMI import/export), and **R Math & Statistics prefabs** (Normal, Student *t*, Chi-squared, Binomial, Histogram + Density, Boxplot, Scatterplot + Fit, and Custom R rendered as sanitized portable SVGs via local `Rscript` or **R Commander Studio**).
+- **Editable exam figures, tables, sticky notes & R statistics plots (`Shift+X`):** Sticky notes (coloured cards with folded corner and click-top-strip peek/hide, also imported from Goodnotes), rich page tables (`Shift+Y`: merged cells, auto-fit rows, per-cell formatting, spreadsheet paste, sort, undo, live preview, up to 50 × 20), function graphs, histograms, bar charts, process states & CPU timelines, trees, node graphs, stroke-order sheets, **UML diagrams** (bold/italic/underline text, direction arrows, end labels, Visual Paradigm XML & XMI import/export), **Textual Analysis** (auto-highlighted candidates, candidate table, and one-click UML generation), and **R Math & Statistics prefabs** rendered via local `Rscript` or **R Commander Studio**.
+- **Model Explorer & project connectivity (`View → Model Explorer`):** Indexes UML elements and Textual Analysis candidates across the note with appearance counts, right-click **Show in…** jumping, and **Rename everywhere…** propagation.
+- **On-demand Prefab packs:** Download optional packs on demand (cloud badge), hide uninstalled packs (eye toggle), or remove packs while keeping existing figures drawn on pages.
 - **Math Mode (`∑ Math` / `Ctrl+Shift+M`) & R Commander Studio Integration:** Toggleable formula bar with live KaTeX preview, built-in numeric/symbolic CAS (`=` evaluate, `d/dx` derivative, `∫` definite integral, `Solve`), one-click **Plot** to Function Graph, **`+ Box`** Math Text Box insertion, and direct **R Plot** / **R Studio** launch (configured in **View → Math Mode & R Bridge…**). From **File → New note…** (or Home's **File** menu), create single `.R` / `.Rmd` files or full **R Workspace folders** (`analysis.R`, `report.Rmd`, `data/`, `.Rproj`), automatically download and install **R Commander Studio** for your platform (Linux x64/ARM64, Windows x64, macOS ARM64), and open `.R`, `.Rmd`, `.qmd`, and `.RData`/`.rds` files with live disk sync.
 - **Kept for exercises:** Keep Grab snippets in a floating viewer / top-bar `★ Kept` pill while building charts or solving problems.
 
-<p align="center"><img src="docs/images/prefabs-menu.png" alt="Prefabs picker menu" width="100%"></p>
+<p align="center"><img src="docs/images/prefabs-menu.png" alt="Prefabs picker menu with on-demand packs and Hide not installed toggle" width="100%"></p>
 <p align="center">
-  <img src="docs/images/prefab-uml.png" alt="UML diagram prefab editor" width="49%">
-  <img src="docs/images/prefab-process.png" alt="Process states and CPU timeline prefab editor" width="49%">
+  <img src="docs/images/model-explorer.png" alt="UML diagram editor with Model Explorer and Show in submenu" width="49%">
+  <img src="docs/images/setup-wizard.png" alt="Setup wizard with tri-state Prefab packs tree" width="49%">
 </p>
 
 </details>
@@ -124,7 +128,7 @@ From the desktop app's **Share** menu:
 
 ### Desktop, Web & Mobile
 
-- **Multi-tab & multi-window** (`Ctrl+T`, drag tab out), floating resizable windows with a shared tray, command palette (`Ctrl+K`), keyboard shortcut badges (`?`), interface zoom (`Ctrl+Shift+−/+/0`), and automatic update checks.
+- **Multi-tab & multi-window** (`Ctrl+T`, drag tab out), first-run **Setup wizard** (`Help → Setup wizard…`) for look, performance, AI, optional modules, and prefab packs, floating resizable windows with a shared tray, command palette (`Ctrl+K`), keyboard shortcut badges (`?`), interface zoom (`Ctrl+Shift+−/+/0`), and automatic update checks.
 - **Adaptive mobile & narrow layout:** Compact bottom bars, horizontally scrollable tool rows with edge fades, touch-friendly zoom/drag handling, and offline PWA support.
 
 ---
