@@ -4,7 +4,7 @@
 // URLs are passed) and the shared-mime definitions for its own formats, and makes itself
 // the default for them. Own formats are claimed; common files (PDF, images…) are only offered.
 import { execFile } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { OTHER_TYPES, OWN_TYPES } from './open-with.js';
@@ -39,6 +39,50 @@ Type=Application
 Categories=Office;
 MimeType=${[...new Set(mimes)].join(';')};
 `;
+}
+
+export function euroOfficeDesktopEntry(appImage, icon = 'notecomplete') {
+  const mimes = [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'application/vnd.oasis.opendocument.text',
+    'application/rtf',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/vnd.oasis.opendocument.spreadsheet',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-powerpoint',
+    'application/vnd.oasis.opendocument.presentation',
+  ];
+  return `[Desktop Entry]
+Version=1.0
+Name=Euro-Office (NoteComplete)
+GenericName=Office Suite
+Comment=Edit Word, Excel and PowerPoint files locally in NoteComplete
+Exec=env ELECTRON_OZONE_PLATFORM_HINT=auto ${execQuote(appImage)} %U
+StartupNotify=true
+StartupWMClass=NoteComplete
+Terminal=false
+Icon=${icon}
+Type=Application
+Categories=Office;WordProcessor;Spreadsheet;Presentation;
+MimeType=${mimes.join(';')};
+`;
+}
+
+export async function setEuroOfficeMenuEntry(enabled, { appImage = process.env.APPIMAGE, platform = process.platform, home = os.homedir(), exec = run } = {}) {
+  if (platform !== 'linux' || !appImage || !path.isAbsolute(appImage)) return false;
+  const data = process.env.XDG_DATA_HOME || path.join(home, '.local/share');
+  const appsDir = path.join(data, 'applications');
+  const file = path.join(appsDir, 'notecomplete-euro-office.desktop');
+  if (enabled) {
+    const changed = await writeIfChanged(file, euroOfficeDesktopEntry(appImage));
+    if (changed) await exec('update-desktop-database', [appsDir]);
+    return true;
+  }
+  await unlink(file).catch(() => {});
+  await exec('update-desktop-database', [appsDir]);
+  return false;
 }
 
 const run = (file, args) => new Promise(resolve => execFile(file, args, { timeout: 15000 }, (error, stdout) => resolve(error ? null : String(stdout))));

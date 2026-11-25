@@ -5004,9 +5004,14 @@ setOfficeOpener(async (file, { mode = "edit" } = {}) => {
   $("title").textContent = activeFileName;
   document.title = `${activeFileName} — NoteComplete`;
   tabBar.update({ title: activeFileName, dirty: false });
-  showDocument();
+  home.hide();
+  $("editor").hidden = true;
+  $("htmlView").hidden = true;
+  $("textView").hidden = true;
+  $("webView").hidden = true;
   const opened = await officeView.open(file, { mode });
   if (opened === false) { reset(); return false; }
+  showDocument();
   rememberDocument();
   documentControls();
   status(`Opened ${activeFileName} in Euro-Office.`);

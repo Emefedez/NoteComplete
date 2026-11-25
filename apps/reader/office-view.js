@@ -94,6 +94,19 @@ export function officeViewer({
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
+    const state = {
+      file,
+      sessionId: '',
+      mode,
+      documentType: '',
+      lossyChoice,
+      copyTarget: null,
+      editor: null,
+      dirty: false,
+      unsub: null,
+    };
+    active = state;
+
     if (title) title.textContent = file.name;
     setState('Starting Euro-Office…');
     if (textBtn) {
@@ -111,7 +124,7 @@ export function officeViewer({
     if (root) root.hidden = false;
 
     const slowHint = setTimeout(() => {
-      if (stateEl?.textContent === 'Starting Euro-Office…') {
+      if (active === state && stateEl?.textContent === 'Starting Euro-Office…') {
         setState('Starting Euro-Office… (first launch builds fonts, ~45 s)');
       }
     }, 4000);
@@ -124,9 +137,16 @@ export function officeViewer({
         theme: getTheme(),
         lang: getLang(),
       });
+    } catch (err) {
+      if (active === state) { active = null; if (root) root.hidden = true; }
+      throw err;
     } finally {
       clearTimeout(slowHint);
     }
+    if (active !== state) return false;
+
+    state.sessionId = session.sessionId;
+    state.documentType = session.config?.documentType || '';
 
     const mountId = `eoMount_${Date.now()}`;
     if (host) {
@@ -136,19 +156,6 @@ export function officeViewer({
       div.className = 'office-editor-mount';
       host.append(div);
     }
-
-    const state = {
-      file,
-      sessionId: session.sessionId,
-      mode,
-      documentType: session.config?.documentType || '',
-      lossyChoice,
-      copyTarget: null,
-      editor: null,
-      dirty: false,
-      unsub: null,
-    };
-    active = state;
 
     if (typeof bridge.onSaved === 'function') {
       state.unsub = bridge.onSaved(async (ev) => {

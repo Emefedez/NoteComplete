@@ -1,3 +1,8 @@
+## What's new in 1.2.87
+
+- **Fix Euro-Office full-window layout.** Opening a document in Euro-Office now hides the handwriting editor immediately so the Euro-Office editor fills the full window instead of splitting with the note toolbar below it.
+- **Euro-Office Start menu entry & responsiveness.** On Linux, installing Euro-Office now adds a **Euro-Office (NoteComplete)** entry to the system app launcher (removed on uninstall), and converter worker concurrency is tuned for smoother editing.
+
 ## What's new in 1.2.86
 
 - **Fix reader startup error.** Removed a duplicate `isMarkdownName` import in `app.js` that prevented the reader from loading, and added a syntax-check test covering every reader JS module.

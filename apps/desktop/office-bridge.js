@@ -23,7 +23,7 @@ const CONTAINER_NAME = 'notecomplete-euro-office';
 const WSL_DISTRO = 'NoteComplete-EuroOffice';
 const PASTA_HOST_GW = '169.254.1.2';
 const DEFAULT_IDLE_MS = 10 * 60 * 1000;
-const CONVERTER_CONFIG = JSON.stringify({ FileConverter: { converter: { maxprocesscount: 0.1 } } }, null, 2) + '\n';
+const CONVERTER_CONFIG = JSON.stringify({ FileConverter: { converter: { maxprocesscount: 0.25 } } }, null, 2) + '\n';
 
 const FALLBACK_DOC_TYPE = {
   docx: 'word', docm: 'word', dotx: 'word', dotm: 'word', doc: 'word', dot: 'word',

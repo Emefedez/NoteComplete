@@ -8,7 +8,7 @@ import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles, withExtension } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
-import { integrateLinux } from './linux-integration.js';
+import { integrateLinux, setEuroOfficeMenuEntry } from './linux-integration.js';
 import { aiRunner } from './ai-runner.js';
 import { agentSetup, stableBinary } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
@@ -473,6 +473,7 @@ app.on('second-instance', (_event, argv, workingDirectory) => {
 app.whenReady().then(async () => {
   if (!primary) return;
   integrateLinux().catch(() => { /* Best effort: the app works without file associations. */ });
+  void officeBridge.status().then((s) => setEuroOfficeMenuEntry(Boolean(s?.installed))).catch(() => {});
   try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
   // Two web permissions, for the reader itself only: writing text to the clipboard (Grab → Copy text)
   // and camera/microphone media (QR scanning in Share and recording in the audio panel).
@@ -672,10 +673,18 @@ app.whenReady().then(async () => {
   }));
   // Euro-Office module IPC (office-bridge.js).
   ipcMain.handle('office:status', guarded(() => officeBridge.status()));
-  ipcMain.handle('office:install', guarded((event) => officeBridge.install((p) => {
-    if (!event.sender.isDestroyed()) event.sender.send('office:progress', p);
-  })));
-  ipcMain.handle('office:uninstall', guarded((_event, options) => officeBridge.uninstall(options || {})));
+  ipcMain.handle('office:install', guarded(async (event) => {
+    const res = await officeBridge.install((p) => {
+      if (!event.sender.isDestroyed()) event.sender.send('office:progress', p);
+    });
+    if (res?.ok) void setEuroOfficeMenuEntry(true).catch(() => {});
+    return res;
+  }));
+  ipcMain.handle('office:uninstall', guarded(async (_event, options) => {
+    const res = await officeBridge.uninstall(options || {});
+    void setEuroOfficeMenuEntry(false).catch(() => {});
+    return res;
+  }));
   ipcMain.handle('office:open', guarded((event, request) => {
     const ownerId = event.sender.id;
     event.sender.once('destroyed', () => { void officeBridge.closeOwner(ownerId); });
