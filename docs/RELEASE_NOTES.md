@@ -1,3 +1,7 @@
+## What's new in 1.2.88
+
+- **Fix desktop startup crash.** Moved the Euro-Office Start menu check after `officeBridge` initialization in `main.js`.
+
 ## What's new in 1.2.87
 
 - **Fix Euro-Office full-window layout.** Opening a document in Euro-Office now hides the handwriting editor immediately so the Euro-Office editor fills the full window instead of splitting with the note toolbar below it.

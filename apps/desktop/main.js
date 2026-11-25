@@ -473,7 +473,6 @@ app.on('second-instance', (_event, argv, workingDirectory) => {
 app.whenReady().then(async () => {
   if (!primary) return;
   integrateLinux().catch(() => { /* Best effort: the app works without file associations. */ });
-  void officeBridge.status().then((s) => setEuroOfficeMenuEntry(Boolean(s?.installed))).catch(() => {});
   try { const z = Number(JSON.parse(await readFile(uiFile(), 'utf8')).zoom); if (UI_SIZES.includes(z)) uiZoom = z; } catch { /* First run. */ }
   // Two web permissions, for the reader itself only: writing text to the clipboard (Grab → Copy text)
   // and camera/microphone media (QR scanning in Share and recording in the audio panel).
@@ -672,6 +671,7 @@ app.whenReady().then(async () => {
     return created;
   }));
   // Euro-Office module IPC (office-bridge.js).
+  void officeBridge.status().then((s) => setEuroOfficeMenuEntry(Boolean(s?.installed))).catch(() => {});
   ipcMain.handle('office:status', guarded(() => officeBridge.status()));
   ipcMain.handle('office:install', guarded(async (event) => {
     const res = await officeBridge.install((p) => {
