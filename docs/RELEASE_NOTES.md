@@ -1,3 +1,7 @@
+## What's new in 1.2.93
+
+- **Beta updates from a branch (Linux AppImage).** **Help → Update from a branch (beta)…** builds any branch of the repository on this computer (git, Rust, Node.js, Python and squashfs-tools needed) and installs it in place of this copy, to try changes before they are released. Nothing is replaced unless the build succeeds, the previous copy is kept as `NoteComplete.AppImage.previous`, the top bar shows the build's progress, and **Back to the latest release** returns to normal releases. Normal release updates are unchanged.
+
 ## What's new in 1.2.92
 
 - **Fix Euro-Office background memory leaks.** `stop.sh` now forcefully terminates the `unshare` namespace and `pasta` after a short grace period so Euro-Office never lingers after NoteComplete closes, stale PIDs from crashed runs are cleaned up on startup and before launch, and idle shutdown is shortened to 3 minutes.
