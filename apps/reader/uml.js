@@ -294,7 +294,9 @@ export function makeElement(type, at = [40, 40], extra = {}, model = null) {
   const def = ELEMENTS[type];
   if (!def) throw Error(`Unknown UML element: ${type}`);
   const [w, h] = def.size;
-  return { id: extra.id || newId('e', model), type, name: extra.name ?? (def.noName || def.optionalName ? '' : def.label), props: { ...defaultProps(def), ...(extra.props || {}) }, bounds: extra.bounds || [at[0], at[1], w, h], parent: extra.parent ?? null };
+  const el = { id: extra.id || newId('e', model), type, name: extra.name ?? (def.noName || def.optionalName ? '' : def.label), props: { ...defaultProps(def), ...(extra.props || {}) }, bounds: extra.bounds || [at[0], at[1], w, h], parent: extra.parent ?? null };
+  if (typeof extra.modelId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(extra.modelId)) el.modelId = extra.modelId;
+  return el;
 }
 
 export function makeConnector(type, from, to, extra = {}, model = null) {
@@ -313,7 +315,9 @@ export function normalizeModel(input) {
     const def = ELEMENTS[e.type];
     const size = def?.size || [140, 60];
     const b = Array.isArray(e.bounds) && e.bounds.length === 4 && e.bounds.every(Number.isFinite) ? e.bounds.map(Number) : null;
-    return { id: String(e.id || `e${i + 1}`), type: String(e.type || 'note'), name: String(e.name ?? ''), props: { ...defaultProps(def), ...(e.props && typeof e.props === 'object' ? e.props : {}) }, bounds: b || [NaN, NaN, size[0], size[1]], parent: e.parent ? String(e.parent) : null };
+    const outEl = { id: String(e.id || `e${i + 1}`), type: String(e.type || 'note'), name: String(e.name ?? ''), props: { ...defaultProps(def), ...(e.props && typeof e.props === 'object' ? e.props : {}) }, bounds: b || [NaN, NaN, size[0], size[1]], parent: e.parent ? String(e.parent) : null };
+    if (typeof e.modelId === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(e.modelId)) outEl.modelId = e.modelId;
+    return outEl;
   });
   const ids = new Set(elements.map((e) => e.id));
   // An association class's line ends on another connector (one that is itself kept).

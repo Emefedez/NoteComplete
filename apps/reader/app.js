@@ -124,6 +124,8 @@ import { layerPanelController } from "./layer-panel.js";
 import { pageThumbnails } from "./page-thumbnails.js";
 import { pdfDetail } from "./pdf-detail.js";
 import { ViewCache, READS } from "./view-cache.js";
+import { createModelExplorer } from "./model-explorer.js";
+import { buildProjectModel, extractPrefabsFromPages, planRename } from "./project-model.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
@@ -810,6 +812,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   audio.reset();
   panels = [];
   doc = null;
+  projectModelController?.reset?.();
   sideFp = "";
   activeFileName = "";
   activeDocKind = "";
@@ -967,6 +970,7 @@ async function load(file, preparedDocument = null) {
     if (collab?.role !== "guest") notes?.load(find.fingerprint);
     const token = ++epoch;
     revision++;
+  projectModelController?.invalidate?.();
     doc = result;
     page = 0;
     activeLayer =
@@ -1059,6 +1063,7 @@ async function importImages(files, { at = null, any = false } = {}) {
       if (note !== epoch) return;
       dirty = changed = true;
       revision++;
+  projectModelController?.invalidate?.();
       panels[targetPage].edits = pageEdits(panels[targetPage]) + 1;
       doc = result;
       updateTools(result);
@@ -2358,6 +2363,7 @@ function edited(op, args, result) {
   // A tablet's copy is the computer's note: the computer saves it, not the tablet.
   if (collab?.role !== "tablet") dirty = changed = true;
   revision++;
+  projectModelController?.invalidate?.();
   // Item-level patches (adjust/crop) only carry delta metadata, not a full document summary.
   if (!Array.isArray(result?.page_sizes)) {
     if (prevDoc && result) {
@@ -4197,6 +4203,7 @@ const autosave = autosaveController({
   },
   onCompacted: (view, message) => {
     revision++;
+  projectModelController?.invalidate?.();
     dirty = changed = true;
     doc = view;
     savedState();
@@ -6992,6 +6999,7 @@ async function selectGrab(targetGrab = grabbed) {
     const result = await mutate("image", { page: currentGrab.page, image });
     dirty = changed = true;
     revision++;
+  projectModelController?.invalidate?.();
     p.edits = pageEdits(p) + 1;
     doc = result;
     updateTools(result);
@@ -7245,8 +7253,119 @@ const { openPageBackground } = pageDialogs({
     get panels() { return panels; },
   },
 });
+// Model Explorer & cross-diagram project model (project-model.js, model-explorer.js).
+let projectModelPrefabs = [];
+let projectModelCache = buildProjectModel([]);
+let projectModelRev = -1;
+let projectModelRefreshTimer = 0;
+let editPrefabByPartRef = null;
+let replacePrefabSpecRef = null;
+async function scanNotePrefabs() {
+  if (!doc || !panels.length) return [];
+  const pages = [];
+  for (let i = 0; i < panels.length; i++) {
+    const p = panels[i];
+    const v = p?.view || await call("view", { page: i }).catch(() => null);
+    if (v?.parts?.length) pages.push({ pageIndex: i, parts: v.parts });
+  }
+  return extractPrefabsFromPages(pages);
+}
+async function refreshProjectModel(force = false) {
+  const panel = $("modelExplorerPanel");
+  if (!doc) {
+    projectModelPrefabs = [];
+    projectModelCache = buildProjectModel([]);
+    projectModelRev = -1;
+    modelExplorer?.update(projectModelCache);
+    return projectModelCache;
+  }
+  if (!force && projectModelRev === revision) return projectModelCache;
+  const rev = revision, token = epoch;
+  const prefabs = await scanNotePrefabs();
+  if (token !== epoch) return projectModelCache;
+  projectModelPrefabs = prefabs;
+  projectModelCache = buildProjectModel(prefabs);
+  projectModelRev = rev;
+  if (panel && !panel.hidden) modelExplorer?.update(projectModelCache);
+  return projectModelCache;
+}
+function setModelExplorerOpen(open) {
+  const panel = $("modelExplorerPanel");
+  const toggle = $("modelExplorerToggle");
+  if (!panel) return;
+  panel.hidden = !open;
+  if (toggle) toggle.setAttribute("aria-checked", String(open));
+  if (open) refreshProjectModel(true);
+}
+async function jumpToProjectOccurrence(occ) {
+  if (!occ || !doc) return;
+  if (Number.isInteger(occ.pageIndex) && occ.pageIndex >= 0 && occ.pageIndex < panels.length) {
+    jump(occ.pageIndex);
+  }
+  if (occ.partId && editPrefabByPartRef) {
+    await editPrefabByPartRef(occ.pageIndex, occ.partId, { focusElementId: occ.elementId || null });
+  }
+}
+async function applyProjectRename(modelId, newName, { excludePartId = null, onlyDiagramKey = null } = {}) {
+  await refreshProjectModel();
+  const plan = planRename(projectModelPrefabs, projectModelCache, modelId, newName, { onlyDiagramKey });
+  const updates = excludePartId ? plan.updates.filter((u) => u.partId !== excludePartId) : plan.updates;
+  if (!updates.length || !replacePrefabSpecRef) return 0;
+  let count = 0;
+  for (const u of updates) {
+    const ok = await replacePrefabSpecRef(u.pageIndex, u.partId, u.afterSpec);
+    if (ok) count++;
+  }
+  await refreshProjectModel(true);
+  if (count > 0) {
+    const total = excludePartId ? count + 1 : count;
+    status(`Renamed “${plan.oldName}” to “${plan.newName}” in ${total} ${total === 1 ? "diagram" : "diagrams"}.`);
+  }
+  return count;
+}
+const modelExplorer = $("modelExplorerPanel") ? createModelExplorer($("modelExplorerPanel"), {
+  onJump: (occ) => jumpToProjectOccurrence(occ),
+  onRename: (el, nextName) => applyProjectRename(el.modelId, nextName),
+  onRefresh: () => refreshProjectModel(true),
+  onClose: () => setModelExplorerOpen(false),
+}) : null;
+if ($("modelExplorerToggle")) {
+  $("modelExplorerToggle").onclick = () => {
+    closeMenus();
+    if (!doc) return status("Open a note first to inspect its Model Explorer.");
+    setModelExplorerOpen($("modelExplorerPanel").hidden);
+  };
+}
+const projectModelController = {
+  getModel: () => projectModelCache,
+  getPrefabs: () => projectModelPrefabs,
+  ensureLoaded: () => refreshProjectModel(),
+  refresh: () => {
+    projectModelRev = -1;
+    clearTimeout(projectModelRefreshTimer);
+    if ($("modelExplorerPanel") && !$("modelExplorerPanel").hidden) {
+      projectModelRefreshTimer = setTimeout(() => refreshProjectModel(true), 120);
+    }
+  },
+  invalidate: () => {
+    projectModelRev = -1;
+    clearTimeout(projectModelRefreshTimer);
+    if ($("modelExplorerPanel") && !$("modelExplorerPanel").hidden) {
+      projectModelRefreshTimer = setTimeout(() => refreshProjectModel(true), 180);
+    }
+  },
+  reset: () => {
+    clearTimeout(projectModelRefreshTimer);
+    projectModelPrefabs = [];
+    projectModelCache = buildProjectModel([]);
+    projectModelRev = -1;
+    modelExplorer?.update(projectModelCache);
+  },
+  jumpTo: (occ) => jumpToProjectOccurrence(occ),
+  applyRename: (modelId, newName, opts) => applyProjectRename(modelId, newName, opts),
+};
 // Graphs, tables, prefabs, UML and the figure editors on the page (figures.js).
-const { editCompound, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, svgToPngFile, syncKeptRefsUi } = figureInserts({
+const { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
   $,
   TOOL_DEFAULTS,
   action,
@@ -7259,6 +7378,7 @@ const { editCompound, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpe
   library,
   openBlankNoteForPrefab,
   pageCanvas,
+  projectModel: projectModelController,
   selection,
   status,
   textBox,
@@ -7273,6 +7393,8 @@ const { editCompound, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpe
     get toolPrefs() { return toolPrefs; },
   },
 });
+editPrefabByPartRef = editPrefabByPart;
+replacePrefabSpecRef = replacePrefabSpec;
 // The menu at the pointer (context-menu.js): right-click on a page, a finger held still, or a
 // selection's ⋯ circle. What is under it can be edited without changing tools first.
 const ITEM_NAMES = { ink: "Ink", shape: "Shape", image: "Image", text: "Text box", group: "Group" };

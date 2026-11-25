@@ -16,8 +16,9 @@ import { fileKind } from "./media-import.js";
 import { sideDocument } from "./side-document.js";
 import { entryTitle } from "./library.js";
 import { savedUmlView } from "./uml.js";
+import { findElementForCandidate, findElementForUml, formatOccurrenceLabel, otherOccurrences } from "./project-model.js";
 
-export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, closeMenus, drawPlantuml, ensureEditableLayer, importImages, library, openBlankNoteForPrefab, pageCanvas, selection, status, textBox, app }) {
+export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, closeMenus, drawPlantuml, ensureEditableLayer, importImages, library, openBlankNoteForPrefab, pageCanvas, projectModel = null, selection, status, textBox, app }) {
   // Graphs and tables (graph.js, table.js, compound-dialogs.js): drawn as ordinary items, parts
   // of one object (part.rs) so that any of it selects all of it and its editor brings back
   // what it is. Insert → Graph or Table, a box dragged with the Shapes tool's Graph or Table,
@@ -291,7 +292,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
   function figureEditor(spec, options = {}) {
     return oneFigure(() => openFigureEditor(spec, options));
   }
-  async function openFigureEditor(spec, { editing = false, mode = "author", references = [] } = {}) {
+  async function openFigureEditor(spec, { editing = false, mode = "author", references = [], project = null } = {}) {
     // The editor its module's manifest names (prefab-registry.js editorOf): its own editor.js,
     // the chart or diagram editor, a window, or the JSON one; a type module edits in its base.
     // A manifest that names none: chosen by the spec's type, as before modules.
@@ -301,7 +302,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       try {
         const { openModuleEditor } = await loading(import("./prefab-host.js"));
         queuedFigures.length = 0;
-        const result = keepModule(await openModuleEditor(owner, spec, { editing, mode, insert: (s) => queuedFigures.push(s) }));
+        const result = keepModule(await openModuleEditor(owner, spec, { editing, mode, insert: (s) => queuedFigures.push(s), project }));
         if (!result) queuedFigures.length = 0;
         return result;
       } catch (e) {
@@ -311,7 +312,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     }
     if (editor === "graph" || editor === "table") return keepModule(await compoundEditor(editor, spec, editing));
     if (editor === "data") return keepModule(await editPrefab({ spec, editing }));
-    if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing));
+    if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing, project));
     if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
       try {
         const { openChartEditor } = await loading(import("./chart-editor.js"));
@@ -366,11 +367,11 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
   function umlEditor(spec, editing = false) {
     return oneFigure(() => openUmlEditor(spec, editing));
   }
-  async function openUmlEditor(spec, editing = false) {
+  async function openUmlEditor(spec, editing = false, project = null) {
     try {
       const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
       // A new diagram opens in the view chosen in Insert prefab (drawing, PlantUML or both).
-      return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml });
+      return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml, project });
     } catch (e) {
       status(`The diagram editor could not open: ${e.message}`, true);
       return null;
@@ -398,6 +399,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       const png = await prefabPng(spec, [at[2], at[3]]);
       const items = prefabItems(at, spec, png, { layer: app.activeLayer, ...(id ? { id } : {}) });
       await action("drawMany", { page: p.index, ...(replace ? { replace } : {}), lines: items.lines, images: items.images });
+      projectModel?.refresh?.();
       return true;
     } catch (e) {
       status(e.message, true);
@@ -444,8 +446,36 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (size) { nw = Math.min(nw, Math.max(w, size[0] - x - 10)); nh = Math.min(nh, Math.max(h, size[1] - y - 10)); }
     return [x, y, Math.max(40, nw), Math.max(20, nh)];
   }
+  // Build a project connectivity context for UML / Textual Analysis editors ("Show in…",
+  // "Rename everywhere…", and focusElementId on jump).
+  function makeEditorProject(spec, partId, focusElementId, state) {
+    if (!projectModel || (spec?.type !== "uml" && spec?.type !== "textual-analysis")) return null;
+    const isUml = spec.type === "uml";
+    const resolveEl = (target, currentSpec) => {
+      const pm = projectModel.getModel?.();
+      if (!pm) return null;
+      return isUml
+        ? findElementForUml(pm, { diagramId: currentSpec?.id || spec.id, partId, elementId: target.id, elementType: target.type, elementName: target.name, modelId: target.modelId })
+        : findElementForCandidate(pm, { analysisId: currentSpec?.id || spec.id, partId, candidateId: target.id, candidateName: target.name, candidateKind: target.kind });
+    };
+    return {
+      ...(isUml ? { focusElementId } : { focusCandidateId: focusElementId }),
+      getOccurrences(target, currentSpec) {
+        const el = resolveEl(target, currentSpec);
+        if (!el) return [];
+        return otherOccurrences(el, { partId }).map((o) => ({ ...o, label: formatOccurrenceLabel(o) }));
+      },
+      jumpTo(occ) {
+        state.pendingJump = occ;
+      },
+      renameEverywhere(target, oldName, newName, currentSpec) {
+        const el = resolveEl(target, currentSpec);
+        if (el) state.pendingRenames.push({ modelId: el.modelId, oldName, newName });
+      },
+    };
+  }
   // Edit graph / Edit table: its editor with what it is, then drawn again where it is now.
-  async function editCompound(item, mode = "author") {
+  async function editCompound(item, mode = "author", { focusElementId = null } = {}) {
     const c = item?.compound;
     if (!c || !app.doc) return;
     let spec = {};
@@ -462,14 +492,25 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
           canvas.width = canvas.height = 0;
         } catch { /* The editor opens without it. */ }
       }
+      if (projectModel && (spec?.type === "uml" || spec?.type === "textual-analysis")) {
+        await projectModel.ensureLoaded?.();
+      }
+      const projState = { pendingJump: null, pendingRenames: [] };
+      const project = makeEditorProject(spec, c.id, focusElementId, projState);
       const note = app.epoch;
-      const chosen = await figureEditor(spec, { editing: true, mode, references });
+      const chosen = await figureEditor(spec, { editing: true, mode, references, project });
       if (!chosen || !sameNote(note)) return;
       const frame = await compoundFrame(item);
       selection.clear();
       if (await placePrefab(app.panels[item.page], chosen, frame, c.items, c.id)) {
         status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
         await placeQueued(app.panels[item.page]);
+        for (const r of projState.pendingRenames) {
+          await projectModel?.applyRename?.(r.modelId, r.newName, { excludePartId: c.id });
+        }
+        if (projState.pendingJump) {
+          await projectModel?.jumpTo?.(projState.pendingJump);
+        }
       } else queuedFigures.length = 0;
       return;
     }
@@ -571,6 +612,36 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       compound: { id: part.id, kind: part.kind, spec: frame?.spec, frame: frame?.item ?? own[0].item, items: own.map((q) => q.item) },
     };
   }
+  // Find a prefab on `pageIndex` by its `partId` and return its compound selection object.
+  async function prefabCompoundByPart(pageIndex, partId) {
+    const p = app.panels[pageIndex];
+    if (!p || !app.doc) return null;
+    const view = p.view || await call("view", { page: pageIndex }).catch(() => null);
+    const parts = view?.parts;
+    if (!Array.isArray(parts)) return null;
+    const own = parts.filter((q) => q.id === partId);
+    const frame = own.find((q) => q.spec);
+    if (!frame) return null;
+    return {
+      kind: "group",
+      page: pageIndex,
+      id: `group:${partId}`,
+      compound: { id: partId, kind: frame.kind, spec: frame.spec, frame: frame.item, items: own.map((q) => q.item) },
+    };
+  }
+  async function editPrefabByPart(pageIndex, partId, { focusElementId = null } = {}) {
+    const item = await prefabCompoundByPart(pageIndex, partId);
+    if (!item) return false;
+    await editCompound(item, "author", { focusElementId });
+    return true;
+  }
+  async function replacePrefabSpec(pageIndex, partId, newSpec) {
+    const item = await prefabCompoundByPart(pageIndex, partId);
+    const p = app.panels[pageIndex];
+    if (!item || !p) return false;
+    const frame = await compoundFrame(item);
+    return placePrefab(p, newSpec, frame, item.compound.items, partId);
+  }
   $("editCompound").onclick = () => editCompound(selection.item);
-  return { editCompound, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, svgToPngFile, syncKeptRefsUi };
+  return { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
 }

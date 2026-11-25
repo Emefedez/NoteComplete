@@ -297,15 +297,23 @@ Owner's idea (2026-11-25): prefab groups are no longer all preinstalled.
 Owner's request (2026-11-25): like Visual Paradigm, "la conectividad punta a punta del proyecto es
 importante".
 
-- [ ] A project model: model elements (classes, actors, use cases, activities, states, candidates …)
-      with stable ids, shared by every UML prefab and Textual Analysis in a note (or a folder of
-      notes), so the same class can appear in several diagrams.
-- [ ] Model Explorer panel: tree of elements by kind/package (like VP's "Candidate Items",
-      "Clases" › "Cliente"), with where each one appears.
-- [ ] Right-click an element in any diagram → "Show in…" lists the other diagrams/prefabs where it
-      appears (class diagram, activity, use case, textual analysis) and jumps there; rename once,
-      updated everywhere (or asks).
-- [ ] Textual Analysis candidates link to the elements they became.
+- [D] A project model: model elements (classes, actors, use cases, activities, states, candidates …)
+      with stable ids (`modelId` preserved by `uml.js` `normalizeModel`, stamped by `uml-from.js`),
+      shared by every UML prefab and Textual Analysis in a note (and extensible to a folder of
+      notes via `noteId`/`noteTitle`), reconciling across diagrams (`project-model.js`,
+      `project-model.test.mjs`).
+- [!] Model Explorer panel (`model-explorer.js`, `model-explorer.css`, View ▸ Model Explorer): tree
+      of elements by Candidate Items folders ("Clases", "Actores", …), kind groups ("Classes",
+      "Actors", "Use Cases", …) and Diagrams, with appearance counts, expanded occurrences, search
+      filter, and click-to-jump. Verified in headless Chromium (dark mode), not yet tried by hand in
+      the desktop app.
+- [!] Right-click an element in any diagram → "Show in…" lists the other diagrams/prefabs where it
+      appears (class diagram, sequence lifeline, use case, textual analysis) and jumps there; rename
+      once, updated everywhere (or asks "Rename everywhere / Only here", `planRename`). Wired in
+      `uml-editor.js`, `model-explorer.js`, `figures.js`, and `app.js`.
+- [!] Textual Analysis candidates link to the elements they became (`prefabs/textual-analysis/editor.js`
+      + `prefab-host.js`): linked `UML` badges, "Show in…" links in the inspector and right-click
+      menu, and rename propagation to linked UML elements.
 
 ## Phase 5: Textual Analysis prefab
 

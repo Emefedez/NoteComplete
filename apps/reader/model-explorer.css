@@ -1,0 +1,432 @@
+/* Model Explorer side panel (Visual Paradigm-style) and rename-everywhere dialogs.
+   Uses NoteComplete's CSS variables (--surface, --bg, --ink, --muted, --line, --accent,
+   --accent-soft) so it adapts cleanly to light and dark themes. */
+
+#modelExplorerPanel {
+  width: 276px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  overflow: hidden;
+  font-size: 13px;
+}
+
+#modelExplorerPanel[hidden] {
+  display: none;
+}
+
+.me-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 10px 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.me-head h2 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.me-search-row {
+  padding: 8px 10px 4px;
+}
+
+.me-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.me-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.me-summary {
+  padding: 4px 12px 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.me-tree {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 6px 14px;
+}
+
+.me-section {
+  margin-bottom: 6px;
+}
+
+.me-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-sec-head:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--ink);
+}
+
+.me-sec-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-sec-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.me-sec-body {
+  padding-left: 4px;
+}
+
+.me-folder {
+  margin: 2px 0 4px;
+}
+
+.me-folder-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.me-folder-head svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  opacity: 0.75;
+}
+
+.me-folder-head span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-folder-head small {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.me-el-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 6px;
+}
+
+.me-el-wrap:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.me-el-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-el-row.open {
+  color: var(--accent);
+}
+
+.me-caret {
+  width: 10px;
+  flex: none;
+  font-size: 10px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.me-kind-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted);
+}
+
+.me-el-row.open .me-kind-icon {
+  color: var(--accent);
+}
+
+.me-el-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-badge {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 10.5px;
+  line-height: 1.3;
+  text-align: center;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.me-badge.shared {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.me-el-action {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-right: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+
+.me-el-wrap:hover .me-el-action,
+.me-el-action:focus-visible {
+  opacity: 1;
+}
+
+.me-el-action:hover {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--ink);
+}
+
+.me-el-action svg {
+  width: 13px;
+  height: 13px;
+}
+
+.me-occs {
+  margin: 1px 0 4px 18px;
+  padding-left: 8px;
+  border-left: 1px solid var(--line);
+  display: grid;
+  gap: 2px;
+}
+
+.me-occ-item,
+.me-diag-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.me-occ-item:hover,
+.me-diag-row:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.me-occ-item:hover .me-kind-icon,
+.me-diag-row:hover .me-kind-icon {
+  color: var(--accent);
+}
+
+.me-occ-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.me-occ-tag {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.me-diag-page {
+  flex: none;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.me-empty {
+  margin: 16px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* Rename-everywhere & rename-scope modal dialogs */
+dialog.me-dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line, #3a3f4a);
+  border-radius: 12px;
+  background: var(--surface, #1e2128);
+  color: var(--ink, #e8ecf2);
+  box-shadow: var(--shadow, 0 16px 40px rgba(0, 0, 0, 0.45));
+}
+
+dialog.me-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.me-dialog-form {
+  padding: 16px 18px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.me-dialog-form h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.me-dialog-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--line, #3a3f4a);
+  border-radius: 7px;
+  background: var(--bg, #14171d);
+  color: var(--ink, #e8ecf2);
+  font: inherit;
+  font-size: 13.5px;
+}
+
+.me-dialog-input:focus {
+  outline: none;
+  border-color: var(--accent, #5b9bff);
+}
+
+.me-dialog-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted, #9aa4b2);
+}
+
+.me-dialog-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink, #e8ecf2);
+}
+
+.me-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.me-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line, #3a3f4a);
+  border-radius: 7px;
+  background: var(--bg, #14171d);
+  color: var(--ink, #e8ecf2);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.me-btn:hover {
+  border-color: var(--accent, #5b9bff);
+}
+
+.me-btn.primary {
+  background: var(--accent, #5b9bff);
+  border-color: var(--accent, #5b9bff);
+  color: #fff;
+  font-weight: 600;
+}
+
+.me-btn.primary:hover {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 760px) {
+  #modelExplorerPanel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 25;
+    width: min(300px, 86vw);
+    box-shadow: var(--shadow);
+  }
+}

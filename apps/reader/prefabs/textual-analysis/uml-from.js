@@ -28,6 +28,7 @@ export function umlFromAnalysis(analysis) {
       const mine = (kind) => cands.filter((x) => x.kind === kind && x.owner === c.name);
       const e = makeElement('class', [0, 0], {
         name: c.name,
+        modelId: c.id,
         props: {
           attributes: mine('attribute').map((a) => parseLine('attribute', `- ${member(a.name)}`)),
           operations: mine('operation').map((o) => parseLine('operation', `+ ${member(o.name).replace(/\(.*$/, '')}()`)),
@@ -66,14 +67,14 @@ export function umlFromAnalysis(analysis) {
     const actorEl = new Map();
     const step = actors.length > 1 ? Math.max(130, (sysH - 100) / (actors.length - 1)) : 0;
     actors.forEach((a, i) => {
-      const e = makeElement('actor', [40, 40 + i * step], { name: a.name }, d);
+      const e = makeElement('actor', [40, 40 + i * step], { name: a.name, modelId: a.id }, d);
       d.elements.push(e);
       d.origin.candidates[e.id] = a.id;
       link(a, d, e);
       actorEl.set(a.name, e);
     });
     cases.forEach((u, i) => {
-      const e = makeElement('useCase', [275, 60 + i * gap], { name: u.name, parent: sys?.id ?? null }, d);
+      const e = makeElement('useCase', [275, 60 + i * gap], { name: u.name, modelId: u.id, parent: sys?.id ?? null }, d);
       d.elements.push(e);
       d.origin.candidates[e.id] = u.id;
       link(u, d, e);

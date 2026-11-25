@@ -14,6 +14,7 @@ import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
+import { askRenameScope, promptRenameEverywhere } from './model-explorer.js';
 import { figureNotes } from './figure-notes.js';
 import { cheatSheet } from './cheat-sheet.js';
 import { resizablePanels } from './panel-resize.js';
@@ -61,7 +62,7 @@ export async function umlPng(model, scale = 2) {
 // Returns { model(), set(model), destroy() }.
 // `ignoreKey(ev)`: keys the page around the editor keeps for itself (a text document's N
 // opens its Notes there); `importAccept` adds file types to Import.
-export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null, ignoreKey = null, view: startView = null, preamble = [], draw: drawPlantuml = null } = {}) {
+export function mountUmlEditor(root, initial, { onApply = null, onCancel = null, onChange = null, applyLabel = 'Apply', markdown = null, ignoreKey = null, view: startView = null, preamble = [], draw: drawPlantuml = null, project = null } = {}) {
   ensureStyles();
   let model = normalizeModel(initial || starterModel('class'));
   let docPreamble = Array.isArray(preamble) && preamble.length ? [...preamble] : Array.isArray(model.preamble) ? [...model.preamble] : [];
@@ -1326,9 +1327,24 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         area.remove();
         if (keep && area.value !== before) {
           snapshot();
-          if (isEl) target.name = def.longName ? area.value : area.value.replace(/\s*\n\s*/g, ' ').trim();
-          else target.props.name = area.value.trim();
+          const nextName = isEl ? (def.longName ? area.value : area.value.replace(/\s*\n\s*/g, ' ').trim()) : area.value.trim();
+          if (isEl) target.name = nextName;
+          else target.props.name = nextName;
           changed();
+          if (isEl && nextName && nextName !== before && project?.getOccurrences) {
+            const occs = project.getOccurrences(target, model) || [];
+            if (occs.length > 0) {
+              askRenameScope({
+                oldName: before,
+                newName: nextName,
+                otherCount: occs.length,
+                otherLabels: occs.map((o) => o.label),
+                host: root.closest('dialog') || document.body,
+              }).then((scope) => {
+                if (scope === 'everywhere') project.renameEverywhere?.(target, before, nextName, model);
+              });
+            }
+          }
         }
         canvas.focus({ preventScroll: true });
       };
@@ -1565,8 +1581,38 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const del = { label: 'Delete', icon: 'backspace', danger: true, key: 'Del', run: removeSelected };
     if (e) {
       const def = ELEMENTS[e.type];
+      const occs = project?.getOccurrences?.(e, model) || [];
+      const showInEntry = occs.length > 0 ? {
+        label: 'Show in…',
+        icon: 'link',
+        submenu: occs.map((o) => ({
+          label: o.label,
+          icon: o.module === 'textual-analysis' ? 'text' : 'uml',
+          run: () => { project.jumpTo?.(o, buildOutput()); },
+        })),
+      } : null;
+      const renameAllEntry = !def.noName && occs.length > 0 ? {
+        label: 'Rename everywhere…',
+        icon: 'text',
+        run: async () => {
+          const res = await promptRenameEverywhere({
+            oldName: e.name,
+            occurrenceCount: occs.length + 1,
+            host: root.closest('dialog') || document.body,
+          });
+          if (!res?.name || res.name === e.name) return;
+          const oldName = e.name;
+          snapshot();
+          e.name = res.name;
+          changed();
+          project.renameEverywhere?.(e, oldName, res.name, model);
+        },
+      } : null;
       return menu(x, y, [
         !def.noName && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(e) },
+        renameAllEntry,
+        showInEntry,
+        (showInEntry || renameAllEntry) && '-',
         props,
         { label: 'Connect to…', icon: 'link', run: () => startConnect(e) },
         { label: 'Duplicate', icon: 'copy', key: 'Ctrl D', run: duplicate },
@@ -1762,13 +1808,14 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   };
   panelBtn.onclick = () => showPanel(!panelOpen);
   notesBtn.onclick = () => showNotes(!notesOpen, !notesOpen);
-  if (applyBtn) applyBtn.onclick = () => {
+  function buildOutput() {
     const out = normalizeModel(model);
     if (docPreamble.length) out.preamble = [...docPreamble];
     if (currentView === 'render' && lastRender.svg) { out.style = 'plantuml'; out.plantumlSvg = lastRender.svg; }
     else { delete out.style; delete out.plantumlSvg; }
-    onApply(out);
-  };
+    return out;
+  }
+  if (applyBtn) applyBtn.onclick = () => onApply(buildOutput());
   if (cancelBtn) cancelBtn.onclick = () => onCancel();
 
   // The canvas gets its size once laid out (and again when the window changes): fit again
@@ -1779,6 +1826,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   showPanel(panelOpen);
   showNotes(notesOpen);
   setView(startView || (model.style === 'plantuml' && drawPlantuml ? 'render' : savedView()));
+  if (project?.focusElementId) {
+    const hit = model.elements.find((q) => q.id === project.focusElementId || q.modelId === project.focusElementId);
+    if (hit) selected = { kind: 'element', id: hit.id };
+  }
   changed();
   requestAnimationFrame(fit);
   // Keys (N, 1–9, Shift S, Ctrl Z) go to the editor from the start, as in the chart editor.
@@ -1798,7 +1849,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null } = {}) {
+export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null, project = null } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
@@ -1810,6 +1861,13 @@ export function openUmlEditor(model, { editing = false, markdown = null, view = 
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view, draw });
+    const wrappedProject = project ? {
+      ...project,
+      jumpTo: (occ, currentOut) => {
+        project.jumpTo?.(occ, currentOut);
+        finish(currentOut);
+      },
+    } : null;
+    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view, draw, project: wrappedProject });
   });
 }
