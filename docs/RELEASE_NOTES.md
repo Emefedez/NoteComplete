@@ -1,3 +1,7 @@
+## What's new in 1.2.89
+
+- **Fix Euro-Office Linux rootless startup race.** `run.sh` now waits for `inner.sh` to finish entering its user/network namespaces before attaching `pasta`, retries transient `pasta` attachment races, and cleans up the `unshare` parent on failure.
+
 ## What's new in 1.2.88
 
 - **Fix desktop startup crash.** Moved the Euro-Office Start menu check after `officeBridge` initialization in `main.js`.
