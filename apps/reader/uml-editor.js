@@ -1839,6 +1839,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   requestAnimationFrame(() => { if (root.isConnected && !root.contains(document.activeElement)) canvas.focus({ preventScroll: true }); });
   return {
     model: () => normalizeModel(model),
+    // What Apply would hand back now (with the PlantUML drawing and preamble when kept).
+    output: () => buildOutput(),
     set: (m) => setModel(m),
     select: (id) => { const e = model.elements.find((q) => q.id === id); selected = e ? { kind: 'element', id } : null; changed(); },
     // Zoom from the page around it: dir 1 in, −1 out, 0 the whole diagram.
@@ -1852,25 +1854,64 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null, project = null } = {}) {
+// `workspace`: other diagrams of the note to open beside it in tabs (uml-workspace.js):
+// { catalog(), open: [keys open last time], projectFor(entry), onApply({ changes, added, openKeys }),
+// remember(openKeys) }. `key`: this diagram's key in the catalog. Apply hands this diagram back
+// (as without tabs) and the other changed or new ones to onApply first.
+export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null, project = null, workspace = null, key = 'this' } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
     const host = make('div', { className: 'uml-host' });
     dialog.append(host);
     document.body.append(dialog);
-    const finish = (value) => { editor.destroy(); dialog.close(); dialog.remove(); resolve(value); };
+    let editor = null, ws = null;
+    const finish = (value) => {
+      if (ws) {
+        const all = ws.tabs();
+        workspace.remember?.(ws.openKeys());
+        const mine = all.find((t) => t.key === key);
+        if (value) {
+          workspace.onApply?.({ changes: all.filter((t) => t.key !== key && !t.isNew && t.changed).map((t) => ({ key: t.key, data: t.data, spec: t.output })), added: all.filter((t) => t.isNew).map((t) => t.output), openKeys: ws.openKeys() });
+          value = mine ? mine.output : value;
+        }
+        ws.destroy();
+      } else editor.destroy();
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    };
     // Keys stay in the editor (the note's shortcuts are not for it).
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const wrappedProject = project ? {
-      ...project,
+    const wrap = (p) => (p ? {
+      ...p,
       jumpTo: (occ, currentOut) => {
-        project.jumpTo?.(occ, currentOut);
-        finish(currentOut);
+        // Another UML diagram of the note opens in a tab, at that element.
+        const target = ws && occ?.module !== 'textual-analysis' && workspace.catalog().find((e) => e.data?.partId === occ.partId);
+        if (target) {
+          const ed = ws.open(target).editor;
+          const hit = ed?.model().elements.find((q) => q.id === occ.elementId || q.modelId === occ.elementId);
+          if (hit) ed.select(hit.id);
+          return;
+        }
+        p.jumpTo?.(occ, currentOut);
+        finish(ws ? true : currentOut);
       },
-    } : null;
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view, draw, project: wrappedProject });
+    } : null);
+    const options = (tab) => ({ onApply: () => finish(true), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view: tab.key === key ? view : null, draw, project: wrap(tab.key === key ? project : workspace.projectFor?.(tab)) });
+    if (!workspace) {
+      editor = mountUmlEditor(host, model, { ...options({ key }), onApply: (m) => finish(m) });
+      return;
+    }
+    import('./uml-workspace.js').then(({ mountUmlWorkspace }) => {
+      const list = workspace.catalog();
+      const tabs = [{ key, spec: model, where: list.find((e) => e.key === key)?.where }, ...(workspace.open || []).filter((k) => k !== key).map((k) => list.find((e) => e.key === k)).filter(Boolean)];
+      ws = mountUmlWorkspace(host, { tabs, active: key, options, catalog: () => workspace.catalog().filter((e) => e.key !== key) });
+    }).catch((e) => {
+      console.warn(e);
+      editor = mountUmlEditor(host, model, { ...options({ key }), onApply: (m) => finish(m) });
+    });
   });
 }
