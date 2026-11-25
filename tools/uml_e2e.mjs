@@ -123,6 +123,58 @@ try {
   assert.equal(await items(), 2, 'one undo brings the one before back');
   console.log('· right-click → Edit UML class diagram…: reopened and redrawn in one undo step');
 
+  // 2b. Workspace tabs: "+" adds a use case diagram in a tab beside the class one; Apply puts
+  // it on the page too. Editing the class diagram again, the list button opens the use case
+  // one in a tab; its change is drawn on Apply, and the tabs are open again next time.
+  const openClass = async () => {
+    const at = await p.locator('.sheet[data-page="0"] .render [data-item^="image:"]').first().boundingBox();
+    await p.mouse.click(at.x + at.width / 2, at.y + at.height / 2, { button: 'right' });
+    await p.click('.context-menu button:has-text("Edit UML class diagram")');
+    await p.waitForSelector('.uml-dialog .uml-ws-tab');
+  };
+  const tabNames = () => p.locator('.uml-dialog .uml-ws-tab .uml-ws-name').allTextContents();
+  const diagramTitle = async (value) => {
+    await p.click('.uml-dialog .uml-tool[data-kind="select"]');
+    if (await p.getAttribute('.uml-dialog .uml-icon[aria-label="Properties of the selection"]', 'aria-pressed') !== 'true') await p.click('.uml-dialog .uml-icon[aria-label="Properties of the selection"]');
+    const field = '.uml-dialog .uml-panel input[placeholder^="Shown above"]';
+    if (value === undefined) return p.inputValue(field);
+    await p.fill(field, value);
+  };
+  await openClass();
+  assert.deepEqual(await tabNames(), ['UML class diagram'], 'one tab: the diagram being edited');
+  await diagramTitle('Library');
+  await p.waitForFunction(() => document.querySelector('.uml-dialog .uml-ws-tab .uml-ws-name')?.textContent === 'Library');
+  await p.click('.uml-dialog .uml-ws-tool[aria-label="New diagram"]');
+  await p.click('.context-menu button:has-text("Use case diagram")');
+  await p.waitForFunction(() => document.querySelector('.uml-dialog .uml-kind')?.value === 'useCase');
+  assert.equal(await p.locator('.uml-dialog .uml-ws-tab').count(), 2, 'a second tab');
+  assert.equal(await p.locator('.uml-dialog .uml-ws-pane').count(), 1, 'only the shown editor is in the page');
+  await p.keyboard.press('Control+PageUp');
+  await p.waitForFunction(() => document.querySelector('.uml-dialog .uml-kind')?.value === 'class');
+  assert.equal(await diagramTitle(), 'Library', 'switching back keeps the class diagram as it was');
+  if (DIR) await p.screenshot({ path: DIR + 'workspace-tabs.png' });
+  await p.click('.uml-dialog button.primary');
+  await p.waitForFunction(() => !document.querySelector('.uml-dialog'));
+  await p.waitForFunction((sel) => document.querySelectorAll(sel).length === 4, ADDED);
+  console.log('· workspace: + opens a new diagram in a tab, Ctrl Page Up switches, Apply adds it to the page');
+  await openClass();
+  await p.click('.uml-dialog .uml-ws-tool[aria-label="Open another diagram"]');
+  await p.click('.context-menu button:has-text("UML use case diagram")');
+  await p.waitForFunction(() => document.querySelector('.uml-dialog .uml-kind')?.value === 'useCase');
+  await diagramTitle('Lending');
+  await p.click('.uml-dialog button.primary');
+  await p.waitForFunction(() => !document.querySelector('.uml-dialog'));
+  await sleep(500);
+  assert.equal(await items(), 4, 'redrawn in place, nothing added');
+  await openClass();
+  assert.deepEqual(await tabNames(), ['Library', 'Lending'], 'the tabs open last time are open again');
+  await p.click('.uml-dialog .uml-ws-tab:nth-child(2)');
+  await p.waitForFunction(() => document.querySelector('.uml-dialog .uml-kind')?.value === 'useCase');
+  assert.equal(await diagramTitle(), 'Lending', 'the other diagram was changed on the page');
+  await p.click('.uml-dialog .uml-bar button:has-text("Cancel")');
+  await p.waitForFunction(() => !document.querySelector('.uml-dialog'));
+  console.log('· workspace: the list opens another diagram of the note; its changes are drawn, and the tabs are remembered');
+
   // 3. The editor's own page.
   const q = await b.newPage({ viewport: { width: 1100, height: 760 } });
   q.on('pageerror', (e) => errors.push(`uml.html: ${e.message}`));
