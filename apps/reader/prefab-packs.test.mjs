@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { prefabPacks, shellWithoutPacks, staticImports } from '../../tools/prefab_packs.mjs';
 import { packs, packById, packOf, packInstalled, cards, moduleById } from './prefab-registry.js';
-import { formatSize, packList, isInstalled, missingPackFor } from './prefab-packs.js';
+import { formatSize, packList, isInstalled, missingPackFor, missingPackMessage } from './prefab-packs.js';
 
 test('prefab_packs: core stays in shell, non-core lazy files leave shell', () => {
   const { packs: built, lazy } = prefabPacks();
@@ -52,4 +52,7 @@ test('registry exposes packs in order with dependencies and cards', () => {
   assert.equal(formatSize(512), '1 KB');
   assert.equal(formatSize(2048), '2 KB');
   assert.equal(formatSize(1.5 * 1024 * 1024), '1.5 MB');
+  assert.equal(missingPackMessage({ type: 'histogram' }), null);
+  assert.match(missingPackMessage({ module: 'no-such-mod', type: 'weird' }), /not installed/);
+  assert.match(missingPackMessage({ type: 'unknown_figure_kind' }), /No installed prefab pack provides "unknown_figure_kind"/);
 });

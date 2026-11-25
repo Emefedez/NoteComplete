@@ -5,7 +5,7 @@
 // keeps what they are (part.rs, kind "prefab"), so they can be edited again like a graph.
 import { imageReady } from './image-ready.js';
 import { cards, groups, packById, onModules, nameOf, renderSpec, stamp, moduleOf } from './prefab-registry.js';
-import { installPack, removePack, packSizes, formatSize, hideMissing, setHideMissing, packList } from './prefab-packs.js';
+import { installPack, removePack, packSizes, formatSize, hideMissing, setHideMissing, packList, missingPackMessage } from './prefab-packs.js';
 import { icon } from './icons.js';
 import { jsonErrorAt, codeBox } from './json-code.js';
 import { CODE_DIAGRAMS, savedUmlView, saveUmlView, askUmlView, setAskUmlView } from './uml.js';
@@ -42,6 +42,8 @@ export const prefabName = (spec) => nameOf(spec);
 // The figure as SVG text with its size, or null when the spec draws nothing (or its module
 // is missing).
 export const prefabSvg = (spec) => renderSpec(spec);
+// Plain-English message when a spec's pack or module is not installed, or null when ready.
+export const prefabMissingReason = (spec) => missingPackMessage(spec);
 // The spec with what its module fetches before drawing (a module's async `prepare`, e.g. the
 // hanzi module's stroke data); used by MCP add_prefab, which writes no data into its specs.
 export const prefabPrepare = async (spec) => (await moduleOf(spec)?.code.prepare?.(spec)) || spec;
@@ -481,7 +483,7 @@ export function editPrefab({ spec, editing = false } = {}) {
 // The figure as a PNG `[w, h]` page units drawn at `scale` pixels per unit, for an image item.
 export async function prefabPng(spec, size, scale = 3) {
   const out = prefabSvg(spec);
-  if (!out) throw Error('Nothing to draw.');
+  if (!out) throw Error(missingPackMessage(spec) || 'Nothing to draw.');
   const targetW = Math.max(1, Math.round(size[0] * scale));
   const targetH = Math.max(1, Math.round(size[1] * scale));
   const img = new Image();

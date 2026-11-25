@@ -7,7 +7,7 @@ import { rgbaOf } from "./text-box.js";
 import { graphItems } from "./graph.js";
 import { tableItems, tableNaturalSize } from "./table.js";
 import { editorOf, moduleOf } from "./prefab-registry.js";
-import { missingPackFor } from "./prefab-packs.js";
+import { missingPackFor, missingPackMessage } from "./prefab-packs.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
 import { askReinstallPack, choosePrefab, editPrefab, notePrefabUsed, prefabAspect, prefabItems, prefabName, prefabPng, prefabSvg } from "./prefabs.js";
 import { icon } from "./icons.js";
@@ -379,6 +379,11 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
   // An exam figure drawn into `box` (its width kept, its height from the figure), or a new box;
   // `replace`: the items of the prefab it replaces, in the same undo step.
   async function placePrefab(p, spec, box = null, replace = null, id = undefined) {
+    const missingMsg = missingPackMessage(spec);
+    if (missingMsg) {
+      status(missingMsg, true);
+      return false;
+    }
     const aspect = prefabAspect(spec);
     let at;
     if (box && box[2] >= 40) at = [box[0], box[1], box[2], box[2] * aspect];

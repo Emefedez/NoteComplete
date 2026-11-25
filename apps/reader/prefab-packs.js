@@ -55,6 +55,20 @@ export function missingPackFor(spec) {
   const p = packOf(moduleOf(spec));
   return p && !packOn(readPackState(), p) ? packById(p.id) : null;
 }
+// Plain-English reason a spec cannot be drawn (missing pack or unknown module/type), or null
+// when it is available. Used by prefabPng, placePrefab, AI features and MCP add_prefab.
+export function missingPackMessage(spec) {
+  const missing = missingPackFor(spec);
+  if (missing) return `The "${missing.label}" prefab pack is not installed on this device. Install it from Insert prefab or Help ▸ Setup wizard ▸ Prefabs.`;
+  const m = moduleOf(spec);
+  if (m && !m.ready) {
+    const p = packOf(m);
+    return `The "${p?.label || m.manifest.label || m.manifest.id}" prefab pack is not installed or its files are missing.`;
+  }
+  if (!m && spec?.module) return `Prefab module "${spec.module}" is not installed.`;
+  if (!m && spec?.type) return `No installed prefab pack provides "${spec.type}".`;
+  return null;
+}
 const listeners = new Set();
 // Called when packs are installed or removed, or prefabs turned on or off.
 export const onPacks = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
