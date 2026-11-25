@@ -37,14 +37,21 @@ in the desktop app); sprints 2 onwards in progress.
 
 ## Phase 2: tables in the native (Markdown) path
 
-- [ ] Merges kept on import: SheetJS `!merges`, docx `w:gridSpan` / `w:vMerge`, ODF
-      `table:number-columns-spanned` / `number-rows-spanned`. Tables with merges are written as
-      HTML `<table>` with `rowspan` / `colspan`; others stay pipe tables. Check that the text view
-      renders (and sanitises) that HTML.
-- [ ] Filter and sort: a bar on each table in the text view (text filter, per-column value
-      filter, sort by header). View only; the file never changes.
-- [ ] "Put on page as table": a sheet or table range becomes a page table with its merges
-      (limits raised if needed).
+- [!] Merges kept on import: SheetJS `!merges` (xlsx, xls, ods), docx `w:gridSpan` / `w:vMerge`
+      (mammoth's colspan/rowspan and the built-in reader), ODF `table:number-columns-spanned` /
+      `number-rows-spanned` (odt, ods, odp), pptx `gridSpan` / `rowSpan`. Tables with merges are
+      written as HTML `<table>` with `rowspan` / `colspan` (`office.js` `tableBlock`); others stay
+      pipe tables. The core still shows raw HTML as text: `html-table.js` turns such a block back
+      into a pipe table the core renders, then gives it its spans (structure and the two span
+      attributes only; cells are Markdown, rendered like any table's).
+- [!] Filter and sort (`table-filter.js`): a bar on each table with 4+ body rows in the text view
+      (text filter, "n of m rows", Clear), sort by header click (up, down, as written; numbers
+      by value, words by locale; empty last), per-column value filter (▾, check boxes). View
+      only; rows sharing a rowspan hide together and such tables do not sort (tooltip says so).
+- [!] "Put on page as table": Put on page in the bar, or right-click any table: the rows shown,
+      in their order, with merges, go to a note picked like "Insert diagram into note"; the
+      table editor opens with them. Over 30 × 12, the menu says what is taken (header + first
+      rows/columns) and offers to choose rows with the filter first. Limits not raised.
 
 ## Phase 3: open with NoteComplete or Euro-Office
 
