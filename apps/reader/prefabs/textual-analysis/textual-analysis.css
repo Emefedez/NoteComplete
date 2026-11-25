@@ -1,0 +1,49 @@
+/* The Textual Analysis editor (editor.js), inside the kit's shell: the text on top and the
+   candidate table under it, in the kit's colours (--k-*), light and dark. */
+.pk-canvas.ta-canvas { display: flex; flex-direction: column; place-items: stretch; padding: 0; touch-action: pan-y; }
+.ta-split { --ta-table: 34%; flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(120px, 1fr) 7px minmax(70px, var(--ta-table)); }
+.ta-split[hidden], .ta-page[hidden] { display: none; }
+.ta-text-pane { display: flex; flex-direction: column; min-height: 0; }
+.ta-classify { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 8px; border-bottom: 1px solid var(--k-line); background: var(--k-chrome); }
+.ta-kinds { display: flex; flex-wrap: wrap; gap: 4px; }
+.ta-classify .ta-kind kbd { font: 10px/1 ui-monospace, monospace; padding: 1px 4px; border: 1px solid var(--k-line); border-radius: 4px; color: var(--k-muted); }
+.ta-type-icon { width: 15px; height: 15px; flex: none; vertical-align: -3px; }
+@media (prefers-color-scheme: dark) { .ta-type-icon { filter: invert(.85) hue-rotate(180deg); } }
+.ta-views { display: flex; gap: 2px; }
+.ta-views .pk-button[aria-pressed="true"] { background: var(--k-soft); color: var(--k-accent); border-color: var(--k-accent); }
+.ta-find { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-bottom: 1px solid var(--k-line); background: var(--k-chrome); }
+.ta-find[hidden] { display: none; }
+.ta-find-input { width: min(260px, 50%); padding: 3px 7px; border: 1px solid var(--k-line); border-radius: 6px; background: var(--k-surface); }
+.ta-find-count { min-width: 64px; font-size: 12px; color: var(--k-muted); }
+.ta-commands .TMCommandBar { padding: 3px 8px; }
+.ta-text { flex: 1; min-height: 0; overflow: auto; }
+.ta-text .TinyMDE { min-height: 100%; padding: 12px 16px 24px; font-size: 14.5px; line-height: 1.7; }
+.ta-plain { width: 100%; height: 100%; box-sizing: border-box; padding: 12px 16px; border: 0; resize: none; background: var(--k-surface); }
+.ta-grip { cursor: row-resize; background: var(--k-line); background-clip: content-box; padding: 3px 0; touch-action: none; }
+.ta-grip:hover { background-color: var(--k-accent); }
+.ta-table { overflow: auto; min-height: 0; background: var(--k-surface); }
+.ta-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ta-table th { position: sticky; top: 0; z-index: 1; padding: 5px 6px; text-align: left; font-weight: 600; color: var(--k-muted); background: var(--k-chrome); border-bottom: 1px solid var(--k-line); white-space: nowrap; }
+.ta-table td { padding: 3px 5px; border-bottom: 1px solid var(--k-line); vertical-align: middle; }
+.ta-table tr.selected td { background: var(--k-soft); }
+.ta-table td input[type="text"], .ta-table td textarea { width: 100%; min-width: 90px; box-sizing: border-box; border: 1px solid transparent; background: transparent; padding: 2px 5px; border-radius: 5px; }
+.ta-table td input[type="text"]:hover, .ta-table td textarea:hover, .ta-table td input[type="text"]:focus, .ta-table td textarea:focus { border-color: var(--k-line); background: var(--k-surface); }
+.ta-table td textarea { resize: vertical; min-width: 160px; font: inherit; }
+.ta-table .ta-no, .ta-table .ta-occ { text-align: center; color: var(--k-muted); width: 1%; white-space: nowrap; }
+.ta-table .ta-occ { color: var(--k-ink); font-variant-numeric: tabular-nums; }
+.ta-table .ta-type { white-space: nowrap; }
+.ta-table .ta-type select { margin-left: 4px; min-height: 24px; }
+.ta-table .ta-hl input[type="color"] { width: 44px; height: 22px; padding: 0; border: 1px solid var(--k-line); border-radius: 4px; background: none; cursor: pointer; }
+.ta-table .ta-actions { white-space: nowrap; width: 1%; }
+.ta-table .ta-actions .pk-button { min-height: 22px; padding: 1px 4px; border-color: transparent; background: transparent; }
+.ta-empty { margin: 10px 12px; color: var(--k-muted); font-size: 12.5px; }
+.ta-page { flex: 1; overflow: auto; padding: 14px; display: grid; place-items: start center; }
+.ta-page > svg { max-width: 100%; height: auto; background: #fff; border-radius: 6px; }
+.ta-tree { display: grid; gap: 4px; }
+.ta-folder-name { font-size: 12px; font-weight: 600; color: var(--k-muted); padding: 2px 2px; }
+.ta-tree-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 3px 6px 3px 14px; border: 0; border-radius: 5px; background: none; text-align: left; cursor: pointer; }
+.ta-tree-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ta-tree-item small { color: var(--k-muted); font-variant-numeric: tabular-nums; }
+.ta-tree-item:hover { background: color-mix(in srgb, var(--k-ink) 7%, transparent); }
+.ta-tree-item.selected { background: var(--k-soft); color: var(--k-accent); }
+::highlight(ta-flash) { background-color: #ff8a00; color: #000; }

@@ -173,6 +173,26 @@ than writing new ones.
 - [ ] Textual Analysis mode: the Markdown viewer with a classify bar (candidate kinds with their
       colours), select text → classify; a side table of candidates (name, kind, occurrences,
       description), duplicates merged, order editable.
+
+      **Design after the owner's Visual Paradigm screenshot (2026-11-25)**: the colour belongs to
+      the *candidate*, not the kind (each new candidate takes the next colour of a palette;
+      editable), and every place its extracted text appears is highlighted and counted
+      automatically (whole words, any case; plurals -s/-es and accent-insensitive matching are
+      options, off by default; where two overlap the longer text wins). So the statement stays
+      the owner's own Markdown: candidates are *found* in it, not marked in it, and no candidate
+      syntax is needed (the text's own `==highlights==` and `=={.red}remarks==` are kept and
+      drawn). Layout as VP: the text on top (TinyMDE with the format bar: bold, italic, nested
+      lists, highlight / underline / text colour; Find, Ctrl F, the app's `text-find.js`), the
+      candidate table under it in a resizable split with VP's columns **No. | Candidate Class |
+      Extracted Text | Type | Description | Occurrence | Highlight**; the model name is
+      suggested from the extracted text (CamelCase for classes, camelCase for attributes and
+      operations, articles and prepositions dropped: "Nombre de cliente" → `nombreCliente`) and
+      editable. The right panel has the title, what goes on the page, the matching options, the
+      candidates' tree by folder (VP's Model Explorer "Candidate Items" > "Clases") and the
+      selected candidate's folder, owner (the class of an attribute/operation, the actor of a
+      use case) and *Merge into*. Occurrences in the editor are drawn with the CSS Custom
+      Highlight API over TinyMDE's own text, so typing and the caret are untouched. Not done:
+      text alignment (Markdown has none) and fonts.
 - [ ] A prefab module (`prefabs/textual-analysis/`, module.json, ai.md) so it goes on pages,
       saves its spec, and AI can write one through `add_prefab`.
 - [ ] "Create UML elements": candidates of kind class / actor / use case become elements of a new
