@@ -367,7 +367,11 @@ export function editTable({ spec = {}, editing = false } = {}) {
       fillNone.setAttribute('aria-pressed', String(!l.fill));
       for (const f of fills) f.setAttribute('aria-pressed', String(f.dataset.fill === l.fill));
     }
-    const fit = (input) => { input.rows = Math.max(1, input.value.split('\n').length); };
+    // As many rows as its lines, and more when a long line wraps (once it is on the page).
+    const fit = (input) => {
+      input.rows = Math.max(1, input.value.split('\n').length);
+      if (input.isConnected && input.scrollHeight > input.clientHeight + 1) input.rows += Math.ceil((input.scrollHeight - input.clientHeight) / 18);
+    };
     // Column widths and row heights as the grid shows them: relative to each other, as on the page.
     const columnsTemplate = (ws) => {
       const mean = ws.reduce((s, w) => s + w, 0) / ws.length;
