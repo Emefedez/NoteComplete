@@ -13,7 +13,7 @@ import { PREFABS, recentPrefabs } from "./prefabs.js";
 import { pageZhEntries, pageZhPicture, pageZhLongPress } from "./chinese/zh-menu.js";
 import { getSharedUmlClip } from "./uml-clipboard.js";
 
-export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, action, blankPageEntries, busy, call, cancelGesture, compoundLabel, copyItem, currentClip, editCompound, editTextItem, insertCompound, insertPrefab, insertShapeAt, insertUml, pageCanvas, palettes, pasteClip, pasteUmlIntoPage, patchItem, pickColor, pickWhole, point, quick, removeItem, selection, setTapeMode, status, tapeOpen, textBox, toggleTape, app }) {
+export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, action, blankPageEntries, busy, call, cancelGesture, compoundLabel, copyItem, currentClip, editCompound, editTextItem, insertCompound, insertPrefab, insertShapeAt, insertUml, pageCanvas, palettes, pasteClip, pasteUmlIntoPage, patchItem, pickColor, pickWhole, point, quick, removeItem, restackItem, selection, setTapeMode, status, tapeOpen, textBox, toggleTape, app }) {
   // Colours and thickness of a shape or stroke, from its menu: the same change as the selection's
   // fields (one undo step). A closed shape's fill (rectangle, ellipse, triangle, star) changes too.
   const hexOf = (rgba) => "#" + rgba.slice(0, 3).map((n) => Math.round(n * 255).toString(16).padStart(2, "0")).join("");
@@ -160,6 +160,18 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       status,
     });
   }
+  // Bring to front / Send to back, and for one item a step forward or backward (Ctrl ] and
+  // Ctrl [, with Shift all the way): the icons are two stacked sheets, the one moved solid.
+  function arrangeEntries(item) {
+    const one = item.kind !== "group";
+    const run = (to) => () => restackItem(item, to);
+    return [
+      { label: "Bring to front", icon: "bringFront", key: "Ctrl Shift ]", run: run("front") },
+      one && { label: "Bring forward", icon: "bringForward", key: "Ctrl ]", run: run("forward") },
+      one && { label: "Send backward", icon: "sendBackward", key: "Ctrl [", run: run("backward") },
+      { label: "Send to back", icon: "sendBack", key: "Ctrl Shift [", run: run("back") },
+    ];
+  }
   function itemMenu(item, x, y, { tape = null, zh = [], sticky = null } = {}) {
     if (!app.doc || !item) return;
     const p = app.panels[item.page];
@@ -191,6 +203,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       { label: "Move, resize or rotate", icon: "select", key: "S", run: () => { document.querySelector('#toolbar [data-tool="select"]')?.click(); selection.show(item); } },
       { label: "Cut", icon: "scissors", key: "Ctrl X", run: () => copyItem(item, { cut: true }) },
       { label: "Copy", icon: "copy", key: "Ctrl C", run: () => copyItem(item) },
+      ...arrangeEntries(item),
       !c && item.kind !== "group" && { label: "Lock in place", icon: "lock", run: () => action("lock", { page: item.page, itemId: item.id, locked: true }).then(() => status("Locked: Select passes over it. Right-click it to unlock it.")) },
       "-",
       exportEntries(`${app.doc.title || "Note"} - ${name}`, (scale, type, quality) => itemPicture(item, scale, type, quality)),

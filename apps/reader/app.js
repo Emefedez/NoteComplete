@@ -2331,6 +2331,7 @@ async function action(op, args = {}, hold = null) {
     if (hold) hold.revision = revision;
     showEdit(op, args, result);
     // Ordinary edits say nothing: the save icon in the bar shows there are unsaved changes.
+    if (collab?.role !== "tablet" && op === "restack") status(`${RESTACKED[args.to] || "Moved."} You can undo this change.`);
     if (collab?.role !== "tablet" && op === "lock") status(args.locked ? "Locked in place: it cannot be selected, moved or erased. Click it again to unlock." : "Unlocked.");
   } catch (e) {
     if (token === epoch) status(e.message, true);
@@ -2408,7 +2409,7 @@ function showEdit(op, args, result) {
   updateTools(result);
   if (Array.isArray(result.layers)) layerPanel(result.layers);
   // Ink edits change one page; undo, redo and layers may change any.
-  const only = ["draw", "drawMany", "erase", "remove", "lock", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
+  const only = ["draw", "drawMany", "erase", "remove", "lock", "restack", "image", "editText", "adjust", "crop", "resize"].includes(op) ? args.page : null;
   const fullView = Boolean(result?.size && Array.isArray(result?.layers));
   const newBackground = op === "setPageBackgrounds" || op === "replacePdfText";
   const affected = newBackground && Array.isArray(args.pages) ? new Set(args.pages.map((p) => p.page)) : null;
@@ -4217,7 +4218,7 @@ try { if (localStorage.getItem("notecomplete-tools-hidden") === "1") setToolsHid
 const SHORTCUTS = [
   ["V", "Pan tool"], ["S", "Select tool"], ["P", "Pen"], ["H", "Highlighter"], ["E", "Eraser"], ["T", "Tape"], ["R", "Shapes"], ["F", "Shapes: fill none / tint / solid"], ["G", "Grab: copy text or ask AI about a region"], ["W", "Text: click to type a text box, or click a text box to edit it (Esc keeps it, Shift Esc or × discards)"], ["O", "Lock: click an item to lock or unlock it in place"], ["1–9", "Pen, highlighter, shapes, tape or a selected text box: the colour with that number on its swatch (Ctrl 1–9 change tabs)"],
   ["/", "Find in note"], ["D", "Dark pages"], ["Shift L", "Layers"], ["Shift P", "Page list"], ["Shift G", "Go to page"], ["Shift I", "Insert image"], ["Shift B", "Insert blank page"], ["Shift X", "Insert prefab: a function graph, histogram, bar chart, process states, CPU timeline, table, tree or node graph, or UML diagram (use case, class, state machine, activity, sequence)"], ["Right-click", "Menu for what is under the pointer: edit it (prefab, graph, table, text), crop, move, lock or delete; on the page, insert here. A finger held still, or a selection's ⋯, opens it too"], ["Shift + right-click", "Delete what is under the pointer at once"], ["Shift Y", "Insert table"], ["Shift O", "Recognize text (OCR)"], ["Shift E", "Export flashcards and quizzes to Anki"], ["Shift U", "Lift all tape / cover it again"], ["Shift T", "Show or hide the tool bar (the quick menu has the tools; holding its × does the same)"], ["N", "Notes (Markdown beside the pages)"], ["A", "Audio and transcript"], ["Shift A", "Go to the page where the recording starts"], ["Shift R", "Record audio into this note / stop and keep it"], ["I", "Dim ink not yet written at this point of the recording"], ["K", "Play / pause recording"], ["Shift K", "Text from part of the recording: choose a segment (scissors in the audio panel)"], ["J / L", "Back / forward 10 s"], ["[ / ]", "Audio slower / faster (0.5× to 3×)"], ["Q", "Resume quiz"], ["Shift Q", "New quiz"], ["Shift C", "New flashcards"], ["Shift F", "Fact check pages with AI (findings go into the notes)"], ["Shift D", "Saved decks and quizzes"], ["Shift S", "Quick menu: tools, and the chosen tool's colours, widths and modes (hold, point and let go, or tap and click; 1–9 choose a tool; hold a tool to move it). Also a pen's side button, or two fingers held still"], ["Shift + pen", "Quick menu at the pen: Shift held as the pen touches the page, or pressed while the pen hovers over it (a pen's button pressed again while hovering closes it)"], ["?", "Show keys on buttons (again to hide)"],
-  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z (or Ctrl Y)", "Undo / redo"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
+  ["Ctrl K", "Commands"], ["Ctrl F", "Find"], ["Ctrl J", "Ask AI"], ["Ctrl N", "New document"], ["Ctrl O", "Open"], ["Ctrl S", "Save"], ["Ctrl Shift N", "New window"], ["Ctrl Z / Ctrl Shift Z (or Ctrl Y)", "Undo / redo"], ["Ctrl Shift ] / Ctrl Shift [", "Selected item or group: bring to front / send to back"], ["Ctrl ] / Ctrl [", "Selected item: bring forward / send backward, past the next item it overlaps"], ["Ctrl + / − / 0", "Zoom in / out / fit"], ["Ctrl Shift + / − / 0", "Interface larger / smaller / 100% (desktop app)"], ["Ctrl + trackpad", "Zoom towards the pointer"], ["Shift + wheel", "Scroll fast"], ["Ctrl + drag on a window", "Move it (Ask AI, quiz, audio, flashcards; ⌘ on a Mac)"], ["Ctrl + right-drag on a window", "Resize it from the nearest corner"], ["Two fingers held still", "Quick menu (any touch screen; also a pen's side button)"], ["Two / three-finger tap", "Undo / redo"], ["Shift + arrows / Page Up, Down", "Scroll three times as far"],
   ["Space", "Flashcards: show answer"], ["1 / 2", "Flashcards: not yet / I knew it"], ["E / V", "Flashcards: edit / double check the card"], ["X (twice)", "Flashcards: discard the card"], ["C", "Flashcards: ask AI to explain the card (the last answer is kept)"], ["M", "Flashcards: minimize the practice window"],
   ["Shift W", "Retake wrong answers"], ["1–4", "Quiz: answer"], ["H", "Quiz: hint (1 point instead of 2)"], ["C", "Quiz: clarify with AI"], ["X (twice)", "Quiz: dispute a wrong question"], ["V", "Quiz: double check and correct"], ["Enter", "Quiz: next question"], ["M / Esc", "Quiz: minimize"],
 ];
@@ -7011,6 +7012,15 @@ $("grabErase").onclick = async () => {
   clearGrab();
   await action("erase", { page, ...regionSweep(rect) });
 };
+// The items in the region to the front or the back, keeping their own order: one undo step.
+for (const [id, to] of [["grabFront", "front"], ["grabBack", "back"]]) $(id).onclick = async () => {
+  if (!grabbed) return;
+  const { page, rect } = grabbed;
+  clearGrab();
+  const ids = (await findItemsInGrab(panels[page], rect)).map((m) => m.id);
+  if (!ids.length) return status("Nothing that can be moved there.", true);
+  await action("restack", { page, ids, to });
+};
 $("grabCopy").onclick = async () => {
   if (!grabbed) return;
   const text = await find.wordsIn(grabbed.page, grabbed.rect);
@@ -7307,6 +7317,27 @@ async function removeItem(item) {
   else await action("remove", { page: item.page, itemId: item.id });
   status("Removed. Press Ctrl+Z to bring it back.");
 }
+// Bring to front, Send to back (a group or graph as a whole, keeping its own order), or one
+// item one step past the next item it overlaps: one undo step, the page drawn again.
+const RESTACKED = { front: "Brought to front.", back: "Sent to back.", forward: "Brought forward.", backward: "Sent backward." };
+async function restackItem(item, to) {
+  if (!item || !doc || busy()) return;
+  const ids = item.compound ? item.compound.items : item.kind === "group" ? item.members.map((m) => m.id) : [item.id];
+  if (ids.length > 1 && !(to === "front" || to === "back")) return status("A group moves to the front or the back; one item at a time moves a step.", true);
+  const group = item.kind === "group" && selection.item?.id === item.id;
+  await action("restack", { page: item.page, ids, to });
+  // A group is not an item the engine knows: it stays selected as it was.
+  if (group) selection.show(item);
+}
+// Ctrl ] / Ctrl [ one step forward or backward, with Shift to the front or the back, for what
+// is selected (by key code: Shift turns the keys into braces).
+document.addEventListener("keydown", (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !["BracketRight", "BracketLeft"].includes(e.code)) return;
+  if (!selection.item || !doc || typingIn(e.target) || editing) return;
+  e.preventDefault();
+  const up = e.code === "BracketRight";
+  restackItem(selection.item, e.shiftKey ? (up ? "front" : "back") : (up ? "forward" : "backward"));
+});
 // The pointer's last place over a page (set by the pointer handlers; paste puts things there).
 let pagePointer = null;
 // Copy, cut and paste of items (item-clipboard.js).
@@ -7366,6 +7397,7 @@ const { itemMenu, itemPicture, longPress, pageMenu } = itemMenus({
   point,
   quick,
   removeItem,
+  restackItem,
   selection,
   setTapeMode,
   status,

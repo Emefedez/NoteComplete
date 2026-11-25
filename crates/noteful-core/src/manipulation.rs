@@ -1,5 +1,9 @@
 //! Absolute adjustments relative to immutable item geometry. One history entry per gesture.
-use crate::{editor::Edit, scene::Item, Editor, Error, Line, Result, Stroke};
+use crate::{
+    editor::{edit_index, Edit},
+    scene::Item,
+    Editor, Error, Line, Result, Stroke,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -25,6 +29,11 @@ pub struct Adjustment {
     /// the fill away, leaving the outline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fill: Option<[f64; 4]>,
+    /// Its place in its layer's stack, set by Bring to front, Send to back and the steps
+    /// between: `[band, value]` as `stack_place` gives (`None` keeps the place it was
+    /// made in). Moves and restyles keep it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub z: Option<[f64; 2]>,
     /// Undo and redo this edit together with the one before it (moving a group of
     /// items is one adjustment per item, undone as one). Not part of the item's state.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -41,6 +50,7 @@ impl Default for Adjustment {
             locked: None,
             crop: None,
             fill: None,
+            z: None,
             joined: false,
         }
     }
@@ -175,6 +185,31 @@ pub(crate) fn item_geometry(item: &Item) -> Geometry {
         }
     }
 }
+/// Bands of a layer's stack, bottom to top: additions under the ink (highlighter fills,
+/// sticky note cards), the page's own imported items, then the pictures, text boxes and ink
+/// added over the ink. Within a band an addition's value is its edit's place in the
+/// history (so later ones are higher) and an imported item's its place in the page.
+pub(crate) const UNDER: f64 = 0.;
+pub(crate) const IMPORTED: f64 = 1.;
+pub(crate) const OVER: f64 = 2.;
+/// Where an item is drawn in its layer: the place Bring to front and the like gave it,
+/// else `made`, the one it was made in.
+pub(crate) fn stack_place(made: [f64; 2], a: Option<&Adjustment>) -> [f64; 2] {
+    a.and_then(|a| a.z).unwrap_or(made)
+}
+/// Sorts `(place, made, entry)` bottom to top; equal places keep the order they were made in.
+pub(crate) fn sort_stack<T>(entries: &mut [([f64; 2], [f64; 2], T)]) {
+    let cmp = |a: [f64; 2], b: [f64; 2]| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1]));
+    entries.sort_by(|a, b| cmp(a.0, b.0).then(cmp(a.1, b.1)));
+}
+/// `(place, made, (id, item))`, as `sort_stack` takes it.
+type StackEntry<'a> = ([f64; 2], [f64; 2], (String, Stacked<'a>));
+/// One item of a layer's stack.
+pub(crate) enum Stacked<'a> {
+    Line(&'a Line),
+    Image(&'a crate::Image),
+    Imported(&'a Item),
+}
 impl Adjustment {
     pub(crate) fn valid(&self) -> bool {
         self.translation
@@ -198,6 +233,9 @@ impl Adjustment {
             && self
                 .fill
                 .is_none_or(|c| c.iter().all(|n| n.is_finite() && (0.0..=1.).contains(n)))
+            && self
+                .z
+                .is_none_or(|z| z.iter().all(|n| n.is_finite()) && (0.0..=2.).contains(&z[0]))
     }
     pub(crate) fn matrix(&self, g: &Geometry) -> [f64; 6] {
         let old = g.rotation.to_radians();
@@ -468,6 +506,10 @@ impl Editor {
         if adjustment.locked.is_none() {
             adjustment.locked = current.locked;
         }
+        // ...and the place in the stack (an adjustment sent without one keeps it).
+        if adjustment.z.is_none() {
+            adjustment.z = current.z;
+        }
         if adjustment.locked != current.locked {
             let mut rest = adjustment.clone();
             rest.locked = current.locked;
@@ -736,114 +778,208 @@ impl Editor {
         {
             return Err(Error::new(0, "Invalid selection point"));
         }
-        let page_ref = self.page(page)?;
         let adjustments = self.adjustments(page);
-        let deleted = self.deleted(page);
-        let added: Vec<_> = self.additions(page).collect();
         let skip = |id: &str, native: bool| {
             !include_locked && adjustments.get(id).and_then(|a| a.locked).unwrap_or(native)
         };
+        // Top to bottom as drawn: a picture laid over a text box or over ink is found before
+        // them, whichever kind of item each one is.
         for layer in self
             .layers()
             .iter()
             .rev()
             .filter(|l| l.visible && !l.locked)
         {
-            let images: Vec<_> = self
-                .images(page)
-                .filter(|(_, image)| image.layer == layer.id)
-                .collect();
-            for (id, line) in added
-                .iter()
-                .rev()
-                .filter(|(_, l)| l.layer == layer.id && !l.under)
-            {
-                if !deleted.contains(id.as_str())
-                    && !skip(id, false)
-                    && hit_geometry(
-                        p,
-                        tolerance,
-                        &line_geometry(line),
-                        &line.points,
-                        adjustments.get(id.as_str()).copied(),
-                        false,
-                    )
-                {
-                    return Ok(Some(id.clone()));
-                }
-            }
-            for (id, image) in images.iter().rev().filter(|(_, image)| !image.under) {
-                let item = image.item(id.clone());
-                if !deleted.contains(id.as_str())
-                    && !skip(id, false)
-                    && hit_geometry(
-                        p,
-                        tolerance,
-                        &item_geometry(&item),
-                        &[],
-                        adjustments.get(id.as_str()).copied(),
-                        true,
-                    )
-                {
-                    return Ok(Some(id.clone()));
-                }
-            }
-            for item in page_ref
-                .items
-                .iter()
-                .rev()
-                .filter(|i| i.layer == layer.id && !skip(&i.id, i.locked()))
-            {
-                if !deleted.contains(item.id.as_str())
-                    && hit_geometry(
-                        p,
-                        tolerance,
-                        &item_geometry(item),
-                        item.hit_points(),
-                        adjustments.get(item.id.as_str()).copied(),
-                        item.object.is_some(),
-                    )
-                {
-                    return Ok(Some(item.id.clone()));
-                }
-            }
-            for (id, line) in added
-                .iter()
-                .rev()
-                .filter(|(_, l)| l.layer == layer.id && l.under)
-            {
-                if !deleted.contains(id.as_str())
-                    && !skip(id, false)
-                    && hit_geometry(
-                        p,
-                        tolerance,
-                        &line_geometry(line),
-                        &line.points,
-                        adjustments.get(id.as_str()).copied(),
-                        false,
-                    )
-                {
-                    return Ok(Some(id.clone()));
-                }
-            }
-            for (id, image) in images.iter().rev().filter(|(_, image)| image.under) {
-                let item = image.item(id.clone());
-                if !deleted.contains(id.as_str())
-                    && !skip(id, false)
-                    && hit_geometry(
-                        p,
-                        tolerance,
-                        &item_geometry(&item),
-                        &[],
-                        adjustments.get(id.as_str()).copied(),
-                        true,
-                    )
-                {
-                    return Ok(Some(id.clone()));
+            for (id, _, entry) in self.layer_stack(page, layer.id)?.into_iter().rev() {
+                let a = adjustments.get(id.as_str()).copied();
+                let hit = match entry {
+                    Stacked::Line(line) => {
+                        !skip(&id, false)
+                            && hit_geometry(
+                                p,
+                                tolerance,
+                                &line_geometry(line),
+                                &line.points,
+                                a,
+                                false,
+                            )
+                    }
+                    Stacked::Image(image) => {
+                        !skip(&id, false)
+                            && hit_geometry(
+                                p,
+                                tolerance,
+                                &item_geometry(&image.item(id.clone())),
+                                &[],
+                                a,
+                                true,
+                            )
+                    }
+                    Stacked::Imported(item) => {
+                        !skip(&id, item.locked())
+                            && hit_geometry(
+                                p,
+                                tolerance,
+                                &item_geometry(item),
+                                item.hit_points(),
+                                a,
+                                item.object.is_some(),
+                            )
+                    }
+                };
+                if hit {
+                    return Ok(Some(id));
                 }
             }
         }
         Ok(None)
+    }
+    /// A page's live items in one layer, bottom to top as they are drawn, each with its place
+    /// in the stack (`stack_place`). Tape is listed where it sits, though drawn over the rest.
+    pub(crate) fn layer_stack<'a>(
+        &'a self,
+        page: usize,
+        layer: u32,
+    ) -> Result<Vec<(String, [f64; 2], Stacked<'a>)>> {
+        let page_ref = self.page(page)?;
+        let adjustments = self.adjustments(page);
+        let deleted = self.deleted(page);
+        let mut entries: Vec<StackEntry<'a>> = Vec::new();
+        let mut push = |id: String, made: [f64; 2], entry: Stacked<'a>| {
+            if !deleted.contains(id.as_str()) {
+                let place = stack_place(made, adjustments.get(id.as_str()).copied());
+                entries.push((place, made, (id, entry)));
+            }
+        };
+        for (id, line) in self.additions(page).filter(|(_, l)| l.layer == layer) {
+            let made = [
+                if line.under { UNDER } else { OVER },
+                edit_index(&id) as f64,
+            ];
+            push(id, made, Stacked::Line(line));
+        }
+        for (id, image) in self.images(page).filter(|(_, i)| i.layer == layer) {
+            let made = [
+                if image.under { UNDER } else { OVER },
+                edit_index(&id) as f64,
+            ];
+            push(id, made, Stacked::Image(image));
+        }
+        for (i, item) in page_ref.items.iter().enumerate() {
+            if item.layer == layer {
+                push(
+                    item.id.clone(),
+                    [IMPORTED, i as f64],
+                    Stacked::Imported(item),
+                );
+            }
+        }
+        sort_stack(&mut entries);
+        Ok(entries
+            .into_iter()
+            .map(|(place, _, (id, entry))| (id, place, entry))
+            .collect())
+    }
+    /// Bring an item to the front of its layer (`front`), send it to the back (`back`), or
+    /// move it one step: over the next item above it that it overlaps (`forward`), or under
+    /// the next one below (`backward`). One undoable edit; nothing when it is already there.
+    pub fn restack_item(&mut self, page: usize, id: &str, to: &str) -> Result<()> {
+        self.restack(page, id, to, false)
+    }
+    /// Several items (a group, a graph) to the front or the back, keeping their order among
+    /// themselves. One undoable edit.
+    pub fn restack_items(&mut self, page: usize, ids: &[String], to: &str) -> Result<()> {
+        if let [id] = ids {
+            return self.restack(page, id, to, false);
+        }
+        if !matches!(to, "front" | "back") {
+            return Err(Error::new(0, "Only one item at a time moves a step"));
+        }
+        for id in ids {
+            self.editable_layer(page, id)?;
+        }
+        // Bottom to top as drawn; the bottom one goes to the front first, the top one to the
+        // back first, so they end in the order they were in.
+        let mut ordered = Vec::new();
+        for layer in self.layers() {
+            for (id, ..) in self.layer_stack(page, layer.id)? {
+                if ids.contains(&id) && !ordered.contains(&id) {
+                    ordered.push(id);
+                }
+            }
+        }
+        if ordered.len() != ids.len() {
+            return Err(Error::new(0, "Invalid items to move"));
+        }
+        if to == "back" {
+            ordered.reverse();
+        }
+        let mut joined = false;
+        for id in &ordered {
+            let before = self.cursor;
+            self.restack(page, id, to, joined)?;
+            joined |= self.cursor > before;
+        }
+        Ok(())
+    }
+    fn restack(&mut self, page: usize, id: &str, to: &str, joined: bool) -> Result<()> {
+        let layer = self.editable_layer(page, id)?;
+        let stack: Vec<(String, [f64; 2])> = self
+            .layer_stack(page, layer)?
+            .into_iter()
+            .map(|(id, place, _)| (id, place))
+            .collect();
+        let at = stack
+            .iter()
+            .position(|(key, _)| key == id)
+            .ok_or_else(|| Error::new(0, "Item not found"))?;
+        let overlaps = |k: usize| -> bool {
+            match (
+                self.current_bounds(page, id),
+                self.current_bounds(page, &stack[k].0),
+            ) {
+                // Boxes are `[x, y, width, height]`.
+                (Ok(a), Ok(b)) => {
+                    a[0] <= b[0] + b[2]
+                        && b[0] <= a[0] + a[2]
+                        && a[1] <= b[1] + b[3]
+                        && b[1] <= a[1] + a[3]
+                }
+                _ => false,
+            }
+        };
+        // Between two places: halfway when they share a band, else just past the first.
+        let between = |from: [f64; 2], to: Option<[f64; 2]>, step: f64| match to {
+            Some(t) if t[0] == from[0] => [from[0], (from[1] + t[1]) / 2.],
+            _ => [from[0], from[1] + step],
+        };
+        let z = match to {
+            "front" if at + 1 < stack.len() => between(stack[stack.len() - 1].1, None, 1.),
+            "back" if at > 0 => between(stack[0].1, None, -1.),
+            "forward" => match (at + 1..stack.len()).find(|&k| overlaps(k)) {
+                Some(k) => between(stack[k].1, stack.get(k + 1).map(|e| e.1), 1.),
+                None => return Ok(()),
+            },
+            "backward" => match (0..at).rev().find(|&k| overlaps(k)) {
+                Some(k) => between(stack[k].1, k.checked_sub(1).map(|j| stack[j].1), -1.),
+                None => return Ok(()),
+            },
+            "front" | "back" => return Ok(()),
+            _ => return Err(Error::new(0, "Unknown place in the stack")),
+        };
+        // Halving the gap between two neighbours many times runs out of room.
+        if stack.iter().any(|(key, place)| key != id && *place == z) {
+            return Err(Error::new(0, "This item cannot move further this way"));
+        }
+        let mut a = self
+            .adjustments(page)
+            .get(id)
+            .copied()
+            .cloned()
+            .unwrap_or_default();
+        a.z = Some(z);
+        a.joined = joined;
+        self.adjust_item(page, id, a)
     }
 }
 fn hit_geometry(

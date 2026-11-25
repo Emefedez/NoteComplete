@@ -49,6 +49,29 @@ fn renamed(id: &str, map: &HashMap<usize, usize>) -> Result<String> {
         }
     }
 }
+/// A place in a layer's stack (Bring to front and the like) with the edits renumbered: in the
+/// bands of added items it is counted in edit positions, so it moves with the kept edits
+/// around it, in proportion, and stays between the same items.
+fn renumbered_place(z: [f64; 2], kept: &[(usize, usize)]) -> [f64; 2] {
+    if z[0] == crate::manipulation::IMPORTED {
+        return z;
+    }
+    let v = z[1];
+    let after = kept.partition_point(|(old, _)| (*old as f64) < v);
+    let lo = after.checked_sub(1).map(|k| kept[k]);
+    let hi = kept.get(after).copied();
+    let to = |n: usize| n as f64;
+    let value = match (lo, hi) {
+        (_, Some((old, new))) if old as f64 == v => to(new),
+        (Some((o0, n0)), Some((o1, n1))) => {
+            to(n0) + (v - to(o0)) * (to(n1) - to(n0)) / (to(o1) - to(o0))
+        }
+        (Some((o0, n0)), None) => to(n0) + (v - to(o0)),
+        (None, Some((o1, n1))) => to(n1) - (to(o1) - v),
+        (None, None) => v,
+    };
+    [z[0], value]
+}
 /// A page's drawing without item names (they are renumbered), for comparing pages.
 fn unnamed(svg: &str) -> String {
     // The names of added items (`data-item`, and `data-tape` on a strip of tape) change
@@ -258,6 +281,8 @@ impl Editor {
             .enumerate()
             .map(|(n, i)| (i, n))
             .collect();
+        let mut kept: Vec<(usize, usize)> = map.iter().map(|(&i, &n)| (i, n)).collect();
+        kept.sort_unstable();
         let mut compacted = Vec::with_capacity(map.len());
         for (i, edit) in history.iter().enumerate().filter(|(i, _)| keep[*i]) {
             let mut edit = edit.clone();
@@ -270,8 +295,16 @@ impl Editor {
                         *id = renamed(id, &map)?;
                     }
                 }
-                Edit::Adjust { id, joined, .. } => {
+                Edit::Adjust {
+                    id,
+                    joined,
+                    adjustment,
+                    ..
+                } => {
                     *id = renamed(id, &map)?;
+                    if let Some(z) = adjustment.z.as_mut() {
+                        *z = renumbered_place(*z, &kept);
+                    }
                     if i < upto {
                         *joined = false;
                     }

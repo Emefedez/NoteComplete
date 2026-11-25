@@ -154,10 +154,30 @@ export const paths = {
  office:'M6 2h9l5 5v15H6zM15 2v5h5M9 9h3M9 12h8M9 15h8v4H9zM13 15v4',
  github:'M9 19c-4.3 1.4-4.3-2.5-6-3m12 5v-3.5c0-1 .1-1.4-.5-2 2.8-.3 5.5-1.4 5.5-6a4.6 4.6 0 0 0-1.3-3.2 4.2 4.2 0 0 0-.1-3.2s-1.1-.3-3.5 1.3a12.3 12.3 0 0 0-6.2 0C6.5 2.8 5.4 3.1 5.4 3.1a4.2 4.2 0 0 0-.1 3.2A4.6 4.6 0 0 0 4 9.5c0 4.6 2.7 5.7 5.5 6-.6.6-.6 1.2-.5 2V21'
 };
+// A sheet of paper with rounded corners, `size` square, its top left at x, y.
+const sheet=(x,y,size=12,r=1.6)=>`M${x+r} ${y}h${size-2*r}a${r} ${r} 0 0 1 ${r} ${r}v${size-2*r}a${r} ${r} 0 0 1 -${r} ${r}h-${size-2*r}a${r} ${r} 0 0 1 -${r} -${r}v-${size-2*r}a${r} ${r} 0 0 1 ${r} -${r}Z`;
+// A sheet partly hidden by one over it whose top left is at bx, by: only what shows, with a
+// thin gap along the edge of the one in front.
+const behind=(x,y,size,bx,by,g=2.5,r=1.6)=>`M${x+r} ${y}H${x+size-r}a${r} ${r} 0 0 1 ${r} ${r}V${by-g}H${bx-g}V${y+size}H${x+r}a${r} ${r} 0 0 1 -${r} -${r}V${y+r}a${r} ${r} 0 0 1 ${r} -${r}Z`;
+// Icons in parts, drawn in order: `fill` is how solid a part is filled (none when absent).
+// Arranging items: two stacked sheets, the one moved solid and the other see-through.
+export const layered = {
+ bringFront:[{d:sheet(3,3,13),fill:.18},{d:sheet(8,8,13),fill:1}],
+ sendBack:[{d:behind(3,3,13,8,8),fill:1},{d:sheet(8,8,13),fill:.18}],
+ // One step: smaller sheets, and an arrow up or down beside them.
+ bringForward:[{d:sheet(3,8,10),fill:.18},{d:sheet(7,12,9.5),fill:1},{d:'M18.5 10V3m-3 3 3-3 3 3'}],
+ sendBackward:[{d:behind(3,8,10,7,12),fill:1},{d:sheet(7,12,9.5),fill:.18},{d:'M18.5 3v7m-3-3 3 3 3-3'}],
+};
+for(const [name,parts] of Object.entries(layered))paths[name]=parts.map(p=>p.d).join('');
 export function icon(name) {
  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
  for(const [key,value] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.65','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true'}))svg.setAttribute(key,value);
- const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',paths[name]||paths.note);svg.append(path);return svg;
+ for(const part of layered[name]||[{d:paths[name]||paths.note}]){
+  const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',part.d);
+  if(part.fill){path.setAttribute('fill','currentColor');if(part.fill<1)path.setAttribute('fill-opacity',part.fill);}
+  svg.append(path);
+ }
+ return svg;
 }
 export function decorateIcons(){
  for(const el of document.querySelectorAll('[data-icon]'))el.prepend(icon(el.dataset.icon));

@@ -598,7 +598,29 @@ impl Editor {
             let mut z = page.items.iter().map(|i| i.z).max().unwrap_or(0);
             // Under-ink additions (highlighter fills) are written before the
             // page's existing strokes, so they draw below its handwriting.
-            let (under, added): (Vec<_>, Vec<_>) = added.into_iter().partition(|(_, l)| l.under);
+            // Lines sent back below the page's own items go with them; the rest in their place
+            // in the stack (Bring to front and the like), else in the order they were made.
+            use crate::manipulation::{sort_stack, stack_place, OVER, UNDER};
+            let place = |id: &str, under: bool| {
+                let made = [
+                    if under { UNDER } else { OVER },
+                    crate::editor::edit_index(id) as f64,
+                ];
+                (stack_place(made, adjustments.get(id).copied()), made)
+            };
+            let mut added: Vec<_> = added
+                .into_iter()
+                .map(|(id, line)| {
+                    let (p, made) = place(&id, line.under);
+                    (p, made, (id, line))
+                })
+                .collect();
+            sort_stack(&mut added);
+            let (under, added): (Vec<_>, Vec<_>) = added
+                .into_iter()
+                .map(|(p, _, entry)| (p, entry))
+                .partition(|(p, _)| p[0] < OVER);
+            let under: Vec<_> = under.into_iter().map(|(_, e)| e).collect();
             let mut new_id = |ids: &mut HashSet<u64>| -> Result<u64> {
                 while ids.contains(&next_id) {
                     next_id = next_id
@@ -642,23 +664,30 @@ impl Editor {
             // Added pictures, text boxes and ink get their z in the order they were made (their
             // ids carry their place in the history), as the reader draws them: a text box made
             // after a stroke is over it in Noteful too.
-            let images: Vec<_> = self
+            let mut images: Vec<_> = self
                 .images(page_no)
                 .filter(|(id, _)| !deleted.contains(id.as_str()))
+                .map(|(id, image)| {
+                    let (p, made) = place(&id, false);
+                    (p, made, (id, image))
+                })
                 .collect();
+            sort_stack(&mut images);
+            let below = |a: [f64; 2], b: [f64; 2]| {
+                a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])).is_lt()
+            };
+            let images: Vec<_> = images.into_iter().map(|(p, _, e)| (p, e)).collect();
             let mut next_image = 0;
             let mut added = added.into_iter().peekable();
             while next_image < images.len() || added.peek().is_some() {
                 let image_first = match added.peek() {
                     None => true,
-                    Some((line_id, _)) => {
-                        next_image < images.len()
-                            && crate::editor::edit_index(&images[next_image].0)
-                                < crate::editor::edit_index(line_id)
+                    Some((line_place, _)) => {
+                        next_image < images.len() && below(images[next_image].0, *line_place)
                     }
                 };
                 if image_first {
-                    let (id, image) = &images[next_image];
+                    let (_, (id, image)) = &images[next_image];
                     next_image += 1;
                     let mut suffix = 0;
                     let resource = loop {
@@ -688,7 +717,7 @@ impl Editor {
                         blocks.push((resource, Cow::Owned(image.bytes()?)));
                     }
                 } else {
-                    let (_, line) = added.next().unwrap();
+                    let (_, (_, line)) = added.next().unwrap();
                     // A filled shape: its inside as highlighter under the outline.
                     if let Some(fill) = line
                         .shape

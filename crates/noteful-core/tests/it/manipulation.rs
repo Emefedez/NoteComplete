@@ -24,6 +24,7 @@ fn adjustment() -> Adjustment {
         locked: None,
         crop: None,
         fill: None,
+        z: None,
         joined: false,
     }
 }

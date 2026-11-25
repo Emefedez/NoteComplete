@@ -416,6 +416,14 @@ impl EditorSession {
             .adjust_item(slot, id, serde_json::from_str(adjustment)?)?;
         self.item_patch(page, slot, id)
     }
+    /// Bring items (JSON list of ids) to the front of their layer or send them to the back
+    /// (`front`, `back`), or one item one step past the next one it overlaps (`forward`,
+    /// `backward`). One undo step; the page is to be drawn again (its items change order).
+    pub fn restack_items(&mut self, page: usize, ids: &str, to: &str) -> Result<(), Failure> {
+        let slot = self.slot(page)?;
+        let ids: Vec<String> = serde_json::from_str(ids)?;
+        Ok(self.inner.restack_items(slot, &ids, to)?)
+    }
     /// Show only `[x0, y0, x1, y1]` (JSON, in the image's native size) of an image.
     pub fn crop_item(&mut self, page: usize, id: &str, rect: &str) -> Result<String, Failure> {
         let slot = self.slot(page)?;

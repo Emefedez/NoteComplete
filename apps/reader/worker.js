@@ -238,6 +238,9 @@ const onDocument = {
 
   remove: edit((args, page) => session.remove_item(page, args.itemId)),
   lock: edit((args, page) => session.set_locked(page, args.itemId, args.locked)),
+  // Bring to front, Send to back (`ids`: one item or a group), or one item one step (`to`:
+  // front, back, forward, backward).
+  restack: edit((args, page) => session.restack_items(page, JSON.stringify(args.ids), args.to)),
   resizePage: edit((args, page) => session.resize_page(page, args.size[0], args.size[1], args.pdfRect ? JSON.stringify(args.pdfRect) : undefined)),
   resizePages: edit((args) => session.resize_pages(JSON.stringify(args.pages.map((p) => ({ page: p.page, size: p.size, pdf_rect: p.pdfRect || null }))))),
   editText: edit((args, page) => session.edit_text(page, args.itemId, JSON.stringify(args.text), args.width, args.height)),

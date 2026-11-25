@@ -33,6 +33,7 @@ mod page_geometry;
 mod pages;
 mod project_v13;
 mod recognized_text;
+mod stacking;
 mod tape_on_top;
 mod text;
 mod view_bench;
