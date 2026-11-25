@@ -2569,6 +2569,16 @@ body.bar-compact .tab { height: 22px; }
 .notes-render th, .notes-render td { padding: 4px 8px; border: 1px solid var(--line); }
 .notes-render img { max-width: 100%; }
 .notes-render .md-page { display: inline-block; margin: 12px 0 4px; padding: 1px 10px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+/* ==highlights== in Markdown (md-highlight.js): the colour comes in --hl (fill) and --hl-strong
+   (underline), set per highlight; softer in the dark so the light text stays readable. */
+mark.md-hl, .TinyMDE .TMHighlight { background: color-mix(in srgb, var(--hl, #fff169) 78%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+mark.md-hl.md-ul, .TinyMDE .TMHighlight.TMUnderline { background: none; padding: 0; text-decoration: underline 2px var(--hl-strong, var(--hl, #c99700)); text-underline-offset: 3px; text-decoration-skip-ink: none; }
+mark.md-hl.md-tc, .TinyMDE .TMHighlight.TMTextColour { background: none; padding: 0; color: var(--hl-strong, #d92d20); }
+.TinyMDE .TMMark_TMHighlight { color: var(--muted); }
+@media (prefers-color-scheme: dark) {
+  mark.md-hl, .TinyMDE .TMHighlight { background: color-mix(in srgb, var(--hl, #fff169) 36%, transparent); }
+  mark.md-hl.md-tc, .TinyMDE .TMHighlight.TMTextColour { background: none; color: color-mix(in srgb, var(--hl-strong, #d92d20) 70%, #fff); }
+}
 @media (max-width: 700px) {
   .notes-panel { position: absolute; z-index: 4; inset: auto 0 0 0; width: auto !important; max-height: 70%; }
 }
@@ -3272,7 +3282,7 @@ body.tablet-mode[data-dock="right"] #drop { padding-right: 60px; }
 .tablet-dock .dock-width span { display: block; width: 22px; height: var(--w); border-radius: 99px; background: currentColor; }
 .dock-spacer { flex: 1 0 8px; }
 .dock-status { width: 10px; height: 10px; border-radius: 50%; background: #2f9a4c; flex: none; }
-body.tablet-waiting .dock-status { background: #d9a400; }
+body.tablet-waiting .dock-status { background: #c99700; }
 body.tablet-waiting #drop::after { content: "Waiting for the computer’s note…"; position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 16px; pointer-events: none; }
 
 /* Narrow windows: rows that scroll sideways fade at the edge that has more (sideScroll in

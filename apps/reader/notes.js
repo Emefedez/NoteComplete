@@ -9,6 +9,8 @@ import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { noteMode, setNoteMode } from './chinese/ruby.js';
 import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './markdown-prefab.js';
+import { highlightCommand, tinyMdeHighlightGrammar } from './md-highlight.js';
+import { paths as iconPaths } from './icons.js';
 
 export { PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu };
 
@@ -16,7 +18,7 @@ export { PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu };
 export const MARKDOWN_COMMANDS = [
   'undo', 'redo', '|',
   'h1', 'h2', '|',
-  'bold', 'italic', 'strikethrough', 'code', '|',
+  'bold', 'italic', 'strikethrough', highlightCommand(iconPaths.highlight), 'code', '|',
   'ul', 'ol', 'tasklist', '|',
   'blockquote', 'hr', '|',
   'insertLink', 'insertImage',
@@ -37,6 +39,8 @@ export function loadEditor() {
     document.head.append(script);
   });
 }
+// TinyMDE's options for every Markdown editor of the app: ==highlights== shown as typed.
+export const MARKDOWN_GRAMMAR = { customInlineGrammar: tinyMdeHighlightGrammar() };
 // Positions in the editor are { row, col }; Yjs counts characters from the start.
 export function toIndex(text, { row, col }) {
   const lines = text.split('\n');
@@ -158,7 +162,7 @@ export function notesController({ call, jump, currentPage, store, status, editPr
   async function mount() {
     const TinyMDE = await loadEditor();
     if (editor || panel.hidden) return;
-    editor = new TinyMDE.Editor({ element: $('notesEditor'), content: text, placeholder: core ? 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.' : 'Notes for this page. Markdown: # heading, **bold**, - list…', });
+    editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: $('notesEditor'), content: text, placeholder: core ? 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.' : 'Notes for this page. Markdown: # heading, **bold**, - list…', });
     bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor, commands: MARKDOWN_COMMANDS });
     editor.addEventListener('change', event => {
       if (shared?.applying) return;

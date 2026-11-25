@@ -153,6 +153,23 @@ than writing new ones.
 - [ ] Highlighting in Markdown, extended: several colours and an underline style, kept in the
       Markdown (`==text=={.colour}` or a `<mark data-kind>` form, to choose), shown in the text view
       and the Markdown editor. Useful on its own for any Markdown note.
+
+      **Syntax chosen** (`apps/reader/md-highlight.js`): `==text==` (yellow), `=={pink}text==`
+      (a colour: yellow, pink, mint, lavender, peach, blue, red, their other names green, teal,
+      purple, orange, sky, amber, coral, or `#rrggbb`), `=={_blue}text==` (an underline in that
+      colour: `_` = underline) and `=={.red}text==` (the text itself in that colour, no fill:
+      `.` = text colour, for remarks such as "(la aplicación NO es una clase)"). Why the tag goes *before* the
+      text: it is the form the handwriting pages already read (`crates/noteful-core/src/ink`,
+      `=={pink}phrase==`, and `convert.js`'s cheat sheet), so notes and ink pages share one
+      dialect and AI already writes it; a reader that does not know it shows the words with `==`
+      around them; it cannot clash with links, footnotes or attributes (`{…}` right after `==`
+      means nothing else in CommonMark/GFM); and a trailing `=={…}` would be read as the start of
+      the next highlight. Rules as Obsidian/Pandoc `==mark==`: no space just inside the
+      delimiters, `===` is never one, no blank line or code inside. The core renders Markdown
+      without it (raw text), and the reader marks it after (`rich-text.js` → `highlightElement`),
+      so the wasm core is unchanged and Markdown without `==x==` renders byte for byte as before
+      (tested on every doc in `docs/`). TinyMDE shows it through its `customInlineGrammar`, and
+      the format bar has a Highlight button (colours, Underline ▸, Text colour ▸, Remove highlight).
 - [ ] Textual Analysis mode: the Markdown viewer with a classify bar (candidate kinds with their
       colours), select text → classify; a side table of candidates (name, kind, occurrences,
       description), duplicates merged, order editable.
