@@ -1,3 +1,8 @@
+## What's new in 1.2.99
+
+- **R Commander Studio aesthetic for Math Mode & R Bridge.** Restyled the Math Mode & R Bridge settings dialog and formula bar with crisp squarer corners (3–4 px), flat underline IDE tabs, uniform 28 px buttons with inline icons, and monospace package badges.
+- **Click Math output to copy.** Clicking the Math Mode formula output box copies the generated formula/LaTeX directly to the clipboard.
+
 ## What's new in 1.2.98
 
 - **Textual Analysis polish.** New Textual Analysis prefabs now start blank instead of prefilled with an example; Extracted Text and Description cells expand vertically on click to show their full text cleanly; highlight colours now use a rounded pill swatch with 12 pastel presets plus a custom picker.
