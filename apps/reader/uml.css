@@ -236,3 +236,6 @@ html.uml-page, .uml-page body { height: 100%; margin: 0; }
 .uml-ws-body { position: relative; min-height: 0; }
 .uml-ws-pane { height: 100%; }
 .uml-ws-tool.uml-ws-list svg { transform: rotate(180deg); }
+.uml-tool-search { width: 100%; box-sizing: border-box; margin: 2px 0 6px; padding: 4px 8px; border: 1px solid var(--u-line); border-radius: 6px; background: var(--u-surface); color: inherit; font: inherit; font-size: 12px; }
+.uml-tools .uml-tool[hidden] { display: none; }
+@media (max-width: 760px) { .uml-tool-search { width: 120px; flex: none; margin: 0 4px; } }

@@ -4489,7 +4489,9 @@ document.addEventListener("keydown", (e) => {
     else save(false, "project", null, { inPlace: true });
     return;
   }
-  if (typingIn(e.target))
+  // Typing (also in a field inside a shadow root, the notes' TinyMDE, or a UML name being
+  // typed): the letters are words, not shortcuts.
+  if (typingIn(e.composedPath?.()[0] || e.target) || typingIn(document.activeElement) || e.target.closest?.(".TinyMDE, .uml-rename"))
     return;
   const navDir = keyNavDirection(e);
   if (navDir) {

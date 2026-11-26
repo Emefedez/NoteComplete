@@ -3,7 +3,7 @@
 // type's fields. The same editor runs on its own page (uml.html) and in a full-window dialog
 // over a note (openUmlEditor), where Apply hands the diagram back to be drawn on the page.
 import { imageReady } from './image-ready.js';
-import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout, TEXT_STYLES, cleanStyle, toggleStyle, nameItalicReason, rowItalicReason, hasEndTexts } from './uml.js';
+import { UML_VIEWS, UML_VIEW_KEY, CODE_DIAGRAMS, savedUmlView, HEADS, headsOf, DIAGRAMS, ELEMENTS, CONNECTORS, ENUMS, LISTS, normalizeModel, starterModel, renderUml, fitBounds, textScale, itemColor, connectorPath, makeElement, makeConnector, parseLine, formatLine, umlIcon, umlName, treeLayout, TEXT_STYLES, cleanStyle, toggleStyle, nameItalicReason, rowItalicReason, hasEndTexts, routeAround, endTextBox, compartmentAt, compartmentRow } from './uml.js';
 import { importUml, exportXmi, exportVp, detectFormat, vpDiagrams } from './uml-xml.js';
 import { parsePlantUml, toPlantUml, layoutFromPlantuml } from './uml-plantuml.js';
 import { writeUmlClip, readUmlClipFromText, getSharedUmlClip, clipFitsDiagram } from './uml-clipboard.js';
@@ -640,6 +640,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     return orderedIds(orderName(), all.map((t) => `${t.kind}:${t.type}`)).map((id) => all.find((t) => `${t.kind}:${t.type}` === id));
   }
   function chooseTool(kind, type) { setTool(tool.kind === kind && tool.type === type ? { kind: 'select' } : { kind, type }); }
+  let toolQuery = '';
   function buildPalette() {
     kindSelect.value = model.diagram;
     const button = ({ kind, type, label }, i) => {
@@ -661,7 +662,20 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     palette.classList.toggle('uml-palette-warn', notRecommended);
     if (notRecommended) palette.title = 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.';
     else palette.removeAttribute('title');
-    palette.replaceChildren(...[sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
+    // A search box over the tools: typing hides the ones whose name does not match, Enter
+    // takes the first one left, Escape empties it.
+    const find = make('input', { type: 'search', className: 'uml-tool-search', placeholder: 'Search tools', value: toolQuery, spellcheck: false, ariaLabel: 'Search the tools' });
+    const filter = () => {
+      const q = toolQuery.trim().toLowerCase();
+      for (const b of list.querySelectorAll('.uml-tool')) b.hidden = !!q && !(b.querySelector('span')?.textContent || '').toLowerCase().includes(q);
+    };
+    find.oninput = () => { toolQuery = find.value; filter(); };
+    find.onkeydown = (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); list.querySelector('.uml-tool:not([hidden])')?.click(); }
+      else if (ev.key === 'Escape' && find.value) { ev.preventDefault(); ev.stopPropagation(); find.value = toolQuery = ''; filter(); }
+    };
+    filter();
+    palette.replaceChildren(...[sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), find, list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
@@ -711,7 +725,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     applyView();
   }
   const center = () => (view ? [view[0] + view[2] / 2, view[1] + view[3] / 2] : [200, 150]);
-  // The arrow handle beside an element: drag it to another element to connect them, or to empty
+  // The arrow handle by an element's top right corner: drag it to another element to connect them, or to empty
   // canvas to add a new element there, connected (how trees and automata grow).
   function connectHandle(e, k) {
     const [x, y, w, h] = fitBounds(e);
@@ -719,7 +733,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     g.setAttribute('class', 'uml-connect');
     g.dataset.handle = 'connect';
     g.dataset.for = e.id;
-    const cx = x + w + 16 * k, cy = y + h / 2, r = 9 * k;
+    // Just outside the top right corner (as in Visual Paradigm), clear of the element's words.
+    const cx = x + w + 16 * k, cy = y + 9 * k, r = 9 * k;
     const dot = document.createElementNS(SVG, 'circle');
     Object.entries({ cx, cy, r }).forEach(([a, v]) => dot.setAttribute(a, v));
     const arrow = document.createElementNS(SVG, 'path');
@@ -929,7 +944,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const pt = toModel(ev);
     const handle = ev.target.closest?.('[data-handle]')?.dataset.handle;
     const hit = ev.target.closest?.('[data-uml-id]');
-    const id = hit?.dataset.umlId, kind = hit?.dataset.umlKind;
+    const near = lineInstead(hit, pt);
+    const id = near ? near.id : hit?.dataset.umlId, kind = near ? 'connector' : hit?.dataset.umlKind;
     svg.setPointerCapture(ev.pointerId);
     if (tool.kind === 'element') { place(tool.type, pt); return; }
     if (tool.kind === 'connector') {
@@ -990,7 +1006,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (kind === 'endText') {
       selected = { kind: 'connector', id };
       const c = model.connectors.find((q) => q.id === id), key = `${hit.dataset.umlEnd}TextOffset`;
-      drag = { mode: 'endText', c, key, start: pt, offset: [...(c.props[key] || [0, 0])], snapped: false };
+      drag = { mode: 'endText', c, key, end: hit.dataset.umlEnd, start: pt, offset: [...(c.props[key] || [0, 0])], snapped: false, click: true };
       changed();
       return;
     }
@@ -998,7 +1014,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (kind === 'label') {
       selected = { kind: 'connector', id };
       const c = model.connectors.find((q) => q.id === id);
-      drag = { mode: 'label', c, start: pt, offset: [...(c.props.labelOffset || [0, 0])], snapped: false };
+      drag = { mode: 'label', c, start: pt, offset: [...(c.props.labelOffset || [0, 0])], snapped: false, click: true };
       changed();
       return;
     }
@@ -1006,7 +1022,16 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       selected = { kind: 'connector', id };
       const c = model.connectors.find((q) => q.id === id);
       // Dragging the line itself bends it where it was taken (a message moves up or down).
-      drag = CONNECTORS[c.type]?.message ? { mode: 'message', c, start: pt, y: c.props.y, snapped: false } : { mode: 'bend', c, index: segmentAt(c, pt), start: pt, snapped: false };
+      // With Shift, every bend moves together (the line keeps its shape); a level or upright
+      // stretch between two bends moves sideways, keeping its corners square.
+      const seg = segmentAt(c, pt), pts = connectorPath(model, c) || [];
+      const [p, q] = [pts[seg], pts[seg + 1]];
+      const square = seg >= 1 && seg + 1 <= c.waypoints.length && p && q && (p[0] === q[0] || p[1] === q[1]);
+      drag = CONNECTORS[c.type]?.message ? { mode: 'message', c, start: pt, y: c.props.y, snapped: false }
+        : ev.shiftKey && c.waypoints.length ? { mode: 'shiftLine', c, start: pt, from: clone(c.waypoints), snapped: false }
+        : square ? { mode: 'segment', c, index: seg - 1, axis: p[0] === q[0] ? 0 : 1, start: pt, from: clone(c.waypoints), snapped: false }
+        : { mode: 'bend', c, index: seg, start: pt, snapped: false };
+      drag.click = true;
       changed();
       return;
     }
@@ -1078,6 +1103,19 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       Object.assign(drag, { mode: 'way' });
       drag.c.waypoints[drag.index] = snapBend(drag.c, drag.index, pt);
       draw();
+    } else if (drag.mode === 'shiftLine') {
+      if (!drag.snapped && Math.hypot(dx, dy) < 3) return;
+      once();
+      drag.c.waypoints = drag.from.map(([x, y]) => [Math.round(x + dx), Math.round(y + dy)]);
+      draw();
+    } else if (drag.mode === 'segment') {
+      if (!drag.snapped && Math.hypot(dx, dy) < 3) return;
+      once();
+      const move = Math.round(drag.axis === 0 ? dx : dy), i = drag.index;
+      drag.c.waypoints = clone(drag.from);
+      drag.c.waypoints[i][drag.axis] += move;
+      drag.c.waypoints[i + 1][drag.axis] += move;
+      draw();
     } else if (drag.mode === 'reconnect') {
       const pts = connectorPath(model, drag.c) || [];
       const fixed = drag.side === 'from' ? pts.at(-1) : pts[0];
@@ -1114,6 +1152,60 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     }
     return Math.min(best, c.waypoints.length);
   }
+  // How many model units one pixel of the screen is now.
+  const pixel = () => (view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1);
+  const toSegment = (pt, a, b) => {
+    const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * (b[0] - a[0]) + (pt[1] - a[1]) * (b[1] - a[1])) / ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2 || 1)));
+    return { t, d: Math.hypot(a[0] + t * (b[0] - a[0]) - pt[0], a[1] + t * (b[1] - a[1]) - pt[1]) };
+  };
+  // The connector whose line passes within `px` pixels of `pt`, the nearest, or null.
+  function connectorNear(pt, px = 9) {
+    let best = null, bestD = px * pixel();
+    for (const c of model.connectors) {
+      const pts = connectorPath(model, c) || [];
+      for (let i = 1; i < pts.length; i++) { const { d } = toSegment(pt, pts[i - 1], pts[i]); if (d < bestD) { bestD = d; best = c; } }
+    }
+    return best;
+  }
+  // Pressed on nothing, or on a container (a system, a package…) behind a line: the line
+  // near the pointer takes it, so a line inside a box is easy to take, and to right-click.
+  function lineInstead(hit, pt) {
+    if (hit && !(hit.dataset.umlKind === 'element' && ELEMENTS[model.elements.find((q) => q.id === hit.dataset.umlId)?.type]?.container)) return null;
+    return pt ? connectorNear(pt) : null;
+  }
+  // Which part of its line `pt` is on: an end ('from' or 'to') or the middle.
+  function partOfLine(c, pt) {
+    const pts = connectorPath(model, c) || [];
+    const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+    const total = lens.reduce((a, b) => a + b, 0);
+    let at = 0, bestD = Infinity, along = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const { t, d } = toSegment(pt, pts[i - 1], pts[i]);
+      if (d < bestD) { bestD = d; along = at + t * lens[i - 1]; }
+      at += lens[i - 1];
+    }
+    const zone = Math.min(70, total * 0.3);
+    return along < zone ? 'from' : along > total - zone ? 'to' : 'middle';
+  }
+  // A click on a line: its name in the middle, the text at an end near it (a multiplicity
+  // like 1..* on an association), its words when they were clicked.
+  function clickedLine(d, ev) {
+    const c = d.c, def = CONNECTORS[c.type];
+    if (!c || ev.type !== 'pointerup') return;
+    if (d.mode === 'endText') return rename(c, d.end);
+    const part = d.mode === 'label' || def.message ? 'middle' : partOfLine(c, toModel(ev));
+    if (part !== 'middle' && (def.ends || hasEndTexts(c.type))) return rename(c, part);
+    rename(c);
+  }
+  // Drops bend `i` of `c` when it sits on (or a few pixels from) the point before or after it,
+  // or on the straight line between them.
+  function mergeBend(c, i) {
+    const pts = connectorPath(model, c) || [];
+    const p = pts[i], q = pts[i + 1], r = pts[i + 2];
+    if (!p || !q || !r) return;
+    const k = pixel();
+    if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 10 * k || Math.hypot(q[0] - r[0], q[1] - r[1]) < 10 * k || toSegment(q, p, r).d < 3 * k) c.waypoints.splice(i, 1);
+  }
   // A bend lines up with its neighbours when it is nearly level or upright with them.
   function snapBend(c, i, pt) {
     const pts = connectorPath(model, c) || [];
@@ -1121,12 +1213,24 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     const middle = (id) => { const e = model.elements.find((q) => q.id === id); if (!e) return null; const [x, y, w, h] = fitBounds(e); return [x + w / 2, y + h / 2]; };
     const prev = i === 0 ? middle(c.from) || pts[0] : pts[i];
     const next = i === c.waypoints.length - 1 ? (CONNECTORS[c.type]?.toConnector ? pts.at(-1) : middle(c.to) || pts.at(-1)) : pts[i + 2];
-    const k = view ? view[2] / Math.max(1, canvas.getBoundingClientRect().width) : 1, near = 7 * k;
+    const k = pixel(), near = 8 * k;
     let [x, y] = pt;
+    // Nearly on the point next to it: onto it (let go there, the bend goes).
+    const ends = [i === 0 ? pts[0] : pts[i], i === c.waypoints.length - 1 ? pts.at(-1) : pts[i + 2]];
+    for (const q of ends) if (q && Math.hypot(x - q[0], y - q[1]) < 10 * k) return [Math.round(q[0]), Math.round(q[1])];
+    let level = false;
     for (const q of [prev, next]) {
       if (!q) continue;
-      if (Math.abs(x - q[0]) < near) x = q[0];
-      if (Math.abs(y - q[1]) < near) y = q[1];
+      if (Math.abs(x - q[0]) < near) { x = q[0]; level = true; }
+      if (Math.abs(y - q[1]) < near) { y = q[1]; level = true; }
+    }
+    // Not level or upright with either: at 45° from one of them when nearly so.
+    if (!level) {
+      for (const q of [prev, next]) {
+        if (!q) continue;
+        const dx = x - q[0], dy = y - q[1];
+        if (Math.abs(Math.abs(dx) - Math.abs(dy)) < near * 1.5) { const r = (Math.abs(dx) + Math.abs(dy)) / 2; x = q[0] + Math.sign(dx) * r; y = q[1] + Math.sign(dy) * r; break; }
+      }
     }
     return [Math.round(x), Math.round(y)];
   }
@@ -1140,6 +1244,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     if (!drag) return;
     const d = drag;
     drag = null;
+    // A click on a line (not a drag): its words to type, by where it was clicked.
+    if (d.click && !d.snapped) return clickedLine(d, ev);
+    // A bend let go on (or nearly on) the point before or after it, or on the straight line
+    // between them, is not needed: it goes, and the line runs straight there.
+    if (d.mode === 'way' && d.snapped) mergeBend(d.c, d.index);
     if (d.mode === 'reconnect') {
       d.line?.remove();
       const pt = toModel(ev), c = d.c;
@@ -1215,10 +1324,11 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       if (c) { selected = { kind: 'connector', id: c.id }; showPanel(true); changed(); panel.querySelector(`[data-end-text="${hit.dataset.umlEnd}"]`)?.focus(); }
       return;
     }
-    if (hit?.dataset.umlKind === 'connector') {
-      const c = model.connectors.find((q) => q.id === hit.dataset.umlId);
+    const near = lineInstead(hit, pt);
+    if (near || hit?.dataset.umlKind === 'connector') {
+      const c = near || model.connectors.find((q) => q.id === hit.dataset.umlId);
       // On its words, or a message: rename it. Elsewhere on the line: a bend there.
-      if (c && (ev.target.closest('text') || CONNECTORS[c.type]?.message)) { selected = { kind: 'connector', id: c.id }; changed(); return rename(c); }
+      if (c && ((!near && ev.target.closest('text')) || CONNECTORS[c.type]?.message)) { selected = { kind: 'connector', id: c.id }; changed(); return rename(c); }
       if (!c) return;
       // A bend where it was double-clicked, between the two points it falls between.
       snapshot();
@@ -1236,7 +1346,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     }
     // (A click redraws the canvas, so the second one may land on the canvas itself.)
     const onEl = hit?.dataset.umlKind === 'element' ? model.elements.find((q) => q.id === hit.dataset.umlId) : !hit ? elementAt(pt) : null;
-    if (onEl) { if (!ELEMENTS[onEl.type]?.noName) { selected = { kind: 'element', id: onEl.id }; changed(); rename(onEl); } return; }
+    if (onEl) {
+      // On a class: the part double-clicked (its name, or that attribute or operation line).
+      const part = compartmentAt(onEl, pt);
+      if (part?.list) { selected = { kind: 'element', id: onEl.id }; changed(); return editRow(onEl, part.part, part.index); }
+      if (!ELEMENTS[onEl.type]?.noName) { selected = { kind: 'element', id: onEl.id }; changed(); rename(onEl); }
+      return;
+    }
     // On empty canvas: a new element of the diagram's first kind (a node in a node graph).
     if (!hit && !elementAt(pt)) place(DIAGRAMS[model.diagram].elements[0], pt);
   }
@@ -1322,9 +1438,13 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const stray = (ev) => { if (root.isConnected && !root.contains(ev.target) && !document.querySelector('.context-menu') && (ev.target === document.body || ev.target === document.documentElement || (ev.target instanceof Element && ev.target.contains(root)))) keys(ev); };
   document.addEventListener('keydown', stray);
   root.addEventListener('keydown', keys);
+  // Keys pressed in a field, the notes (TinyMDE) or a name being typed are words, never the
+  // editor's shortcuts (N, ?, the tools' numbers…).
+  const typingIn = (t) => t instanceof Element && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || !!t.closest('.TinyMDE, [contenteditable]:not([contenteditable="false"])'));
   function keys(ev) {
+    if (editing || typingIn(ev.composedPath?.()[0] || ev.target)) { if (!ev.ctrlKey && !ev.metaKey && !ev.altKey && ev.key.length === 1) return; }
     if (ignoreKey?.(ev)) return;
-    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || !!ev.target.isContentEditable;
+    const typing = typingIn(ev.composedPath?.()[0] || ev.target) || typingIn(document.activeElement) || !!editing;
     const mod = ev.ctrlKey || ev.metaKey;
     // Arrow keys move the selected element (Shift: ten times as far), as in drawing programs.
     const step = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[ev.key];
@@ -1622,21 +1742,28 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       }
       const swap = make('button', { type: 'button', textContent: 'Swap direction' });
       swap.onclick = () => { snapshot(); swapEnds(c); changed(); };
-      const straight = make('button', { type: 'button', textContent: 'Straighten', disabled: !c.waypoints.length });
-      straight.onclick = () => { snapshot(); c.waypoints = []; changed(); };
+      // The line's path: straight, with right angles, or around the other boxes.
+      const shapes = (def.message ? pathEntries(c).slice(0, 1) : pathEntries(c)).map((e) => { const b = make('button', { type: 'button', textContent: e.short, title: e.label, disabled: !!e.disabled }); b.onclick = e.run; return b; });
       // A plain line (no arrow, no ends) looks the same either way round: no Swap direction.
-      out.push(make('div', { className: 'uml-row' }, ...(directed(def) ? [swap] : []), straight));
+      if (directed(def)) out.push(make('div', { className: 'uml-row' }, swap));
+      out.push(make('div', { className: 'uml-row' }, ...shapes));
     }
     panel.replaceChildren(...out);
   }
   // Renames in place: a text box over the element (or the connector's label), as in Visual
   // Paradigm. Enter keeps it (Shift Enter is a new line in a note), Escape leaves it as it was.
   let editing = null;
-  function rename(target) {
+  // `end` ('from' or 'to'): a connector's text at that end instead: the multiplicity of an
+  // association's end, or the free text at the end of other lines.
+  function rename(target, end = null) {
     if (!target) return;
     const isEl = !!target.bounds;
     const def = isEl ? ELEMENTS[target.type] : CONNECTORS[target.type];
-    if (!def || (isEl && def.noName) || (!isEl && !('name' in (def.fields || {})))) return;
+    if (end && (isEl || !def || !(def.ends || hasEndTexts(target.type)))) end = null;
+    if (!def || (isEl && def.noName) || (!isEl && !end && !('name' in (def.fields || {})))) return;
+    // Where the words are kept: the name, or the end's multiplicity or text.
+    const side = end && def.ends ? (target.props[`${end}End`] ||= { role: '', multiplicity: '', navigable: false }) : null;
+    const read = () => (end ? (side ? side.multiplicity || '' : String(target.props[`${end}Text`] ?? '')) : isEl ? target.name : target.props.name || '');
     editing?.done(false);
     requestAnimationFrame(() => {
       const m = svg.getScreenCTM();
@@ -1650,16 +1777,20 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         const below = ['stickman', 'dot', 'bullseye', 'flowFinal', 'diamond', 'node', 'actorLifeline'].includes(def.shape);
         const lane = def.shape === 'lane' || def.shape === 'boundary' || def.shape === 'folder' || def.shape === 'composite' || def.shape === 'compartments' || def.shape === 'lifeline' || def.shape === 'fragment';
         box = below ? [x + w / 2 - 80, y + h + 2, 160, 26] : lane ? [x + 4, y + 4, Math.max(120, w - 8), 26] : [x + 4, y + 4, w - 8, h - 8];
+      } else if (end) {
+        const pts = connectorPath(model, target) || [[0, 0], [0, 0]];
+        const at = endTextBox(pts, end, read() || '0..*', side ? {} : { offset: target.props[`${end}TextOffset`] });
+        box = [at.anchor === 'start' ? at.x - 4 : at.x - 86, at.y - 17, 90, 24];
       } else {
         const pts = connectorPath(model, target) || [[0, 0], [0, 0]];
         const mid = pts[Math.floor((pts.length - 1) / 2)], nxt = pts[Math.floor((pts.length - 1) / 2) + 1] || mid;
         box = [(mid[0] + nxt[0]) / 2 - 70, (mid[1] + nxt[1]) / 2 - 13, 140, 26];
       }
       const p = new DOMPoint(box[0], box[1]).matrixTransform(m);
-      const area = make('textarea', { className: 'uml-rename', value: isEl ? target.name : target.props.name || '', spellcheck: false });
+      const area = make('textarea', { className: 'uml-rename', value: read(), spellcheck: false, placeholder: end ? (side ? '1..*' : 'Text') : '' });
       Object.assign(area.style, { left: `${p.x - r.left}px`, top: `${p.y - r.top}px`, width: `${Math.max(80, box[2] * k)}px`, height: `${Math.max(24, box[3] * k)}px`, fontSize: `${Math.max(11, 13 * k)}px` });
       // The text's style while it is typed, and Ctrl B / I / U to change it (as in the panel).
-      const styleObj = isEl ? target.props : target.props, styleKey = isEl ? 'nameStyle' : 'labelStyle';
+      const styleObj = side || target.props, styleKey = side ? 'style' : end ? `${end}TextStyle` : isEl ? 'nameStyle' : 'labelStyle';
       const showStyle = () => {
         const st = styleObj[styleKey] || {};
         area.style.fontWeight = st.bold ? 'bold' : '';
@@ -1678,7 +1809,9 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         if (keep && area.value !== before) {
           snapshot();
           const nextName = isEl ? (def.longName ? area.value : area.value.replace(/\s*\n\s*/g, ' ').trim()) : area.value.trim();
-          if (isEl) target.name = nextName;
+          if (side) side.multiplicity = nextName.replace(/\s+/g, ' ');
+          else if (end) { if (nextName) target.props[`${end}Text`] = nextName; else delete target.props[`${end}Text`]; }
+          else if (isEl) target.name = nextName;
           else target.props.name = nextName;
           changed();
           if (isEl && nextName && nextName !== before && project?.getOccurrences) {
@@ -1710,6 +1843,62 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         }
         if (ev.key === 'Escape') { ev.preventDefault(); done(false); }
         else if (ev.key === 'Enter' && !(ev.shiftKey && def.longName)) { ev.preventDefault(); done(true); }
+      });
+      area.addEventListener('blur', () => done(true));
+      area.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    });
+  }
+  // One line of a class's compartment (an attribute, an operation, a literal) typed in place,
+  // as written in the properties (- name: String [1]). `index` past the last: a new line.
+  // Enter keeps it and opens a new line under it, Escape leaves it, an emptied line goes.
+  function editRow(e, key, index, fresh = false) {
+    const list = { attributes: 'attribute', operations: 'operation', literals: 'literal' }[key];
+    if (!list) return;
+    editing?.done(false);
+    requestAnimationFrame(() => {
+      const m = svg.getScreenCTM();
+      if (!m) return;
+      const rows = (e.props[key] ||= []);
+      const adding = fresh || index >= rows.length;
+      // Where the line is drawn (a new one: where it will be).
+      if (adding && !fresh) index = rows.length;
+      const box = compartmentRow(e, key, index) || fitBounds(e);
+      const r = canvas.getBoundingClientRect(), k = m.a || 1;
+      const p = new DOMPoint(box[0], box[1]).matrixTransform(m);
+      const area = make('textarea', { className: 'uml-rename uml-row-edit', value: adding ? '' : formatLine(list, rows[index]), spellcheck: false, placeholder: LISTS[list]?.example || '' });
+      Object.assign(area.style, { left: `${p.x - r.left}px`, top: `${p.y - r.top}px`, width: `${Math.max(160, box[2] * k)}px`, height: `${Math.max(22, box[3] * k)}px`, fontSize: `${Math.max(11, 13 * k)}px`, textAlign: 'left' });
+      canvas.append(area);
+      area.focus();
+      area.select();
+      const before = area.value;
+      const done = (keep, next = false) => {
+        if (editing?.area !== area) return;
+        editing = null;
+        area.remove();
+        const text = area.value.replace(/\s*\n\s*/g, ' ').trim();
+        let changedRows = false;
+        if (keep && text !== before.trim()) {
+          snapshot();
+          if (!text) { if (!adding) rows.splice(index, 1); }
+          else {
+            const row = parseLine(list, text);
+            const style = !adding && rows[index]?.style;
+            if (style) row.style = style;
+            if (adding) rows.splice(index, 0, row); else rows[index] = row;
+          }
+          changedRows = true;
+          changed();
+        }
+        canvas.focus({ preventScroll: true });
+        // Enter: on to a new line under this one (not after an empty new line).
+        if (next && (text || !adding)) editRow(e, key, index + 1, true);
+        return changedRows;
+      };
+      editing = { area, done };
+      area.addEventListener('keydown', (ev) => {
+        ev.stopPropagation();
+        if (ev.key === 'Escape') { ev.preventDefault(); done(false); }
+        else if (ev.key === 'Enter') { ev.preventDefault(); done(true, !ev.shiftKey); }
       });
       area.addEventListener('blur', () => done(true));
       area.addEventListener('pointerdown', (ev) => ev.stopPropagation());
@@ -1753,6 +1942,23 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     // After the click that ends this press, which would close a menu opened now.
     const [x, y] = [ev.clientX, ev.clientY];
     setTimeout(() => menu(x, y, [entry(d.type), '-', ...types.filter((t) => t !== d.type).map(entry)], { title: 'Connect as' }), 0);
+  }
+  // The ways a connector's line can go, for its menu and its properties: one choice, from a
+  // plain straight line to one that finds its way around the other boxes.
+  function pathEntries(c) {
+    const toLine = !!CONNECTORS[c.type]?.toConnector;
+    return [
+      { label: 'Straight line (no bends)', short: 'Straight', icon: 'minus', disabled: !c.waypoints.length, run: () => setPath(c, 'straight') },
+      { label: 'Right angles (one elbow or a step)', short: 'Right angles', icon: 'layers', run: () => setPath(c, 'square') },
+      !toLine && { label: 'Around other boxes and lines', short: 'Around boxes', icon: 'link', run: () => setPath(c, 'around') },
+    ].filter(Boolean);
+  }
+  function setPath(c, kind) {
+    const way = kind === 'straight' ? [] : kind === 'square' ? rectilinear(c) : routeAround(model, c);
+    if (!way) return say('No way around the other boxes was found: the line stays as it was.');
+    snapshot();
+    c.waypoints = way;
+    changed();
   }
   // Right-angled bends between a connector's two ends (one elbow, or two for a step).
   function rectilinear(c) {
@@ -1923,8 +2129,10 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   // --- Menu at the pointer: right-click, or a long press ------------------------------
   function menuAt(x, y, pt) {
     const hit = document.elementFromPoint(x, y)?.closest?.('[data-uml-id]');
-    const e = hit?.dataset.umlKind === 'element' ? model.elements.find((q) => q.id === hit.dataset.umlId) : !hit && pt ? elementAt(pt) : null;
-    const c = ['connector', 'label', 'endText'].includes(hit?.dataset.umlKind) ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null;
+    // A line near the pointer comes before the system or package behind it.
+    const near = lineInstead(hit, pt);
+    const e = near ? null : hit?.dataset.umlKind === 'element' ? model.elements.find((q) => q.id === hit.dataset.umlId) : !hit && pt ? elementAt(pt) : null;
+    const c = near || (['connector', 'label', 'endText'].includes(hit?.dataset.umlKind) ? model.connectors.find((q) => q.id === hit.dataset.umlId) : null);
     if (e || c) { selected = { kind: e ? 'element' : 'connector', id: (e || c).id }; changed(); }
     else if (selected) { selected = null; changed(); }
     const props = { label: 'Properties…', icon: 'settings', run: () => showPanel(true) };
@@ -1976,6 +2184,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
       const def = CONNECTORS[c.type];
       return menu(x, y, [
         'name' in (def.fields || {}) && { label: 'Rename', icon: 'text', key: 'F2', run: () => rename(c) },
+        // The words at each end (also a click near that end of the line).
+        ...((def.ends || hasEndTexts(c.type)) ? [['from', 'start'], ['to', 'end']].map(([end, where]) => ({ label: def.ends ? `Multiplicity at the ${where}` : `Text at the ${where}`, icon: 'text', run: () => rename(c, end) })) : []),
         props,
         !def.toConnector && { label: 'Type', icon: 'link', submenu: DIAGRAMS[model.diagram].connectors.filter((t) => !CONNECTORS[t].toConnector).map((t) => ({ label: CONNECTORS[t].label, iconEl: umlIcon('connector', t), checked: t === c.type, run: () => retype(c, t) })) },
         directed(def) && !def.toConnector && { label: 'Swap direction', icon: 'swap', run: () => { snapshot(); swapEnds(c); changed(); } },
@@ -1985,8 +2195,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
         !def.message && { label: 'Line', iconEl: lineIcon(headsOf(c).line), submenu: () => ['solid', 'dashed'].map((l) => ({ label: l === 'solid' ? 'Solid' : 'Dashed', iconEl: lineIcon(l), checked: headsOf(c).line === l, run: () => setProp(c, 'line', l) })) },
         (c.props.headFrom || c.props.headTo || c.props.line) && { label: 'Default heads', icon: 'restart', run: () => { snapshot(); delete c.props.headFrom; delete c.props.headTo; delete c.props.line; changed(); } },
         '-',
-        { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => { snapshot(); c.waypoints = []; changed(); } },
-        !def.message && { label: 'Make rectilinear', icon: 'layers', run: () => { snapshot(); c.waypoints = rectilinear(c); changed(); } },
+        def.message ? { label: 'Straighten', icon: 'minus', disabled: !c.waypoints.length, run: () => setPath(c, 'straight') } : { label: 'Path', icon: 'layers', submenu: () => pathEntries(c) },
         { label: 'Label back beside the line', icon: 'restart', disabled: !c.props.labelOffset, run: () => { snapshot(); delete c.props.labelOffset; changed(); } },
         (c.props.fromTextOffset || c.props.toTextOffset) && { label: 'End texts back by their ends', icon: 'restart', run: () => { snapshot(); delete c.props.fromTextOffset; delete c.props.toTextOffset; changed(); } },
         '-', ...styleEntries(c),
@@ -2036,7 +2245,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
           { icon: 'draw', does: 'Drag a line: bend it · hollow dot: another bend · double-click a bend: remove it' },
           { icon: 'link', does: 'Drag a selected line\'s end onto another element: reconnect it' },
           { icon: 'text', does: 'Double-click: rename · on empty canvas: a new element' },
-          { icon: 'settings', does: 'Right-click or hold: the menu (type, straighten, rectilinear, colour…)' },
+          { icon: 'settings', does: 'Right-click or hold: the menu (type, path: straight, right angles or around boxes, colour…)' },
           { icon: 'arrowRight', does: 'Right-click a line: any type, the head at each end, solid or dashed' },
           { icon: 'pan', does: 'Drag empty canvas or the middle button: pan · Ctrl wheel: zoom' },
         ] },
