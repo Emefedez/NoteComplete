@@ -72,6 +72,8 @@ export function officeViewer({
   confirmLossy = (name, copyName) => (globalThis.confirm?.(`Editing "${name}" in place may lose some formatting.\n\nOK: save in place\nCancel: save as a new ${copyName} copy beside it`) ? 'in-place' : 'copy'),
   onSaveBytes = async () => ({ savedName: '' }),
   onOpenAsText = () => {},
+  // A file the text view does not open itself but can go back to (a document made from Markdown).
+  canOpenAsText = () => false,
   onDirtyChange = () => {},
   onStatus = () => {},
 } = {}) {
@@ -110,7 +112,7 @@ export function officeViewer({
     if (title) title.textContent = file.name;
     setState('Starting Euro-Office…');
     if (textBtn) {
-      textBtn.hidden = !textViewOpens(file.name);
+      textBtn.hidden = !(textViewOpens(file.name) || canOpenAsText(file));
       textBtn.onclick = async () => {
         const currentFile = active?.file || file;
         await close({ save: true });

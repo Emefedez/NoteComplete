@@ -122,6 +122,41 @@ try {
   const saved = await q.evaluate(() => window.__officeOpened[0]);
   assert.equal(saved.name, 'saved notes.md');
   assert.match(saved.text, /^# Saved/);
+
+  // backlog.md in Euro-Office, then Open as text (same spot): back to the Markdown as it was,
+  // prefab still SVG, unsaved edit kept.
+  const r = await b.newPage({ viewport: { width: 1300, height: 850 } });
+  r.on('pageerror', (e) => errors.push(e.message));
+  r.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+  await r.addInitScript(() => {
+    window.__officeOpened = [];
+    window.notecompleteOffice = {
+      status: async () => ({ installed: true, state: 'installed', fontsGenerated: true }),
+      open: ({ name, bytes }) => { window.__officeOpened.push({ name, text: new TextDecoder().decode(bytes) }); return new Promise(() => {}); },
+      close: async () => ({ ok: true }),
+    };
+  });
+  await openReader(r, server.origin);
+  const svgLine = '![Box](data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2210%22%20height%3D%2210%22%3E%3C%2Fsvg%3E)';
+  await r.setInputFiles('#file', { name: 'backlog.md', mimeType: 'text/markdown', buffer: Buffer.from(`# Backlog\n\n${svgLine}\n`) });
+  await r.waitForSelector('#textView:not([hidden]) #textBody h1');
+  await r.click('#textEdit');
+  await r.waitForSelector('#textEditor .TinyMDE');
+  await r.locator('#textEditor .TinyMDE > div').first().click();
+  await r.keyboard.press('End');
+  await r.keyboard.type(' v2');
+  await sleep(300);
+  await r.click('#textOpenOffice:visible');
+  await r.waitForFunction(() => window.__officeOpened.length > 0);
+  assert.match((await r.evaluate(() => window.__officeOpened[0])).text, /data:image\/png/);
+  await r.waitForSelector('#officeOpenText:visible');
+  const textBox = await r.locator('#officeOpenText').boundingBox();
+  assert.ok(textBox.x + textBox.width > 1200, 'at the far right');
+  await r.click('#officeOpenText');
+  await r.waitForSelector('#textView:not([hidden]) #textBody h1');
+  const back = await r.evaluate(() => ({ h1: document.querySelector('#textBody h1').textContent, svg: !!document.querySelector('#textBody img[src^="data:image/svg+xml"]'), title: document.getElementById('textTitle').textContent }));
+  assert.deepEqual(back, { h1: 'Backlog v2', svg: true, title: 'backlog' });
+  assert.deepEqual(dialogs, []);
   assert.deepEqual(errors.filter((e) => !/Failed to load resource|stub/.test(e)), []);
   console.log('Markdown prefabs end to end: passed.');
 
