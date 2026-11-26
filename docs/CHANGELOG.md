@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.7
+
+- **Theme editor.** **View ▸ More themes…** now has **Edit colours**, as in R Commander Studio: each colour of the interface (panels, bars, menus, behind the pages, buttons, text, accent, lines…) with a colour picker and its hex code. Changes show at once and are kept with the chosen theme; **Reset colours** goes back to the theme's own. **Copy JSON** and **Paste JSON…** keep or share a theme, and a theme copied from R Commander Studio pastes in too.
+- **A larger Setup wizard.** The window is bigger and the theme cards sit five to a row, so the Look step shows every theme without scrolling.
+
 ## 2.0.6
 
 - **Back from Euro-Office to your Markdown.** After opening a Markdown file (such as *backlog.md*) in Euro-Office, **Open as text** at the far right of the bar takes you back to it: the same file, where it is saved, with its prefabs still editable and any edits you had not saved yet. Before, there was no way back.

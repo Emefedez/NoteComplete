@@ -40,7 +40,7 @@ jobs:
       # The sharing server's packages (ws, yjs); Electron itself is not needed for the tests.
       - run: npm ci --ignore-scripts
         working-directory: apps/desktop
-      - run: node --test apps/reader/*.test.mjs apps/reader/chinese/*.test.mjs apps/reader/prefabs/*/test/*.test.mjs apps/desktop/*.test.mjs
+      - run: node --test apps/reader/*.test.mjs apps/reader/math/*.test.mjs apps/reader/chinese/*.test.mjs apps/reader/prefabs/*/test/*.test.mjs apps/desktop/*.test.mjs
       - run: node apps/reader/test.mjs
       - run: node apps/desktop/stage.mjs
       - uses: actions/upload-artifact@v4

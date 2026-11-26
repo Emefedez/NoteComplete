@@ -2,6 +2,8 @@
 // write (polynomials, fractions, roots, powers, trigonometry, exponentials and logarithms,
 // absolute values, implicit products like 2x or x\sin x). Parsed into closures: no eval, so
 // it runs under the app's content security policy. Anything else is refused with a reason.
+import { normalizeUnicodeMath } from './math/unicode-math.js';
+
 const FUNCTIONS = {
   sin: Math.sin, cos: Math.cos, tan: Math.tan, cot: (v) => 1 / Math.tan(v), sec: (v) => 1 / Math.cos(v), csc: (v) => 1 / Math.sin(v),
   arcsin: Math.asin, arccos: Math.acos, arctan: Math.atan, sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
@@ -11,7 +13,7 @@ const CONSTANTS = { pi: Math.PI };
 
 // The right side of `y = …`, `f(x) = …` or a bare expression.
 export function functionSource(tex) {
-  const source = String(tex ?? '').replace(/^\s*\$+|\$+\s*$/g, '').trim();
+  const source = normalizeUnicodeMath(tex).replace(/^\s*\$+|\$+\s*$/g, '').trim();
   const parts = source.split('=');
   if (parts.length === 1) return source;
   if (parts.length === 2 && /^\s*(y|[a-zA-Z](\s*\\left)?\s*\(\s*x\s*(\\right)?\s*\))\s*$/.test(parts[0])) return parts[1].trim();

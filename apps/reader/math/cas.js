@@ -2,6 +2,8 @@
 // Parses LaTeX or plain expressions into an AST supporting numeric evaluation, exact symbolic
 // differentiation, algebraic simplification, adaptive Simpson definite integration, and root solving.
 
+import { normalizeUnicodeMath } from './unicode-math.js';
+
 const TRIG_FUNCS = new Set(['sin', 'cos', 'tan', 'cot', 'sec', 'csc']);
 const INV_TRIG_FUNCS = new Set(['asin', 'acos', 'atan', 'arcsin', 'arccos', 'arctan']);
 const ALL_FUNCS = new Set([
@@ -31,13 +33,8 @@ function binom(n, k) {
 
 // Convert common LaTeX constructs into a clean expression token stream.
 function preprocessLatex(raw) {
-  let s = String(raw ?? '')
+  let s = normalizeUnicodeMath(raw)
     .replace(/^\s*\$+|\$+\s*$/g, '')
-    .replace(/−/g, '-')
-    .replace(/×/g, '*')
-    .replace(/·/g, '*')
-    .replace(/÷/g, '/')
-    .replace(/π/g, '\\pi ')
     .replace(/\\(left|right|displaystyle|textstyle|bigl?|bigr?|Bigl?|Bigr?)\b/g, '')
     .replace(/\\[,;:! ]|~/g, ' ')
     .replace(/\\operatorname\{([A-Za-z]+)\}/g, '\\$1')
@@ -77,13 +74,16 @@ function tokenize(raw) {
         tokens.push({ t: word === 'pi' || word === 'tau' ? 'const' : 'func', v: word });
         i += word.length;
       } else {
-        // Single-letter variables so `2xy` parses as `2 * x * y`
-        tokens.push({ t: 'var', v: c });
-        i += 1;
+        // Single-letter variables so `2xy` parses as `2 * x * y`; an index stays on its
+        // letter, so x_1 (or x₁) and x_{12} are variables of their own.
+        const index = /^_(?:\{[A-Za-z0-9]+\}|[A-Za-z0-9])/.exec(s.slice(i + 1));
+        const name = index ? `${c}_{${index[0].replace(/^_\{?|\}$/g, '')}}` : c;
+        tokens.push({ t: 'var', v: name });
+        i += 1 + (index ? index[0].length : 0);
       }
       continue;
     }
-    if ('+-*/^()[]{},|!'.includes(c)) {
+    if ('+-*/^_()[]{},|!'.includes(c)) {
       tokens.push({ t: c, v: c });
       i++;
       continue;
@@ -177,6 +177,14 @@ export function parseAst(raw) {
     return [parsePower()];
   }
 
+  // log_b(x), log₂ x, \log_{10} x: the change of base ln x / ln b.
+  function parseLogBase() {
+    next();
+    const base = parseGroup();
+    const [arg] = parseFuncArg();
+    return { type: 'bin', op: '/', left: { type: 'call', name: 'ln', args: [arg] }, right: { type: 'call', name: 'ln', args: [base] } };
+  }
+
   function parseAtom() {
     const tok = next();
     if (!tok) throw new Error('Expression ended unexpectedly.');
@@ -198,6 +206,7 @@ export function parseAst(raw) {
       return { type: 'call', name: 'abs', args: [e] };
     }
     if (tok.t === 'func') {
+      if (tok.v === 'log' && peek()?.t === '_') return parseLogBase();
       const args = parseFuncArg();
       return { type: 'call', name: tok.v, args };
     }
@@ -220,12 +229,7 @@ export function parseAst(raw) {
       }
       if (ALL_FUNCS.has(tok.v)) {
         // Optional subscript on \log_b(x)
-        if (tok.v === 'log' && peek()?.t === '_') {
-          next();
-          const base = parseGroup();
-          const [arg] = parseFuncArg();
-          return { type: 'bin', op: '/', left: { type: 'call', name: 'ln', args: [arg] }, right: { type: 'call', name: 'ln', args: [base] } };
-        }
+        if (tok.v === 'log' && peek()?.t === '_') return parseLogBase();
         return { type: 'call', name: tok.v, args: parseFuncArg() };
       }
       throw new Error(`Unsupported command “\\${tok.v}”.`);

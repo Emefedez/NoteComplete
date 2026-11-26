@@ -46,3 +46,9 @@ test('what cannot be drawn says why', () => {
   assert.throws(() => compileFunction(''), /Nothing/);
   assert.throws(() => compileFunction('(x+1'), /Missing/);
 });
+
+test('the graph reads Unicode math too: x², ×, −, √, π', () => {
+  assert.equal(compileFunction('y = x² − 1')(3), 8);
+  assert.equal(compileFunction('2 × √x')(9), 6);
+  assert.ok(Math.abs(compileFunction('\\sin(πx)')(0.5) - 1) < 1e-12);
+});
