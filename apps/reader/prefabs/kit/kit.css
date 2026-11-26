@@ -23,6 +23,8 @@
 .pk-main.with-palette { grid-template-columns: var(--pk-left, 140px) minmax(0, 1fr); }
 .pk-main.with-panel { grid-template-columns: minmax(0, 1fr) var(--pk-right, 280px); }
 .pk-main.with-palette.with-panel { grid-template-columns: var(--pk-left, 140px) minmax(0, 1fr) var(--pk-right, 280px); }
+.pk-main:not(.with-palette) > .pk-palette { display: none; }
+.pk-main:not(.with-panel) > .pk-panel { display: none; }
 .pk-palette { overflow: auto; padding: 6px; border-right: 1px solid var(--k-line); display: flex; flex-direction: column; gap: 2px; }
 .pk-canvas { min-width: 0; min-height: 0; overflow: auto; padding: 12px; background: var(--k-surface); outline: none; touch-action: none; display: grid; place-items: center; }
 .pk-canvas > svg { max-width: 100%; height: auto; background: #fff; border-radius: 6px; }
@@ -69,6 +71,24 @@
 .panel-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 1px; background: transparent; transition: background .12s; }
 .panel-grip:hover::after, .panel-grip.dragging::after { left: 2px; width: 3px; background: var(--k-accent, var(--c-accent, var(--u-accent, var(--accent, #245dc4)))); }
 body.panel-resizing { cursor: col-resize; user-select: none; -webkit-user-select: none; }
+/* Collapsible sidebar edge tab (left/right arrow handle, like the Pages panel tab). */
+.panel-collapse-tab {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 4;
+  display: grid; place-items: center; width: 18px; min-width: 18px; height: 44px; min-height: 44px; padding: 0;
+  border: 1px solid var(--k-line, var(--u-line, var(--line, #dce0e5)));
+  background: var(--k-chrome, var(--u-chrome, var(--chrome, #f7f8fa)));
+  color: var(--k-muted, var(--u-muted, var(--muted, #626b76)));
+  box-shadow: 0 2px 6px #00000018; cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+}
+.panel-collapse-tab:hover {
+  background: var(--k-soft, var(--u-soft, var(--accent-soft, #eaf0fc)));
+  color: var(--k-accent, var(--u-accent, var(--accent, #245dc4)));
+  border-color: var(--k-accent, var(--u-accent, var(--accent, #245dc4)));
+}
+.panel-collapse-tab svg { width: 13px; height: 13px; display: block; }
+.panel-collapse-tab[data-side="left"] { border-left: 0; border-radius: 0 7px 7px 0; }
+.panel-collapse-tab[data-side="right"] { border-right: 0; border-radius: 7px 0 0 7px; }
+@container pk-editor (max-width: 640px) { .pk-main > .panel-collapse-tab { display: none; } }
 /* … and where a hovering pen points (editor-touch.js). */
 .pen-hover-ring { position: fixed; left: 0; top: 0; z-index: 2147483000; width: 10px; height: 10px; margin: -6px 0 0 -6px; border: 1.5px solid #0a84ff; border-radius: 50%; background: #0a84ff22; pointer-events: none; }
 .pen-hover-ring[hidden] { display: none; }

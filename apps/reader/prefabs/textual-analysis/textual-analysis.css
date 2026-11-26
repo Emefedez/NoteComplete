@@ -24,17 +24,29 @@
 .ta-table { overflow: auto; min-height: 0; background: var(--k-surface); }
 .ta-table table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .ta-table th { position: sticky; top: 0; z-index: 1; padding: 5px 6px; text-align: left; font-weight: 600; color: var(--k-muted); background: var(--k-chrome); border-bottom: 1px solid var(--k-line); white-space: nowrap; }
-.ta-table td { padding: 3px 5px; border-bottom: 1px solid var(--k-line); vertical-align: middle; }
+.ta-table td { padding: 4px 5px; border-bottom: 1px solid var(--k-line); vertical-align: top; }
 .ta-table tr.selected td { background: var(--k-soft); }
-.ta-table td input[type="text"], .ta-table td textarea { width: 100%; min-width: 90px; box-sizing: border-box; border: 1px solid transparent; background: transparent; padding: 2px 5px; border-radius: 5px; }
-.ta-table td input[type="text"]:hover, .ta-table td textarea:hover, .ta-table td input[type="text"]:focus, .ta-table td textarea:focus { border-color: var(--k-line); background: var(--k-surface); }
-.ta-table td textarea { resize: vertical; min-width: 160px; font: inherit; }
-.ta-table .ta-no, .ta-table .ta-occ { text-align: center; color: var(--k-muted); width: 1%; white-space: nowrap; }
+.ta-table td input[type="text"], .ta-table td textarea { width: 100%; min-width: 90px; box-sizing: border-box; border: 1px solid transparent; background: transparent; padding: 3px 6px; border-radius: 5px; font: inherit; line-height: 1.4; }
+.ta-table td input[type="text"]:hover, .ta-table td textarea:hover { border-color: var(--k-line); background: var(--k-surface); }
+.ta-table td input[type="text"]:focus, .ta-table td textarea:focus { border-color: var(--k-accent); background: var(--k-surface); outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--k-accent) 18%, transparent); }
+.ta-table td textarea.ta-cell-area { display: block; resize: none; overflow: hidden; min-height: 26px; min-width: 140px; white-space: pre-wrap; word-break: break-word; }
+.ta-table td textarea.ta-cell-area.ta-desc { min-width: 170px; }
+.ta-table td textarea.ta-cell-area:focus { min-height: 54px; overflow: auto; resize: vertical; }
+.ta-table .ta-no, .ta-table .ta-occ { text-align: center; color: var(--k-muted); width: 1%; white-space: nowrap; padding-top: 7px; }
 .ta-table .ta-occ { color: var(--k-ink); font-variant-numeric: tabular-nums; }
-.ta-table .ta-type { white-space: nowrap; }
+.ta-table .ta-type { white-space: nowrap; padding-top: 5px; }
 .ta-table .ta-type select { margin-left: 4px; min-height: 24px; }
-.ta-table .ta-hl input[type="color"] { width: 44px; height: 22px; padding: 0; border: 1px solid var(--k-line); border-radius: 4px; background: none; cursor: pointer; }
-.ta-table .ta-actions { white-space: nowrap; width: 1%; }
+.ta-table .ta-hl { text-align: center; padding-top: 5px; width: 1%; white-space: nowrap; }
+.ta-hl-pill { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 18px; padding: 0; border: 1px solid #00000028; border-radius: 999px; cursor: pointer; vertical-align: middle; transition: transform .1s, box-shadow .12s; }
+.ta-hl-pill:hover, .ta-hl-pill:focus-visible { transform: scale(1.08); box-shadow: 0 0 0 2px var(--k-accent); outline: none; }
+.ta-color-pop { position: fixed; z-index: 120; padding: 8px; border: 1px solid var(--k-line); border-radius: 10px; background: var(--k-surface); box-shadow: 0 10px 28px #0003, 0 2px 6px #0002; display: grid; gap: 8px; width: 176px; }
+.ta-color-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ta-color-swatch { width: 32px; height: 22px; padding: 0; border: 1.5px solid #00000022; border-radius: 999px; cursor: pointer; transition: transform .1s, border-color .1s; }
+.ta-color-swatch:hover { transform: scale(1.1); border-color: var(--k-ink); }
+.ta-color-swatch.active { border: 2px solid var(--k-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--k-accent) 28%, transparent); }
+.ta-color-custom { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 6px; border-top: 1px solid var(--k-line); font-size: 12px; color: var(--k-muted); cursor: pointer; }
+.ta-color-custom input[type="color"] { width: 28px; height: 20px; padding: 0; border: 1px solid var(--k-line); border-radius: 5px; background: none; cursor: pointer; }
+.ta-table .ta-actions { white-space: nowrap; width: 1%; padding-top: 5px; }
 .ta-table .ta-actions .pk-button { min-height: 22px; padding: 1px 4px; border-color: transparent; background: transparent; }
 .ta-empty { margin: 10px 12px; color: var(--k-muted); font-size: 12.5px; }
 .ta-page { flex: 1; overflow: auto; padding: 14px; display: grid; place-items: start center; }

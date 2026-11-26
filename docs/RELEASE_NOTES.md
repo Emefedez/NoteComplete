@@ -1,3 +1,10 @@
+## What's new in 1.2.98
+
+- **Textual Analysis polish.** New Textual Analysis prefabs now start blank instead of prefilled with an example; Extracted Text and Description cells expand vertically on click to show their full text cleanly; highlight colours now use a rounded pill swatch with 12 pastel presets plus a custom picker.
+- **Grab from Textual Analysis in UML & bidirectional linking.** The UML editor now includes a scrollable, collapsible **Textual Analysis** sidebar to relate any analysis prefab in the note or a `.json` analysis file, sync missing classes/attributes/operations, group parameters/attributes (including promoting multi-valued attributes like `numeroTelefono` to `NumeroTelefono` with `- numeroTelefono`), and create a linked Textual Analysis or UML diagram directly from the other.
+- **Collapsible prefab sidebars.** Left and right sidebars in the UML editor and prefab editors now have arrow edge tabs (like the Pages panel) to collapse and expand them.
+- **Help → Check for updates (branch)…** Renamed from *Update from a branch (beta)…* to match *Check for updates…*.
+
 ## What's new in 1.2.97
 
 - **Cancel resizing by dragging.** Resizing a page by dragging its borders now has a × next to Done. It puts the page back to the size it had before you started dragging, however many drags you made; Done and Esc still keep the new size.

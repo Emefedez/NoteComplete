@@ -4,7 +4,27 @@ import { readFileSync } from 'node:fs';
 import { normalize, findOccurrences, occurrences, classify, candidateAt, removeCandidate, update, setText, merge, move, suggestName, nextColour, textBlocks, PALETTE } from '../model.js';
 import { render } from '../render.js';
 
-const card = JSON.parse(readFileSync(new URL('../module.json', import.meta.url))).prefabs[0].spec;
+const defaultSpec = JSON.parse(readFileSync(new URL('../module.json', import.meta.url))).prefabs[0].spec;
+const card = {
+  type: 'textual-analysis',
+  title: 'Actividades Aventura',
+  show: 'both',
+  match: { plural: false, accents: false },
+  text: 'Se quiere desarrollar una aplicación =={.red}(la aplicación NO es una clase)== para gestionar **actividades de aventura** y las reservas de los clientes.\n\n- De cada cliente será necesario disponer de la siguiente información:\n  - Nombre de cliente, fecha de nacimiento y una única dirección de correo electrónico.\n  - Dirección postal: estará compuesta por calle, número, piso, código postal, localidad, municipio y provincia.\n  - Uno o más números de teléfono. Cada teléfono sólo podrá estar asociado a un único cliente.\n- Un cliente puede reservar plazas en varias actividades de aventura; cada reserva es de un solo cliente.\n- De cada actividad de aventura se guarda su nombre, la fecha y el número de plazas libres.\n- Si el cliente cancela una reserva, la plaza queda libre para otro cliente, y se le avisa por correo electrónico.',
+  candidates: [
+    { name: 'ActividadAventura', text: 'actividades de aventura', aliases: ['actividad de aventura'], kind: 'class', description: '', folder: 'Clases', order: 0 },
+    { name: 'Cliente', text: 'cliente', kind: 'class', description: '', folder: 'Clases', order: 1 },
+    { name: 'ReservaPlaza', text: 'las reservas de los clientes', kind: 'class', description: '', folder: 'Clases', order: 2 },
+    { name: 'nombreCliente', text: 'Nombre de cliente', kind: 'attribute', description: '', owner: 'Cliente', order: 3 },
+    { name: 'DireccionPostal', text: 'Dirección postal', kind: 'class', description: 'Al no ser atómico y tener atributos dentro, es clase y no atributo', folder: 'Clases', order: 4 },
+    { name: 'numeroTelefono', text: 'números de teléfono', kind: 'class', description: 'Uno o más por cliente', folder: 'Clases', order: 5 },
+  ],
+};
+
+test('the default Textual Analysis prefab starts empty (no prefilled example)', () => {
+  assert.equal(defaultSpec.text, '');
+  assert.deepEqual(defaultSpec.candidates, []);
+});
 
 test('the sample statement: every candidate counted where its words appear', () => {
   const model = normalize(card);
@@ -105,4 +125,38 @@ test('Create UML diagrams: classes with their members, actors and use cases, lin
   assert.ok(renderUml(cls).svg.includes('Book') && renderUml(uc).svg.includes('Borrow book'));
   // Candidate ids are stable: the same spec gives the same ids.
   assert.deepEqual(normalize({ text: 'a', candidates: [{ text: 'cliente' }] }).candidates[0].id, normalize({ text: 'b', candidates: [{ text: 'Cliente' }] }).candidates[0].id);
+});
+
+test('groupAnalysisCandidates, makeClassFromAttribute, and syncDiagramWithAnalysis support UML sidebar workflows', async () => {
+  const { groupAnalysisCandidates, makeClassFromAttribute, syncDiagramWithAnalysis } = await import('../uml-from.js');
+  const { starterModel, normalizeModel } = await import('../../../uml.js');
+  const analysis = normalize({
+    title: 'Aventura',
+    text: 'cliente nombreCliente numeroTelefono',
+    candidates: [
+      { name: 'Cliente', text: 'cliente', kind: 'class' },
+      { name: 'nombreCliente', text: 'nombre cliente', kind: 'attribute' },
+      { name: 'numeroTelefono', text: 'numero telefono', kind: 'attribute' },
+      { name: 'email', text: 'email', kind: 'attribute', owner: 'Cliente' },
+    ],
+  });
+  const grouped = groupAnalysisCandidates(analysis);
+  assert.equal(grouped.classes.length, 1);
+  assert.deepEqual(grouped.classes[0].attributes.map((a) => a.name), ['email']);
+  assert.deepEqual(grouped.classes[0].suggestedAttributes.map((a) => a.name), ['nombreCliente']);
+  assert.deepEqual(grouped.looseAttributes.map((a) => a.name), ['nombreCliente', 'numeroTelefono']);
+
+  // Promoting a multi-valued attribute (numeroTelefono) creates class NumeroTelefono with - numeroTelefono.
+  const phoneClass = makeClassFromAttribute(analysis.candidates[2]);
+  assert.equal(phoneClass.name, 'NumeroTelefono');
+  assert.equal(phoneClass.props.attributes[0].name, 'numeroTelefono');
+
+  // Syncing a class diagram links origin and adds missing classes + owned attributes without duplicating.
+  const diag = normalizeModel({ ...starterModel('class'), elements: [], connectors: [] });
+  const first = syncDiagramWithAnalysis(diag, analysis);
+  assert.equal(first.addedElements, 1);
+  assert.equal(diag.origin.module, 'textual-analysis');
+  assert.equal(diag.origin.id, analysis.id);
+  const second = syncDiagramWithAnalysis(diag, analysis);
+  assert.deepEqual(second, { addedElements: 0, addedMembers: 0 });
 });

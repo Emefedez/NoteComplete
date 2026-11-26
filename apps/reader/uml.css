@@ -31,11 +31,51 @@
 .uml-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 10px; border-bottom: 1px solid var(--u-line); background: var(--u-chrome); }
 .uml-spacer { flex: 1; }
 .uml-main { display: grid; grid-template-columns: var(--u-left, 150px) minmax(0, 1fr); min-height: 0; position: relative; }
+.uml-main.palette-collapsed { grid-template-columns: minmax(0, 1fr); }
+.uml-main.palette-collapsed > .uml-palette { display: none; }
+.uml-main.with-ta { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-ta, 270px); }
+.uml-main.palette-collapsed.with-ta { grid-template-columns: minmax(0, 1fr) var(--u-ta, 270px); }
 .uml-main.with-panel { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-panel, 280px); }
-.uml-main:not(.with-panel) > .uml-panel { display: none; }
+.uml-main.palette-collapsed.with-panel { grid-template-columns: minmax(0, 1fr) var(--u-panel, 280px); }
 .uml-main.with-notes { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-notes, 300px); }
+.uml-main.palette-collapsed.with-notes { grid-template-columns: minmax(0, 1fr) var(--u-notes, 300px); }
+.uml-main.with-ta.with-panel { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-ta, 270px) var(--u-panel, 280px); }
+.uml-main.palette-collapsed.with-ta.with-panel { grid-template-columns: minmax(0, 1fr) var(--u-ta, 270px) var(--u-panel, 280px); }
 .uml-main.with-notes.with-panel { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-notes, 300px) var(--u-panel, 280px); }
+.uml-main.palette-collapsed.with-notes.with-panel { grid-template-columns: minmax(0, 1fr) var(--u-notes, 300px) var(--u-panel, 280px); }
+.uml-main.with-ta.with-notes { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-ta, 270px) var(--u-notes, 300px); }
+.uml-main.palette-collapsed.with-ta.with-notes { grid-template-columns: minmax(0, 1fr) var(--u-ta, 270px) var(--u-notes, 300px); }
+.uml-main.with-ta.with-notes.with-panel { grid-template-columns: var(--u-left, 150px) minmax(0, 1fr) var(--u-ta, 270px) var(--u-notes, 300px) var(--u-panel, 280px); }
+.uml-main.palette-collapsed.with-ta.with-notes.with-panel { grid-template-columns: minmax(0, 1fr) var(--u-ta, 270px) var(--u-notes, 300px) var(--u-panel, 280px); }
+.uml-main:not(.with-panel) > .uml-panel { display: none; }
 .uml-main:not(.with-notes) > .uml-notes { display: none; }
+.uml-main:not(.with-ta) > .uml-ta-pane { display: none; }
+.uml-ta-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--u-line); background: var(--u-chrome); overflow: hidden; }
+.uml-ta-head { flex: none; display: grid; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--u-line); }
+.uml-ta-head-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--u-muted); }
+.uml-ta-head select { width: 100%; min-height: 28px; font-size: 12.5px; }
+.uml-ta-head-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.uml-ta-head-actions button { min-height: 24px; padding: 2px 7px; font-size: 11.5px; display: inline-flex; align-items: center; gap: 4px; }
+.uml-ta-head-actions button svg { width: 13px; height: 13px; }
+.uml-ta-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 10px 16px; display: flex; flex-direction: column; gap: 8px; }
+.uml-ta-section { border: 1px solid var(--u-line); border-radius: 8px; background: var(--u-surface); overflow: hidden; }
+.uml-ta-section > summary { padding: 6px 9px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--u-muted); cursor: pointer; user-select: none; list-style: none; display: flex; align-items: center; justify-content: space-between; }
+.uml-ta-section > summary::-webkit-details-marker { display: none; }
+.uml-ta-section > summary::before { content: "▾"; margin-right: 6px; font-size: 11px; }
+.uml-ta-section:not([open]) > summary::before { content: "▸"; }
+.uml-ta-list { display: grid; gap: 2px; padding: 2px 6px 6px; }
+.uml-ta-item { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; font-size: 12.5px; }
+.uml-ta-item:hover { background: color-mix(in srgb, var(--u-ink) 5%, transparent); }
+.uml-ta-dot { width: 9px; height: 9px; border-radius: 999px; flex: none; border: 1px solid #00000028; }
+.uml-ta-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uml-ta-item button { min-height: 22px; padding: 1px 6px; font-size: 11px; flex: none; }
+.uml-ta-item button.on-canvas { color: #15803d; border-color: color-mix(in srgb, #15803d 35%, var(--u-line)); background: color-mix(in srgb, #15803d 10%, transparent); }
+.uml-ta-members { margin: 0 0 4px 16px; padding-left: 8px; border-left: 1.5px solid var(--u-line); display: grid; gap: 2px; }
+.uml-ta-member { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--u-muted); padding: 1px 3px; border-radius: 4px; }
+.uml-ta-member.suggested { font-style: italic; }
+.uml-ta-member span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.uml-ta-member button { min-height: 20px; padding: 0 5px; font-size: 10.5px; }
+.uml-ta-empty { margin: 6px 2px; font-size: 12px; color: var(--u-muted); }
 /* The drawing and its PlantUML text (uml-editor.js views): one, the other, or side by side. */
 .uml-work { display: flex; min-width: 0; min-height: 0; }
 .uml-work > .uml-canvas { flex: 1 1 0; }

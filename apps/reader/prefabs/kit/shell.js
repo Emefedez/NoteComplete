@@ -57,6 +57,50 @@ export function editorShell(root, { id = 'module', title = '', applyLabel = 'Ins
     ...(paletteEl ? [{ panel: paletteEl, variable: '--pk-left', side: 'left', key: `${id}-left`, min: 110, max: 360 }] : []),
     ...(panelEl ? [{ panel: panelEl, variable: '--pk-right', side: 'right', key: `${id}-right`, min: 200, max: 640 }] : []),
   ]);
+  // Collapsible edge tabs (little arrow tabs hugging each sidebar's inner edge, like Pages).
+  const collapseTabs = [];
+  const makeCollapseTab = (side, cls, targetEl, storeKey, label) => {
+    let open = true;
+    try { open = localStorage.getItem(`notecomplete-panel-collapsed:${storeKey}`) !== '1'; } catch { /* Optional. */ }
+    const tab = make('button', { type: 'button', className: 'panel-collapse-tab' });
+    tab.dataset.side = side;
+    const place = () => {
+      const box = main.getBoundingClientRect();
+      if (!box.width || !box.height) return;
+      if (open) {
+        const r = targetEl.getBoundingClientRect();
+        if (side === 'left') tab.style.left = `${Math.max(0, r.right - box.left)}px`;
+        else tab.style.left = `${Math.max(0, r.left - box.left - 18)}px`;
+      } else {
+        tab.style.left = side === 'left' ? '0px' : `${Math.max(0, box.width - 18)}px`;
+      }
+    };
+    const sync = () => {
+      main.classList.toggle(cls, open);
+      const arrow = side === 'left' ? (open ? 'chevronLeft' : 'chevronRight') : (open ? 'chevronRight' : 'chevronLeft');
+      tab.replaceChildren(icon(arrow));
+      tab.title = open ? `Hide ${label}` : `Show ${label}`;
+      tab.setAttribute('aria-label', tab.title);
+      tab.setAttribute('aria-expanded', String(open));
+      requestAnimationFrame(() => { sides.update(); place(); });
+    };
+    tab.onclick = () => {
+      open = !open;
+      try { localStorage.setItem(`notecomplete-panel-collapsed:${storeKey}`, open ? '0' : '1'); } catch { /* Optional. */ }
+      sync();
+    };
+    main.append(tab);
+    collapseTabs.push({ tab, place });
+    sync();
+  };
+  if (paletteEl) makeCollapseTab('left', 'with-palette', paletteEl, `${id}-left`, 'tools sidebar');
+  if (panelEl) makeCollapseTab('right', 'with-panel', panelEl, `${id}-right`, 'properties sidebar');
+  const tabObserver = typeof ResizeObserver === 'function' && collapseTabs.length ? new ResizeObserver(() => collapseTabs.forEach((t) => t.place())) : null;
+  if (tabObserver) {
+    tabObserver.observe(main);
+    if (paletteEl) tabObserver.observe(paletteEl);
+    if (panelEl) tabObserver.observe(panelEl);
+  }
   let sheet = null;
   const toggleHelp = () => {
     if (!help) return;
@@ -96,7 +140,7 @@ export function editorShell(root, { id = 'module', title = '', applyLabel = 'Ins
     },
     // Undo/redo buttons follow the history: `canUndo`, `canRedo`.
     history(canUndo, canRedo) { if (undoBtn) undoBtn.disabled = !canUndo; if (redoBtn) redoBtn.disabled = !canRedo; },
-    destroy() { clearTimeout(sayTimer); sheet?.destroy?.(); fingers.destroy(); sides.destroy(); root.removeEventListener('keydown', keys); document.removeEventListener('keydown', stray, true); root.replaceChildren(); root.classList.remove('pk-editor'); },
+    destroy() { clearTimeout(sayTimer); tabObserver?.disconnect(); sheet?.destroy?.(); fingers.destroy(); sides.destroy(); root.removeEventListener('keydown', keys); document.removeEventListener('keydown', stray, true); root.replaceChildren(); root.classList.remove('pk-editor'); },
   };
 }
 

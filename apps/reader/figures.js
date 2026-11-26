@@ -364,8 +364,8 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       }));
   }
   // The UML diagram editor (uml-editor.js), loaded the first time it is needed.
-  function umlEditor(spec, editing = false, workspace = null) {
-    return oneFigure(() => openUmlEditor(spec, editing, null, workspace));
+  function umlEditor(spec, editing = false, workspace = null, project = null) {
+    return oneFigure(() => openUmlEditor(spec, editing, project, workspace));
   }
   async function openUmlEditor(spec, editing = false, project = null, workspace = null) {
     try {
@@ -415,8 +415,11 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (missing && !(await oneFigure(() => askReinstallPack(missing)))) return false;
     const { starterModel } = await import("./uml.js");
     const note = app.epoch;
-    const ws = startedEmpty ? null : await umlWorkspace(null);
-    const spec = await umlEditor(starterModel(diagram), false, ws);
+    const projState = { pendingJump: null, pendingRenames: [], pendingLinks: [] };
+    const ws = startedEmpty ? null : await umlWorkspace(null, projState);
+    const starter = starterModel(diagram);
+    const project = startedEmpty ? null : makeEditorProject(starter, null, null, projState);
+    const spec = await umlEditor(starter, false, ws, project);
     if (!spec || !sameNote(note, startedEmpty)) return false;
     if (startedEmpty) {
       p = await openBlankNoteForPrefab(prefabName(spec) || "UML Diagram");
@@ -424,6 +427,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     }
     const done = await placePrefab(p, spec, box);
     if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+    if (done) await placeQueued(p);
     if (done && ws) await ws.applyPending(p);
     return done;
   }
@@ -473,6 +477,57 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       renameEverywhere(target, oldName, newName, currentSpec) {
         const el = resolveEl(target, currentSpec);
         if (el) state.pendingRenames.push({ modelId: el.modelId, oldName, newName, excludePartId: partId });
+      },
+      getAnalyses() {
+        return (projectModel.getPrefabs?.() || [])
+          .filter((d) => d.spec?.type === "textual-analysis")
+          .map((d) => ({
+            key: `p${d.pageIndex}:${d.partId}`,
+            label: String(d.spec.title || "").trim() || "Textual analysis",
+            where: `p. ${d.pageIndex + 1}`,
+            pageIndex: d.pageIndex,
+            partId: d.partId,
+            spec: d.spec,
+          }));
+      },
+      getUmlDiagrams() {
+        return (projectModel.getPrefabs?.() || [])
+          .filter((d) => d.spec?.type === "uml")
+          .map((d) => ({
+            key: `p${d.pageIndex}:${d.partId}`,
+            label: String(d.spec.name || d.spec.title || "").trim() || prefabName(d.spec),
+            where: `p. ${d.pageIndex + 1}`,
+            pageIndex: d.pageIndex,
+            partId: d.partId,
+            spec: d.spec,
+          }));
+      },
+      linkUmlDiagram(target, analysisModel) {
+        if (!target?.spec || !analysisModel?.id) return;
+        state.pendingLinks ||= [];
+        const updated = {
+          ...target.spec,
+          origin: {
+            module: "textual-analysis",
+            id: analysisModel.id,
+            candidates: { ...(target.spec.origin?.candidates || {}) },
+          },
+        };
+        state.pendingLinks.push({ pageIndex: target.pageIndex, partId: target.partId, spec: updated });
+      },
+      createAnalysis(umlModel) {
+        const id = `ta-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const created = {
+          type: "textual-analysis",
+          id,
+          title: String(umlModel?.name || "").trim(),
+          show: "both",
+          match: { plural: false, accents: false },
+          text: "",
+          candidates: [],
+        };
+        queuedFigures.push(created);
+        return created;
       },
     };
   }
@@ -535,7 +590,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       if (projectModel && (spec?.type === "uml" || spec?.type === "textual-analysis")) {
         await projectModel.ensureLoaded?.();
       }
-      const projState = { pendingJump: null, pendingRenames: [] };
+      const projState = { pendingJump: null, pendingRenames: [], pendingLinks: [] };
       const project = makeEditorProject(spec, c.id, focusElementId, projState);
       const ws = spec?.type === "uml" && mode === "author" ? await umlWorkspace({ pageIndex: item.page, partId: c.id }, projState) : null;
       const note = app.epoch;
@@ -547,6 +602,9 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
         status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
         await placeQueued(app.panels[item.page]);
         if (ws) await ws.applyPending(app.panels[item.page], [frame[0], frame[1], frame[2], frame[2] * prefabAspect(chosen)]);
+        for (const lk of projState.pendingLinks) {
+          await replacePrefabSpec(lk.pageIndex, lk.partId, lk.spec);
+        }
         for (const r of projState.pendingRenames) {
           await projectModel?.applyRename?.(r.modelId, r.newName, { excludePartId: r.excludePartId ?? c.id });
         }
