@@ -12,6 +12,7 @@ import { download } from './download.js';
 import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
 import { editorQuickMenu } from './editor-quick.js';
+import { toolSearch } from './tool-search.js';
 import { icon } from './icons.js';
 import { openContextMenu as openMenu, closeContextMenu } from './context-menu.js';
 import { askRenameScope, promptRenameEverywhere } from './model-explorer.js';
@@ -640,7 +641,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     return orderedIds(orderName(), all.map((t) => `${t.kind}:${t.type}`)).map((id) => all.find((t) => `${t.kind}:${t.type}` === id));
   }
   function chooseTool(kind, type) { setTool(tool.kind === kind && tool.type === type ? { kind: 'select' } : { kind, type }); }
-  let toolQuery = '';
+  const toolQuery = { query: '' };
   function buildPalette() {
     kindSelect.value = model.diagram;
     const button = ({ kind, type, label }, i) => {
@@ -662,19 +663,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     palette.classList.toggle('uml-palette-warn', notRecommended);
     if (notRecommended) palette.title = 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.';
     else palette.removeAttribute('title');
-    // A search box over the tools: typing hides the ones whose name does not match, Enter
-    // takes the first one left, Escape empties it.
-    const find = make('input', { type: 'search', className: 'uml-tool-search', placeholder: 'Search tools', value: toolQuery, spellcheck: false, ariaLabel: 'Search the tools' });
-    const filter = () => {
-      const q = toolQuery.trim().toLowerCase();
-      for (const b of list.querySelectorAll('.uml-tool')) b.hidden = !!q && !(b.querySelector('span')?.textContent || '').toLowerCase().includes(q);
-    };
-    find.oninput = () => { toolQuery = find.value; filter(); };
-    find.onkeydown = (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); list.querySelector('.uml-tool:not([hidden])')?.click(); }
-      else if (ev.key === 'Escape' && find.value) { ev.preventDefault(); ev.stopPropagation(); find.value = toolQuery = ''; filter(); }
-    };
-    filter();
+    // A search box over the tools (tool-search.js).
+    const find = toolSearch(list, { items: '.uml-tool', name: (b) => b.querySelector('span')?.textContent, state: toolQuery, className: 'uml-tool-search' });
     palette.replaceChildren(...[sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), find, list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
