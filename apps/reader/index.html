@@ -1235,7 +1235,14 @@
         </aside>
         <div id="findBar" class="find-bar" role="search" hidden>
           <div class="find-row">
-            <input id="findInput" type="search" aria-label="Find in note" placeholder="Find in note: text, PDF, OCR, audio" autocomplete="off" />
+            <div class="find-field">
+              <input id="findInput" type="search" aria-label="Find in note" placeholder="Find in note: text, PDF, OCR, audio" autocomplete="off" data-zh-slot="findFieldButtons" />
+              <span id="findFieldButtons" class="find-field-buttons">
+                <button id="findCase" type="button" class="find-toggle" aria-pressed="false" aria-label="Match case" title="Match case (Alt C)">Aa</button>
+                <button id="findWord" type="button" class="find-toggle" aria-pressed="false" aria-label="Match whole word" title="Match whole word (Alt W)"><u>ab</u></button>
+                <button id="findRegex" type="button" class="find-toggle" aria-pressed="false" aria-label="Use regular expression" title="Use regular expression (Alt R)">.*</button>
+              </span>
+            </div>
             <span id="findCount" class="find-count" aria-live="polite"></span>
             <button id="findPrev" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Previous match" title="Previous match (Shift Enter)" disabled></button>
             <button id="findNext" type="button" class="icon-button nav-arrow" data-icon="down" aria-label="Next match" title="Next match (Enter)" disabled></button>

@@ -587,6 +587,15 @@ function showSmallButtons() {
     if (!el.isConnected || el.__zhButton) continue;
     const b = zhButton(() => el, { small: true, doc: el.ownerDocument });
     el.__zhButton = b;
+    // A field with its own row of buttons inside (data-zh-slot: Find's Aa ab .*) takes the 中
+    // there, in line, instead of over its corner.
+    const slot = el.dataset?.zhSlot && el.ownerDocument.getElementById(el.dataset.zhSlot);
+    if (slot) {
+      b.classList.add('zh-inline');
+      slot.append(b);
+      el.__zhIme.addButton(b);
+      continue;
+    }
     el.insertAdjacentElement('afterend', b);
     el.parentElement?.classList.add('zh-host');
     el.__zhIme.addButton(b);

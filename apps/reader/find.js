@@ -172,6 +172,21 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       return b;
     }));
   }
+  // Aa, ab and .* (as in VS Code): Match case, Match whole word, Use regular expression.
+  // Remembered on this device.
+  const OPTIONS_KEY = 'notecomplete-find-options';
+  let options = { matchCase: false, wholeWord: false, regex: false };
+  try { Object.assign(options, JSON.parse(localStorage.getItem(OPTIONS_KEY)) || {}); } catch { /* Optional. */ }
+  const toggles = { matchCase: 'findCase', wholeWord: 'findWord', regex: 'findRegex' };
+  const showOptions = () => { for (const [key, id] of Object.entries(toggles)) $(id)?.setAttribute('aria-pressed', String(!!options[key])); };
+  const flip = (key) => {
+    options[key] = !options[key];
+    try { localStorage.setItem(OPTIONS_KEY, JSON.stringify(options)); } catch { /* Optional. */ }
+    showOptions(); current = 0; run();
+    $('findResults').hidden = !hits.length;
+  };
+  for (const [key, id] of Object.entries(toggles)) if ($(id)) $(id).onclick = () => { flip(key); $('findInput').focus(); };
+  showOptions();
   let readings = null;
   function run() {
     // Letters in a note with Chinese also find it by pinyin: readings come on first need.
@@ -179,7 +194,10 @@ export function findController({ call, library, backgrounds, panels, jump, audio
       const of = index;
       readings = import('./chinese/ruby.js').then(m => of.addPinyin(m.annotate)).then(() => { readings = null; if (of === index) run(); }, () => { readings = null; });
     }
-    const all = index.search($('findInput').value);
+    const all = index.search($('findInput').value, 500, options);
+    const invalid = options.regex && !!index.patternError;
+    $('findInput').closest('.find-field')?.classList.toggle('invalid', invalid);
+    $('findInput').title = invalid ? `Not a valid regular expression: ${index.patternError}` : '';
     renderSources(all);
     hits = all.filter(h => sources.has(h.source));
     current = hits.length ? Math.max(0, Math.min(current, hits.length - 1)) : -1;
@@ -187,7 +205,7 @@ export function findController({ call, library, backgrounds, panels, jump, audio
     for (const p of panels()) paint(p);
   }
   function render() {
-    $('findCount').textContent = !$('findInput').value.trim() ? '' : hits.length ? `${current + 1} of ${hits.length}` : 'No matches';
+    $('findCount').textContent = !$('findInput').value.trim() ? '' : hits.length ? `${current + 1} of ${hits.length}` : options.regex && index.patternError ? 'Invalid pattern' : 'No matches';
     $('findPrev').disabled = $('findNext').disabled = !hits.length;
     const list = $('findResults'), fragment = document.createDocumentFragment();
     hits.slice(0, 200).forEach((hit, i) => {
@@ -293,6 +311,9 @@ export function findController({ call, library, backgrounds, panels, jump, audio
   }
   $('findInput').oninput = () => { clearTimeout(debounce); debounce = setTimeout(() => { current = 0; run(); $('findResults').hidden = !hits.length; }, 120); };
   $('findInput').onkeydown = event => {
+    // Alt C / Alt W / Alt R flip the options, as in VS Code.
+    const altKey = event.altKey && !event.ctrlKey && !event.metaKey && { c: 'matchCase', w: 'wholeWord', r: 'regex' }[event.key.toLowerCase()];
+    if (altKey) { event.preventDefault(); flip(altKey); return; }
     if (event.key === 'Enter') { event.preventDefault(); go(current + (event.shiftKey ? -1 : 1)); }
     if (event.key === 'Escape') { event.preventDefault(); close(); }
   };

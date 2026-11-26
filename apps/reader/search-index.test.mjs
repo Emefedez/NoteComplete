@@ -144,3 +144,35 @@ test('letters find Chinese by its pinyin, once the readings are added', async ()
   assert.deepEqual(index.search('ni hao shijie')[0].matched, ['你', '好', '世', '界']);
   assert.equal(index.search('nihaox').length, 0);
 });
+
+test('a formula is one term, also when the PDF broke it, and single letters are whole words', async () => {
+  const { SearchIndex, queryTerms } = await import('./search-index.js');
+  assert.deepEqual(queryTerms('B(n,p)'), ['bnp']);
+  assert.deepEqual(queryTerms('binomial B(n,p)'), ['binomial', 'bnp']);
+  assert.deepEqual(queryTerms('中文'), ['中', '文']);
+  const index = new SearchIndex();
+  const words = (text) => text.split(' ').map((t) => ({ text: t }));
+  index.add({ page: 0, source: 'pdf', words: words('Sea X ~ B(n,p) con n = 10') });
+  index.add({ page: 1, source: 'pdf', words: words('Bernoulli nos pide probabilidad') });
+  index.add({ page: 2, source: 'pdf', words: words('la binomial B(n, p) tiene media np') });
+  assert.deepEqual(index.search('B(n,p)').map((h) => h.page), [0, 2]);
+  assert.deepEqual(index.search('B(n,p)')[1].matched, ['B(n,', 'p)']);
+  // "n" alone is the letter n, not every word that begins with n.
+  assert.deepEqual(index.search('n').map((h) => h.page), [0]);
+});
+
+test('Find bar options: match case, whole word, regular expression', async () => {
+  const { SearchIndex } = await import('./search-index.js');
+  const index = new SearchIndex();
+  const words = (text) => text.split(' ').map((t) => ({ text: t }));
+  index.add({ page: 0, source: 'text', words: words('Memoria principal y memoria caché') });
+  index.add({ page: 1, source: 'text', words: words('Memorias SSD') });
+  assert.equal(index.search('memoria').length, 3, 'prefix and case-insensitive by default');
+  assert.equal(index.search('Memoria', 500, { matchCase: true }).length, 2);
+  assert.equal(index.search('memoria', 500, { wholeWord: true }).length, 2);
+  assert.equal(index.search('Memoria', 500, { matchCase: true, wholeWord: true }).length, 1);
+  assert.deepEqual(index.search('memorias? (principal|SSD)', 500, { regex: true }).map((h) => h.matched), [['Memoria', 'principal'], ['Memorias', 'SSD']]);
+  assert.equal(index.search('cache', 500, { regex: true }).length, 1, 'accents ignored');
+  assert.equal(index.search('(unclosed', 500, { regex: true }).length, 0);
+  assert.ok(index.patternError);
+});
