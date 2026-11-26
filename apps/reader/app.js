@@ -5306,6 +5306,27 @@ const odtExporter = odtExportController({
   filename,
   download,
   openGeneratedFile: async (file) => openChosen(file),
+  openInEuroOffice: async (file) => {
+    if (library?.rememberImported) await library.rememberImported(file, { origin: "OpenOffice (.odt)" }).catch(() => null);
+    reset({ opening: true });
+    activeFileName = file.name || "Document.odt";
+    activeDocKind = "office";
+    officeFile = file;
+    $("title").textContent = activeFileName;
+    document.title = `${activeFileName} — NoteComplete`;
+    tabBar.update({ title: activeFileName, dirty: false });
+    home.hide();
+    $("editor").hidden = true;
+    $("htmlView").hidden = true;
+    $("textView").hidden = true;
+    $("webView").hidden = true;
+    const opened = await officeView.open(file, { mode: "edit" });
+    if (opened === false) { reset(); return false; }
+    showDocument();
+    rememberDocument();
+    documentControls();
+    return true;
+  },
   jobs: { start: (...a) => jobs.start(...a) },
   status,
   busy,

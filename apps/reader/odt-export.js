@@ -176,6 +176,7 @@ export function odtExportController({
   filename,
   download,
   openGeneratedFile = null,
+  openInEuroOffice = null,
   jobs,
   status,
   busy = () => false,
@@ -204,15 +205,18 @@ export function odtExportController({
           <span><strong>Direct visual pages (PDF &amp; ink as shown)</strong><span class="wizard-check-hint">Embeds every page directly at exact dimensions into OpenDocument (.odt), preserving all graphics, PDF layout and ink.</span></span>
         </label>
       </div>
-      <label id="odtKeepBgRow" class="wizard-check" style="margin: 0 0 12px;">
+      <label id="odtKeepBgRow" class="wizard-check" style="margin: 0 0 10px;">
         <input id="odtKeepBg" type="checkbox" checked />
         <span><strong>Include page visual background behind text blocks</strong><span class="wizard-check-hint">Uncheck for clean white pages with only the extracted editable text blocks.</span></span>
+      </label>
+      <label id="odtOpenEuroRow" class="wizard-check" style="margin: 0 0 12px;"${openInEuroOffice ? '' : ' hidden'}>
+        <input id="odtOpenEuro" type="checkbox" checked />
+        <span><strong>Open automatically in Euro-Office</strong><span class="wizard-check-hint">Opens the converted <code>.odt</code> directly in Euro-Office right after saving.</span></span>
       </label>
       <p id="odtStatus" class="muted" role="status"></p>
       <div class="ocr-actions">
         <button id="odtCancel" type="button">Cancel</button>
-        <button id="odtSaveBtn" type="button" class="primary">Save .odt</button>
-        <button id="odtOpenBtn" type="button">Convert &amp; open</button>
+        <button id="odtSaveBtn" type="button" class="primary">Convert &amp; save .odt</button>
       </div>
     `;
     dialog.querySelector('#odtCloseX').append(icon('close'));
@@ -223,8 +227,7 @@ export function odtExportController({
       dialog.querySelector('#odtKeepBgRow').hidden = mode !== 'blocks';
     };
     for (const r of dialog.querySelectorAll('input[name="odtMode"]')) r.onchange = syncBgRow;
-    dialog.querySelector('#odtSaveBtn').onclick = () => runExport({ openAfter: false });
-    dialog.querySelector('#odtOpenBtn').onclick = () => runExport({ openAfter: true });
+    dialog.querySelector('#odtSaveBtn').onclick = () => runExport();
     document.body.append(dialog);
     return dialog;
   }
@@ -271,16 +274,16 @@ export function odtExportController({
     return out;
   }
 
-  async function runExport({ openAfter = false } = {}) {
+  async function runExport() {
     if (busy()) return;
     const { pages: count } = documentInfo();
     if (!count) return;
     const mode = dialog.querySelector('input[name="odtMode"]:checked')?.value || 'blocks';
     const keepBg = mode === 'visual' || Boolean(dialog.querySelector('#odtKeepBg')?.checked);
+    const autoEuroOffice = Boolean(openInEuroOffice && dialog.querySelector('#odtOpenEuro')?.checked);
     const saveBtn = dialog.querySelector('#odtSaveBtn');
-    const openBtn = dialog.querySelector('#odtOpenBtn');
     const note = dialog.querySelector('#odtStatus');
-    saveBtn.disabled = openBtn.disabled = true;
+    saveBtn.disabled = true;
 
     let stopped = false;
     const job = jobs?.start?.('OpenOffice (.odt)', { pages: count, batches: 1, kind: 'export', cancel: () => { stopped = true; } });
@@ -318,22 +321,22 @@ export function odtExportController({
       const outName = `${title}.odt`;
       const outFile = new File([bytes], outName, { type: 'application/vnd.oasis.opendocument.text' });
 
-      if (openAfter && typeof openGeneratedFile === 'function') {
+      if (autoEuroOffice) {
         dialog.close();
-        await openGeneratedFile(outFile);
+        await openInEuroOffice(outFile);
       } else {
         await download(bytes, outName, 'application/vnd.oasis.opendocument.text');
         dialog.close();
       }
       const detail = mode === 'blocks' ? ` (${totalBlocks} editable text blocks)` : '';
-      const msg = `Exported ${outName}${detail}.`;
+      const msg = autoEuroOffice ? `Opened ${outName} in Euro-Office${detail}.` : `Exported ${outName}${detail}.`;
       job?.finish?.(msg);
       status?.(msg);
     } catch (e) {
       note.textContent = e?.message || String(e);
       job?.fail?.(e?.message || String(e));
     } finally {
-      saveBtn.disabled = openBtn.disabled = false;
+      saveBtn.disabled = false;
     }
   }
 

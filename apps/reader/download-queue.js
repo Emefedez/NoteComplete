@@ -124,10 +124,17 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
 
       // Keep file in local library so it shows up in Recent and on disk
       if (library && downloadedBlob) {
-        const fileRef = next.source === 'archive'
-          ? { source: 'archive', archiveId: next.sourceId, path: next.doc.path || next.name, name: next.name, size: downloadedBlob.size }
-          : next.doc;
-        await library.keep(fileRef, downloadedBlob).catch(() => null);
+        if (next.source === 'moodle' && typeof library.rememberImported === 'function') {
+          const fileObj = downloadedBlob instanceof File
+            ? downloadedBlob
+            : new File([downloadedBlob], next.name || 'moodle-file', { type: downloadedBlob.type || 'application/octet-stream' });
+          await library.rememberImported(fileObj, { origin: next.doc?.courseName ? `Moodle · ${next.doc.courseName}` : 'Moodle' }).catch(() => null);
+        } else {
+          const fileRef = next.source === 'archive'
+            ? { source: 'archive', archiveId: next.sourceId, path: next.doc.path || next.name, name: next.name, size: downloadedBlob.size }
+            : next.doc;
+          await library.keep(fileRef, downloadedBlob).catch(() => null);
+        }
       }
 
       next.status = 'done';

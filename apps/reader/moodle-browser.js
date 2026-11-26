@@ -104,7 +104,7 @@ export function moodleBrowser({
       id: `moodle:${item.id}`,
       name: cleanName,
       size: Number(item.size || 0),
-      doc: { ...item, name: cleanName, source: 'moodle' },
+      doc: { ...item, name: cleanName, source: 'moodle', courseName: currentCourse?.fullname || session?.label || 'Moodle' },
       client: moodleQueueClient,
     };
   }
@@ -441,8 +441,7 @@ export function moodleBrowser({
       const actions = document.createElement('span');
       actions.className = 'moodle-card-actions';
       if (queue && item.isDownloadable && !selectingQueue) {
-        const qItem = queueItemOf(item);
-        actions.append(queueButton({ queue, id: qItem.id, item: qItem }));
+        actions.append(queueButton({ queue, id: `moodle:${item.id}`, item: () => queueItemOf(item) }));
       }
       const ext = document.createElement('button');
       ext.type = 'button';
