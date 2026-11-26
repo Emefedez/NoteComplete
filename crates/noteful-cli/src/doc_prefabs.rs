@@ -45,10 +45,7 @@ pub(super) fn embed_spec_in_svg(svg: &str, spec_json: &str) -> String {
             || rest.starts_with('>')
             || rest.starts_with('/')
         {
-            return format!(
-                "{}<svg data-nc-prefab-spec=\"{encoded}\"{rest}",
-                &svg[..at]
-            );
+            return format!("{}<svg data-nc-prefab-spec=\"{encoded}\"{rest}", &svg[..at]);
         }
     }
     svg.to_owned()
@@ -270,7 +267,8 @@ pub(super) fn insert_into_markdown(
             }
             end
         };
-        let mut out_lines: Vec<String> = lines[..insert_at].iter().map(|s| (*s).to_owned()).collect();
+        let mut out_lines: Vec<String> =
+            lines[..insert_at].iter().map(|s| (*s).to_owned()).collect();
         if !out_lines.is_empty() && !out_lines.last().unwrap().trim().is_empty() {
             out_lines.push(String::new());
         }
@@ -315,7 +313,9 @@ pub(super) fn insert_into_markdown(
                 format!("{trimmed}\n\n{block}\n")
             })
         }
-        other => Err(format!("position must be 'end', 'start' or 'after_heading', not '{other}'").into()),
+        other => {
+            Err(format!("position must be 'end', 'start' or 'after_heading', not '{other}'").into())
+        }
     }
 }
 
@@ -366,11 +366,13 @@ fn doc_destination(args: &Value, source: &Path) -> Res<(PathBuf, Option<PathBuf>
             Some(PathBuf::from(format!("{}.bak", source.display()))),
         ));
     }
-    if let Some(out) = args["out"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+    if let Some(out) = args["out"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let out = PathBuf::from(out);
-        if source == out
-            || std::fs::canonicalize(source).ok() == std::fs::canonicalize(&out).ok()
-        {
+        if source == out || std::fs::canonicalize(source).ok() == std::fs::canonicalize(&out).ok() {
             return Err(
                 "out is the source document; pass in_place: true to change it (a .bak copy is kept)"
                     .into(),
@@ -469,7 +471,10 @@ fn emu_fit(svg_w: f64, svg_h: f64, max_cx: f64, max_cy: f64) -> (u64, u64) {
         cy = max_cy;
         cx = cy / aspect;
     }
-    (cx.round().max(91440.0) as u64, cy.round().max(91440.0) as u64)
+    (
+        cx.round().max(91440.0) as u64,
+        cy.round().max(91440.0) as u64,
+    )
 }
 
 fn next_numeric_id(xml: &str) -> u32 {
@@ -532,10 +537,8 @@ fn pptx_pic_xml(
     rel_id: &str,
     name: &str,
     spec_json: &str,
-    x: u64,
-    y: u64,
-    cx: u64,
-    cy: u64,
+    (x, y): (u64, u64),
+    (cx, cy): (u64, u64),
 ) -> String {
     let esc_name = xml_escape(name);
     let descr = xml_escape(&format!("notecomplete-prefab:{spec_json}"));
@@ -677,9 +680,8 @@ pub(super) fn insert_into_docx(
     let para = docx_drawing_paragraph(doc_pr_id, &rel_id, &prefab.name, &prefab.spec_json, cx, cy);
 
     let new_doc_xml = if let Some(ph) = replace_placeholder.filter(|s| !s.is_empty()) {
-        replace_xml_paragraph_containing(&doc_xml, "<w:p", "</w:p>", ph, &para).ok_or_else(|| {
-            format!("Placeholder '{ph}' was not found in word/document.xml")
-        })?
+        replace_xml_paragraph_containing(&doc_xml, "<w:p", "</w:p>", ph, &para)
+            .ok_or_else(|| format!("Placeholder '{ph}' was not found in word/document.xml"))?
     } else if position == Some("start") {
         let body_start = doc_xml
             .find("<w:body")
@@ -788,7 +790,12 @@ pub(super) fn insert_into_pptx(
         })
         .unwrap_or((9_144_000.0, 6_858_000.0));
 
-    let (cx, cy) = emu_fit(prefab.width, prefab.height, slide_cx * 0.78, slide_cy * 0.72);
+    let (cx, cy) = emu_fit(
+        prefab.width,
+        prefab.height,
+        slide_cx * 0.78,
+        slide_cy * 0.72,
+    );
     let x = ((slide_cx - cx as f64) / 2.0).max(0.0) as u64;
     let y = ((slide_cy - cy as f64) / 2.0).max(0.0) as u64;
 
@@ -796,7 +803,14 @@ pub(super) fn insert_into_pptx(
     let media_rel = format!("../media/nc_prefab_{id}.png");
     let rel_id = next_rel_id(&rels_xml);
     let pic_id = next_numeric_id(&slide_xml);
-    let pic = pptx_pic_xml(pic_id, &rel_id, &prefab.name, &prefab.spec_json, x, y, cx, cy);
+    let pic = pptx_pic_xml(
+        pic_id,
+        &rel_id,
+        &prefab.name,
+        &prefab.spec_json,
+        (x, y),
+        (cx, cy),
+    );
 
     let sp_end = slide_xml
         .rfind("</p:spTree>")
@@ -913,7 +927,11 @@ pub(super) fn insert_into_odf(
         "<manifest:file-entry manifest:full-path=\"{pic_path}\" manifest:media-type=\"image/png\"/>"
     );
     let new_manifest = if let Some(at) = manifest_xml.rfind("</manifest:manifest>") {
-        format!("{}{manifest_entry}{}", &manifest_xml[..at], &manifest_xml[at..])
+        format!(
+            "{}{manifest_entry}{}",
+            &manifest_xml[..at],
+            &manifest_xml[at..]
+        )
     } else {
         manifest_xml
     };
@@ -950,12 +968,11 @@ fn prefab_id() -> String {
 }
 
 fn preview_content(report: Value, prefab: &RenderedPrefab) -> Res<Value> {
-    let mut content =
-        vec![json!({"type":"text","text":serde_json::to_string_pretty(&report)?})];
+    let mut content = vec![json!({"type":"text","text":serde_json::to_string_pretty(&report)?})];
     match prefab.to_png(900) {
-        Ok(png) => content.push(
-            json!({"type":"image","data":STANDARD.encode(png),"mimeType":"image/png"}),
-        ),
+        Ok(png) => {
+            content.push(json!({"type":"image","data":STANDARD.encode(png),"mimeType":"image/png"}))
+        }
         Err(e) => content.push(json!({"type":"text","text":format!("No preview: {e}")})),
     }
     Ok(Value::Array(content))
@@ -966,13 +983,19 @@ fn preview_content(report: Value, prefab: &RenderedPrefab) -> Res<Value> {
 /// (`target: "notes"`).
 pub(super) fn add_prefab_to_document(args: &Value, source: &Path, ext: &str) -> Res<Value> {
     let prefab = render_prefab(&args["spec"])?;
-    let position = args["position"].as_str().map(str::trim).filter(|s| !s.is_empty());
+    let position = args["position"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
     let after_heading = args["after_heading"]
         .as_str()
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let replace_placeholder = args["replace_placeholder"].as_str();
-    let alt = args["alt"].as_str().map(str::trim).filter(|s| !s.is_empty());
+    let alt = args["alt"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
 
     // Target: embedded Markdown notes inside a .notecomp / .notepart / .nfedit notebook.
     if args["target"].as_str() == Some("notes") {
@@ -1120,7 +1143,11 @@ pub(super) fn create_markdown(args: &Value) -> Res<Value> {
     }
 
     let overwrite = args["overwrite"].as_bool() == Some(true);
-    let out = if let Some(p) = args["out"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+    let out = if let Some(p) = args["out"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         let out = PathBuf::from(p);
         let e = out
             .extension()
@@ -1162,13 +1189,11 @@ pub(super) fn create_markdown(args: &Value) -> Res<Value> {
         "prefabs_embedded": rendered_list.iter().map(|(k, r)| json!({"key": k, "name": r.name})).collect::<Vec<_>>(),
         "open": "Open this .md file in NoteComplete to view and double-click any embedded prefab to edit it.",
     });
-    let mut content =
-        vec![json!({"type":"text","text":serde_json::to_string_pretty(&report)?})];
+    let mut content = vec![json!({"type":"text","text":serde_json::to_string_pretty(&report)?})];
     for (_, rendered) in rendered_list.iter().take(3) {
         if let Ok(png) = rendered.to_png(900) {
-            content.push(
-                json!({"type":"image","data":STANDARD.encode(png),"mimeType":"image/png"}),
-            );
+            content
+                .push(json!({"type":"image","data":STANDARD.encode(png),"mimeType":"image/png"}));
         }
     }
     Ok(Value::Array(content))
@@ -1179,7 +1204,8 @@ mod tests {
     use super::*;
 
     fn sample_prefab() -> RenderedPrefab {
-        let spec_json = r#"{"type":"bar","title":"Scores","bins":[{"label":"A","value":5}]}"#.to_owned();
+        let spec_json =
+            r#"{"type":"bar","title":"Scores","bins":[{"label":"A","value":5}]}"#.to_owned();
         let svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 400 200\"><rect width=\"400\" height=\"200\" fill=\"#fff\"/></svg>".to_owned();
         let svg_with_spec = embed_spec_in_svg(&svg, &spec_json);
         RenderedPrefab {
@@ -1266,7 +1292,8 @@ mod tests {
         assert!(res_pos < blk_pos && blk_pos < next_pos);
 
         let ph_doc = "# Title\n\n<!-- PREFAB:chart -->\n";
-        let by_ph = insert_into_markdown(ph_doc, &block, None, None, Some("<!-- PREFAB:chart -->")).unwrap();
+        let by_ph = insert_into_markdown(ph_doc, &block, None, None, Some("<!-- PREFAB:chart -->"))
+            .unwrap();
         assert!(by_ph.contains(&block) && !by_ph.contains("<!-- PREFAB:chart -->"));
 
         let fm_doc = "---\ntitle: Test\n---\n\nBody\n";
@@ -1279,37 +1306,102 @@ mod tests {
         let p = sample_prefab();
         let html = "<html><body><p>Hi</p></body></html>";
         let out_html = insert_into_html(html, &p.html_block(None), Some("end"), None).unwrap();
-        assert!(out_html.contains("<figure class=\"nc-prefab\">") && out_html.ends_with("</body></html>"));
+        assert!(
+            out_html.contains("<figure class=\"nc-prefab\">")
+                && out_html.ends_with("</body></html>")
+        );
 
         let fake_png = b"\x89PNG\r\n\x1a\nfake";
         // DOCX append before sectPr
         let docx_out = insert_into_docx(&minimal_docx(), &p, fake_png, "abc", None, None).unwrap();
         let docx_entries = read_zip_entries(&docx_out).unwrap();
-        assert!(docx_entries.iter().any(|(n, _, _)| n == "word/media/nc_prefab_abc.png"));
-        let doc_xml = String::from_utf8(docx_entries.iter().find(|(n, _, _)| n == "word/document.xml").unwrap().1.clone()).unwrap();
-        assert!(doc_xml.contains("notecomplete-prefab:") && doc_xml.find("<w:drawing>").unwrap() < doc_xml.find("<w:sectPr/>").unwrap());
-        let ct_xml = String::from_utf8(docx_entries.iter().find(|(n, _, _)| n == "[Content_Types].xml").unwrap().1.clone()).unwrap();
+        assert!(docx_entries
+            .iter()
+            .any(|(n, _, _)| n == "word/media/nc_prefab_abc.png"));
+        let doc_xml = String::from_utf8(
+            docx_entries
+                .iter()
+                .find(|(n, _, _)| n == "word/document.xml")
+                .unwrap()
+                .1
+                .clone(),
+        )
+        .unwrap();
+        assert!(
+            doc_xml.contains("notecomplete-prefab:")
+                && doc_xml.find("<w:drawing>").unwrap() < doc_xml.find("<w:sectPr/>").unwrap()
+        );
+        let ct_xml = String::from_utf8(
+            docx_entries
+                .iter()
+                .find(|(n, _, _)| n == "[Content_Types].xml")
+                .unwrap()
+                .1
+                .clone(),
+        )
+        .unwrap();
         assert!(ct_xml.contains("Extension=\"png\""));
 
         // DOCX placeholder replacement
-        let docx_ph = insert_into_docx(&minimal_docx(), &p, fake_png, "ph1", None, Some("<!-- CHART -->")).unwrap();
+        let docx_ph = insert_into_docx(
+            &minimal_docx(),
+            &p,
+            fake_png,
+            "ph1",
+            None,
+            Some("<!-- CHART -->"),
+        )
+        .unwrap();
         let docx_ph_entries = read_zip_entries(&docx_ph).unwrap();
-        let doc_ph_xml = String::from_utf8(docx_ph_entries.iter().find(|(n, _, _)| n == "word/document.xml").unwrap().1.clone()).unwrap();
+        let doc_ph_xml = String::from_utf8(
+            docx_ph_entries
+                .iter()
+                .find(|(n, _, _)| n == "word/document.xml")
+                .unwrap()
+                .1
+                .clone(),
+        )
+        .unwrap();
         assert!(doc_ph_xml.contains("<w:drawing>") && !doc_ph_xml.contains("<!-- CHART -->"));
 
         // PPTX slide insertion
-        let (pptx_out, slide) = insert_into_pptx(&minimal_pptx(), &p, fake_png, "s1", Some(1)).unwrap();
+        let (pptx_out, slide) =
+            insert_into_pptx(&minimal_pptx(), &p, fake_png, "s1", Some(1)).unwrap();
         assert_eq!(slide, 1);
         let pptx_entries = read_zip_entries(&pptx_out).unwrap();
-        assert!(pptx_entries.iter().any(|(n, _, _)| n == "ppt/media/nc_prefab_s1.png"));
-        let slide_xml = String::from_utf8(pptx_entries.iter().find(|(n, _, _)| n == "ppt/slides/slide1.xml").unwrap().1.clone()).unwrap();
+        assert!(pptx_entries
+            .iter()
+            .any(|(n, _, _)| n == "ppt/media/nc_prefab_s1.png"));
+        let slide_xml = String::from_utf8(
+            pptx_entries
+                .iter()
+                .find(|(n, _, _)| n == "ppt/slides/slide1.xml")
+                .unwrap()
+                .1
+                .clone(),
+        )
+        .unwrap();
         assert!(slide_xml.contains("<p:pic>") && slide_xml.contains("notecomplete-prefab:"));
 
         // ODT insertion
-        let odt_out = insert_into_odf(&minimal_odt(), "odt", &p, fake_png, "o1", None, None).unwrap();
+        let odt_out =
+            insert_into_odf(&minimal_odt(), "odt", &p, fake_png, "o1", None, None).unwrap();
         let odt_entries = read_zip_entries(&odt_out).unwrap();
-        assert!(odt_entries.iter().any(|(n, _, _)| n == "Pictures/nc_prefab_o1.png"));
-        let odt_xml = String::from_utf8(odt_entries.iter().find(|(n, _, _)| n == "content.xml").unwrap().1.clone()).unwrap();
-        assert!(odt_xml.contains("Pictures/nc_prefab_o1.png") && odt_xml.contains("notecomplete-prefab:"));
+        assert!(odt_entries
+            .iter()
+            .any(|(n, _, _)| n == "Pictures/nc_prefab_o1.png"));
+        let odt_xml = String::from_utf8(
+            odt_entries
+                .iter()
+                .find(|(n, _, _)| n == "content.xml")
+                .unwrap()
+                .1
+                .clone(),
+        )
+        .unwrap();
+        assert!(
+            odt_xml.contains("Pictures/nc_prefab_o1.png")
+                && odt_xml.contains("notecomplete-prefab:")
+        );
     }
 }

@@ -110,9 +110,8 @@ pub(super) fn prefer_markdown_setting() -> bool {
     if let Some(home) = std::env::var_os("HOME") {
         let home = PathBuf::from(home);
         candidates.push(home.join(".config/notecomplete-desktop/mcp-settings.json"));
-        candidates.push(
-            home.join("Library/Application Support/notecomplete-desktop/mcp-settings.json"),
-        );
+        candidates
+            .push(home.join("Library/Application Support/notecomplete-desktop/mcp-settings.json"));
     }
     if let Some(appdata) = std::env::var_os("APPDATA") {
         candidates.push(PathBuf::from(appdata).join("notecomplete-desktop/mcp-settings.json"));
@@ -554,7 +553,10 @@ impl Server {
     }
 
     fn audio_timeline(&mut self, args: &Value) -> Res<Value> {
-        let gap_s = args["gap_seconds"].as_f64().unwrap_or(8.0).clamp(0.0, 300.0);
+        let gap_s = args["gap_seconds"]
+            .as_f64()
+            .unwrap_or(8.0)
+            .clamp(0.0, 300.0);
         let single = match args["page"].as_u64() {
             Some(p) if p >= 1 => Some(p as usize - 1),
             Some(_) => return Err("page must be 1 or more".into()),
@@ -632,7 +634,10 @@ fn page_audio_windows(v: &Value, gap_s: f64) -> Vec<Value> {
         };
         let start = t["start"].as_f64().unwrap_or(0.0);
         let end = t["end"].as_f64().unwrap_or(start).max(start);
-        by_rec.entry(rec_id.to_owned()).or_default().push((start, end));
+        by_rec
+            .entry(rec_id.to_owned())
+            .or_default()
+            .push((start, end));
     }
     let mut out = Vec::new();
     let mut keys: Vec<String> = by_rec.keys().cloned().collect();
