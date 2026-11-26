@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.11
+
+- **Bundled skills in desktop installers & Modules card.** Fixed `apps/desktop/package.json` so `skills/notecomplete-*` and `noteful` share a single `extraResources` array in every desktop installer, and added one-click **Install skills** support to the Setup Wizard → Modules **AI tools connection** card when harnesses are already connected.
+- **Math Mode hidden on Home & error-safe.** Math Mode no longer opens or toggles on the Home screen, hides automatically when returning to Home, and safely guards plot/insert actions against missing pages.
+- **New R Script or Workspace dialog polish.** Fixed the oversized header SVG icon (now neatly aligned at 18×18 px) and removed the non-functional "zero-bloat embedded" selector from the New R dialog and R Bridge settings.
+
 ## 2.0.10
 
 - **Edit prefab… in Euro-Office right-click menu.** Right-clicking a NoteComplete prefab image inside Euro-Office (whether inserted via MCP or converted from Markdown) now offers **Edit prefab…**, opens NoteComplete's native prefab editor, and updates the image in place inside Euro-Office.

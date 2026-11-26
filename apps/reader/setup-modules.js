@@ -18,7 +18,7 @@
 // status() and install().
 import { mathSettings } from './math/settings.js';
 import { zhSettings, zhEverUsed, setZhEverUsed } from './chinese/settings.js';
-import { OFFICE_KINDS, openWithPrefs, setOpenWith } from './open-with-pref.js';
+import { OFFICE_KINDS, openWithPrefs, rOpenWith, setOpenWith, setROpenWith } from './open-with-pref.js';
 import { readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
 
 const registry = new Map();
@@ -56,12 +56,24 @@ export function rStudioProgress(p = {}) {
   return { text: 'Looking for the latest release' };
 }
 
-export function rStudioModule(bridge = globalThis.notecompleteRBridge) {
+export function rStudioModule(bridge = globalThis.notecompleteRBridge, storage = globalThis.localStorage) {
   return {
     id: 'r-studio', kind: 'install',
     icon: './r-commander-studio.svg',
     name: 'R Commander Studio',
     summary: 'R statistics and graphs in a friendly editor',
+    settingsAlways: true,
+    settings(el, ui, status = {}) {
+      const installed = status.state === 'installed';
+      el.append(
+        ui.hint('Open R scripts by default with:'),
+        ui.row('R scripts', ui.segmented('R scripts', [
+          { value: 'text', label: 'Text view', title: 'Edit in NoteComplete’s code editor' },
+          { value: 'r-studio', label: 'R Commander Studio', disabled: !installed, title: installed ? '' : 'Once R Commander Studio is installed' },
+          { value: 'ask', label: 'Ask each time' },
+        ], rOpenWith(storage), (v) => setROpenWith(v, storage)), '.R, .Rmd, .qmd'),
+      );
+    },
     async status() {
       if (!bridge) return rStudioState(null, { bridge: false });
       try { return rStudioState(await bridge.status()); } catch (e) { return { state: 'error', detail: e.message }; }

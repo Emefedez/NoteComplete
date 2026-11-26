@@ -7,11 +7,11 @@
 // (open-with-pref.js), with "ask" for a chooser; a choice that cannot open the file, or is not
 // installed, falls back to the other way. Pure functions; the chooser and menus are in open-with-ui.js.
 import { OFFICE_FORMATS } from './office-formats.js';
-import { isOfficeName, isTableName } from './text-types.js';
-import { openWith } from './open-with-pref.js';
+import { isOfficeName, isRScriptName, isTableName } from './text-types.js';
+import { R_KIND, openWith, rOpenWith } from './open-with-pref.js';
 
-export const OPENER_LABELS = { text: 'Text view (Markdown)', 'euro-office': 'Euro-Office' };
-export const KIND_NAMES = { documents: 'documents', spreadsheets: 'spreadsheets', presentations: 'presentations', pdf: 'PDF files', other: 'these files' };
+export const OPENER_LABELS = { text: 'Text view (Markdown)', 'euro-office': 'Euro-Office', 'r-studio': 'R Commander Studio' };
+export const KIND_NAMES = { documents: 'documents', spreadsheets: 'spreadsheets', presentations: 'presentations', [R_KIND]: 'R scripts', pdf: 'PDF files', other: 'these files' };
 const TYPE_KIND = { word: 'documents', cell: 'spreadsheets', slide: 'presentations', pdf: 'pdf', diagram: 'other' };
 // Files NoteComplete opens its own way that are not office documents: PDF stays a note, plain
 // text, Markdown, XML and web pages keep their own views. Euro-Office lists them, but they are
@@ -35,8 +35,9 @@ export function formatTable(list = OFFICE_FORMATS) {
   return table;
 }
 
-// documents / spreadsheets / presentations / pdf / other, by extension.
+// documents / spreadsheets / presentations / r-scripts / pdf / other, by extension.
 export function fileKindOf(name, formats = OFFICE_FORMATS) {
+  if (isRScriptName(name)) return R_KIND;
   const ext = extensionOf(name);
   if (ext === 'csv' || ext === 'tsv') return 'spreadsheets';
   return TYPE_KIND[formatTable(formats).get(ext)?.type] || 'other';
@@ -58,11 +59,17 @@ export function euroOfficeMode(name, formats = OFFICE_FORMATS) {
 
 // Files only Euro-Office opens (.ppsx, .xltx, .djvu, .vsdx…): unsupported until it is installed.
 export const onlyEuroOffice = (name, formats = OFFICE_FORMATS) => !textViewOpens(name) && euroOfficeMode(name, formats) !== null;
-// Files that have an "Open with" choice to show (menus): any the text view or Euro-Office opens.
-export const hasOpenWith = (name, formats = OFFICE_FORMATS) => textViewOpens(name) || euroOfficeMode(name, formats) !== null;
+// Files that have an "Open with" choice to show (menus): any the text view, Euro-Office or R Commander Studio opens.
+export const hasOpenWith = (name, formats = OFFICE_FORMATS) => isRScriptName(name) || textViewOpens(name) || euroOfficeMode(name, formats) !== null;
 
 // The ways that open this file, each { id, label, available, mode? } (available: usable now).
-export function openersFor(name, { installed = false, formats = OFFICE_FORMATS } = {}) {
+export function openersFor(name, { installed = false, rStudioInstalled = false, formats = OFFICE_FORMATS } = {}) {
+  if (isRScriptName(name)) {
+    return [
+      { id: 'text', label: 'Text view (code editor)', available: true },
+      { id: 'r-studio', label: OPENER_LABELS['r-studio'], available: Boolean(rStudioInstalled), mode: 'edit' },
+    ];
+  }
   const list = [];
   if (textViewOpens(name)) list.push({ id: 'text', label: OPENER_LABELS.text, available: true });
   const mode = euroOfficeMode(name, formats);
@@ -71,15 +78,15 @@ export function openersFor(name, { installed = false, formats = OFFICE_FORMATS }
 }
 
 // What opening the file does: { kind, openers, opener, ask }.
-//   opener: 'text' | 'euro-office' | null (nothing installed opens it: unsupported)
+//   opener: 'text' | 'euro-office' | 'r-studio' | null (nothing installed opens it: unsupported)
 //   ask: show the chooser (the kind's default is "ask" and there is more than one way); `opener`
 //        is then the one to suggest.
-// `pref`: the kind's default ('text' | 'euro-office' | 'ask'), read from the setting when omitted.
-export function decideOpener(name, { installed = false, formats = OFFICE_FORMATS, pref = null, storage } = {}) {
+// `pref`: the kind's default ('text' | 'euro-office' | 'r-studio' | 'ask'), read from the setting when omitted.
+export function decideOpener(name, { installed = false, rStudioInstalled = false, formats = OFFICE_FORMATS, pref = null, storage } = {}) {
   const kind = fileKindOf(name, formats);
-  const openers = openersFor(name, { installed, formats });
+  const openers = openersFor(name, { installed, rStudioInstalled, formats });
   const usable = openers.filter((o) => o.available);
-  const chosen = pref ?? (['documents', 'spreadsheets', 'presentations'].includes(kind) ? openWith(kind, storage) : 'text');
+  const chosen = pref ?? (kind === R_KIND ? rOpenWith(storage) : ['documents', 'spreadsheets', 'presentations'].includes(kind) ? openWith(kind, storage) : 'text');
   if (!usable.length) return { kind, openers, opener: null, ask: false };
   const ask = chosen === 'ask' && openers.length > 1;
   const opener = (usable.find((o) => o.id === chosen) || usable[0]).id;

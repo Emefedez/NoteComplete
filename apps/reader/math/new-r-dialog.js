@@ -9,6 +9,7 @@ let dlg = null;
 export async function openNewRDialog({
   status = () => {},
   onOpenStudio = null,
+  onOpenFile = null,
   onCreatedWorkspace = null,
   onCreatedFile = null,
 } = {}) {
@@ -17,7 +18,7 @@ export async function openNewRDialog({
     return;
   }
   if (!dlg) dlg = buildDialog();
-  dlg._handlers = { status, onOpenStudio, onCreatedWorkspace, onCreatedFile };
+  dlg._handlers = { status, onOpenStudio, onOpenFile, onCreatedWorkspace, onCreatedFile };
   await refreshDialogState(dlg);
   if (!dlg.open) dlg.showModal();
   dlg.querySelector('[data-nr-name]')?.focus();
@@ -149,14 +150,19 @@ function buildDialog() {
       d.close();
       if (created.mode === 'workspace') {
         await d._handlers?.onCreatedWorkspace?.(created);
+        await d._handlers?.onOpenStudio?.({
+          filePath: created.filePath,
+          folderPath: created.folderPath,
+          embed: false,
+        });
       } else {
         await d._handlers?.onCreatedFile?.(created);
+        if (d._handlers?.onOpenFile) {
+          await d._handlers.onOpenFile(created);
+        } else {
+          await d._handlers?.onOpenStudio?.({ filePath: created.filePath, folderPath: '', embed: false });
+        }
       }
-      await d._handlers?.onOpenStudio?.({
-        filePath: created.filePath,
-        folderPath: created.mode === 'workspace' ? created.folderPath : '',
-        embed: false,
-      });
     } catch (e) {
       d._handlers?.status?.(e.message, true);
     } finally {

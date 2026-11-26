@@ -910,6 +910,16 @@ async function load(file, preparedDocument = null) {
       catch (e) { status("Could not open in Euro-Office: " + e.message, true); throw e; }
       return;
     }
+    if (way.opener === "r-studio") {
+      try {
+        const code = await file.text().catch(() => "");
+        await openRStudioTarget({ filePath: docMember?.path || file.path || "", title: file.name, code });
+      } catch (e) {
+        status("Could not open in R Commander Studio: " + e.message, true);
+        throw e;
+      }
+      return;
+    }
   }
   editing = true;
   status("Opening document…");
@@ -4930,6 +4940,22 @@ const launchNewRDialog = () => {
       if (created?.filePath) {
         await library.rememberLocal(created.filePath, created.name, created.size || 0).catch(() => {});
         home?.renderRecent?.();
+      }
+    },
+    onOpenFile: async (created) => {
+      if (!created?.filePath) return;
+      const way = await chooseOpener(created.name || created.filePath);
+      if (way.cancelled) return;
+      if (way.opener === "r-studio") {
+        await openRStudioTarget({ filePath: created.filePath, title: created.name || "" });
+        return;
+      }
+      const bytes = await window.notecompleteFiles?.readLocalNote?.(created.filePath).catch(() => null);
+      if (bytes) {
+        const file = new File([bytes], created.name || created.filePath.split(/[\\/]/).pop(), { type: "text/plain" });
+        openOnceWith(file.name, "text");
+        await load(file);
+        await setDocMember({ source: "local", path: created.filePath, name: file.name });
       }
     },
   });

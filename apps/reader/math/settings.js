@@ -1,6 +1,7 @@
 // Settings → Math Mode & R Bridge (localStorage "notecomplete-math-<name>").
 // Styled identically to Chinese settings (chinese/settings.js) using NoteComplete's design tokens.
 import { icon } from '../icons.js';
+import { rOpenWith, setROpenWith } from '../open-with-pref.js';
 
 export const MATH_DEFAULTS = Object.freeze({
   enabled: false,         // Show Math Mode bar & quick tools (Ctrl+Shift+M)
@@ -96,6 +97,7 @@ function build({ status, onInsertRPrefab }) {
       <progress data-rb-install-prog max="1" value="0" hidden style="width:100%;margin-top:8px;"></progress>
       <div class="math-bridge-preview" data-rb-preview hidden></div>
     </div>
+    <label class="zh-set-row" style="margin-top:10px;"><span>Open R scripts (.R, .Rmd, .qmd) with</span><select data-ms-r-open><option value="text">Text view (NoteComplete)</option><option value="r-studio">R Commander Studio</option><option value="ask">Ask each time</option></select></label>
     <label class="zh-set-row zh-set-check" style="margin-top:8px;"><input type="checkbox" data-ms="rAutoFallback"> <span>Use local Rscript fallback when R Commander Studio is not running</span></label>
     <p class="muted math-rc-footnote">Security: NoteComplete never executes R code automatically when opening a note. Cached vector SVGs render offline on every device; R runs only when you explicitly click Run / Update.</p>
   </div>
@@ -122,6 +124,11 @@ function build({ status, onInsertRPrefab }) {
       const val = input.type === 'checkbox' ? input.checked : input.value;
       mathSettings({ [key]: val });
     };
+  }
+  const rOpenSel = d.querySelector('[data-ms-r-open]');
+  if (rOpenSel) {
+    rOpenSel.value = rOpenWith();
+    rOpenSel.onchange = () => setROpenWith(rOpenSel.value);
   }
 
   d.querySelector('[data-rb-refresh]').onclick = () => refreshBridgeStatus();

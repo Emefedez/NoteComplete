@@ -5,12 +5,20 @@
 import { icon } from './icons.js';
 import { openContextMenu } from './context-menu.js';
 import { OFFICE_FORMATS } from './office-formats.js';
+import { isRScriptName } from './text-types.js';
 import { decideOpener, hasOpenWith, takeOpenOnce, openOnceWith, OPENER_LABELS, KIND_NAMES } from './open-with.js';
-import { OFFICE_KINDS, setOpenWith } from './open-with-pref.js';
+import { OFFICE_KINDS, R_KIND, setOpenWith, setROpenWith } from './open-with-pref.js';
 import { officeModule } from './office-module.js';
 
 const INSTALL_HINT = 'Install from Setup ▸ Modules…';
 export const isMarkdownName = (name) => /\.(md|markdown|mdown)$/i.test(String(name || ''));
+
+async function rStudioInstalledState() {
+  try {
+    const st = await globalThis.notecompleteRBridge?.status?.();
+    return Boolean(st?.studioInstalled || st?.studioConnected);
+  } catch { return false; }
+}
 
 // Opening the setup wizard at its Modules step: app.js gives the wizard's own open(); without
 // it (a page without the wizard) the address that opens it is used.
@@ -27,8 +35,9 @@ async function moduleState(module = officeModule) {
 }
 
 // What one opener does to this file, said in a line under its name.
-function describe(o, installed) {
-  if (o.id === 'text') return 'Read it here as text and tables. Save keeps a Markdown copy; the file is not changed.';
+function describe(o, installed, isR = false) {
+  if (o.id === 'text') return isR ? 'Edit in NoteComplete’s built-in code editor.' : 'Read it here as text and tables. Save keeps a Markdown copy; the file is not changed.';
+  if (o.id === 'r-studio') return o.available ? 'Edit and run in R Commander Studio.' : 'Edit and run in R Commander Studio. Not installed yet.';
   if (!installed) return 'Edit it in the office suite. Not installed yet.';
   return { edit: 'Edit it in the office suite; saves to the same file.', 'lossy-edit': 'Edit it in the office suite; saves to the same file (some formatting may be lost).', convert: 'Edit it in the office suite as a new file beside it; this one is kept.', view: 'View it in the office suite.' }[o.mode] || '';
 }
@@ -40,26 +49,27 @@ export function askOpener(name, decision, { installed = false, doc = globalThis.
     const dialog = make('dialog', { className: 'ocr-dialog open-with-dialog' });
     dialog.setAttribute('aria-labelledby', 'openWithTitle');
     const remember = make('input', { type: 'checkbox' });
+    const isR = decision.kind === R_KIND;
     const kindName = KIND_NAMES[decision.kind] || 'these files';
     let result = null;
     // Side by side like the UML editor's tools, each with its number key (1, 2, …).
     const choices = make('div', { className: 'open-with-choices' }, ...decision.openers.map((o, i) => {
       const b = make('button', { type: 'button', className: 'open-with-choice', disabled: !o.available },
-        make('span', { className: 'open-with-choice-head' }, icon(o.id === 'text' ? 'text' : 'office'), make('kbd', { textContent: String(i + 1) })),
+        make('span', { className: 'open-with-choice-head' }, icon(o.id === 'text' ? 'text' : o.id === 'r-studio' ? 'rstudio' : 'office'), make('kbd', { textContent: String(i + 1) })),
         make('strong', { textContent: o.label }),
-        make('span', { className: 'open-with-choice-about', textContent: describe(o, installed) }));
+        make('span', { className: 'open-with-choice-about', textContent: describe(o, installed, isR) }));
       b.dataset.opener = o.id;
       b.title = `${o.label} (${i + 1})`;
       b.onclick = () => { result = { opener: o.id, remember: remember.checked }; dialog.close(); };
       return b;
     }));
     const missing = decision.openers.some((o) => !o.available);
-    const install = make('button', { type: 'button', className: 'link', textContent: `Euro-Office: ${INSTALL_HINT} (I)` });
+    const install = make('button', { type: 'button', className: 'link', textContent: `${isR ? 'R Commander Studio' : 'Euro-Office'}: ${INSTALL_HINT} (I)` });
     install.onclick = () => { dialog.close(); setTimeout(openSetupModules, 0); };
     const cancel = make('button', { type: 'button', textContent: 'Cancel' });
     cancel.onclick = () => dialog.close();
     const rememberRow = make('label', { className: 'open-with-remember' }, remember, ` Remember for ${kindName} `, make('kbd', { textContent: 'R' }));
-    rememberRow.hidden = !OFFICE_KINDS.includes(decision.kind);
+    rememberRow.hidden = !(OFFICE_KINDS.includes(decision.kind) || isR);
     dialog.append(
       make('h2', { id: 'openWithTitle', textContent: 'Open with' }),
       make('p', { className: 'muted open-with-name', textContent: name }),
@@ -95,13 +105,15 @@ export function askOpener(name, decision, { installed = false, doc = globalThis.
 // mode } for 'text' or 'euro-office', or { cancelled: true } when the chooser was dismissed.
 // A choice made in an "Open with" menu for this file wins over the default.
 export async function chooseOpener(name, { module = officeModule, storage, ask = askOpener } = {}) {
-  const { installed, formats } = await moduleState(module);
+  const isR = isRScriptName(name);
+  const { installed, formats } = isR ? { installed: false, formats: OFFICE_FORMATS } : await moduleState(module);
+  const rStudioInstalled = isR ? await rStudioInstalledState() : false;
   const forced = takeOpenOnce(name);
   if (forced === 'euro-office' && isMarkdownName(name) && installed) {
     return { opener: 'euro-office', mode: 'convert' };
   }
   if (!hasOpenWith(name, formats)) return { opener: 'native' };
-  const decision = decideOpener(name, { installed, formats, storage });
+  const decision = decideOpener(name, { installed, rStudioInstalled, formats, storage });
   const mode = (id) => decision.openers.find((o) => o.id === id)?.mode;
   const usable = (id) => decision.openers.some((o) => o.id === id && o.available);
   if (forced && usable(forced)) return { opener: forced, mode: mode(forced) };
@@ -109,19 +121,22 @@ export async function chooseOpener(name, { module = officeModule, storage, ask =
   if (!decision.ask) return { opener: decision.opener, mode: mode(decision.opener) };
   const picked = await ask(name, decision, { installed });
   if (!picked || !usable(picked.opener)) return { cancelled: true };
-  if (picked.remember && OFFICE_KINDS.includes(decision.kind)) setOpenWith(decision.kind, picked.opener, storage);
+  if (picked.remember) {
+    if (decision.kind === R_KIND) setROpenWith(picked.opener, storage);
+    else if (OFFICE_KINDS.includes(decision.kind)) setOpenWith(decision.kind, picked.opener, storage);
+  }
   return { opener: picked.opener, mode: mode(picked.opener) };
 }
 
 // The "Open with ▸" entries for a file (context-menu.js entries), or [] when it has no choice.
-// `open(opener)` opens the file that way. Euro-Office is shown, disabled, while not installed,
-// with the way to install it below.
-export function openWithEntries(name, { open, installed = false, formats = OFFICE_FORMATS, storage } = {}) {
+// `open(opener)` opens the file that way. Euro-Office / R Commander Studio are shown, disabled,
+// while not installed, with the way to install them below.
+export function openWithEntries(name, { open, installed = false, rStudioInstalled = false, formats = OFFICE_FORMATS, storage } = {}) {
   if (!hasOpenWith(name, formats)) return [];
-  const decision = decideOpener(name, { installed, formats, storage });
+  const decision = decideOpener(name, { installed, rStudioInstalled, formats, storage });
   const items = decision.openers.map((o) => ({
     label: o.available ? o.label : `${o.label} (not installed)`,
-    icon: o.id === 'text' ? 'text' : 'office',
+    icon: o.id === 'text' ? 'text' : o.id === 'r-studio' ? 'rstudio' : 'office',
     disabled: !o.available,
     checked: !decision.ask && decision.opener === o.id,
     run: () => open(o.id),
@@ -130,16 +145,18 @@ export function openWithEntries(name, { open, installed = false, formats = OFFIC
   return [{ label: 'Open with', icon: 'open', submenu: items }];
 }
 
-// Right-click (or a long press) on a list card of an office file: Open with ▸ …, then `extra`
+// Right-click (or a long press) on a list card of an office or R file: Open with ▸ …, then `extra`
 // entries (Home's "More…"). `choose()` opens it the usual way (the card's click); the menu sets
 // the opener for that one opening first. Other files keep `fallback` (their own menu), if any.
 export function attachOpenWithMenu(button, name, choose, { extra = [], fallback = null, module = officeModule } = {}) {
   const isMd = isMarkdownName(name);
+  const isR = isRScriptName(name);
   if (!hasOpenWith(name) && !isMd) { if (fallback) button.oncontextmenu = (e) => { e.preventDefault(); fallback(e); }; return; }
   button.oncontextmenu = async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const { installed, formats } = await moduleState(module);
+    const { installed, formats } = isR ? { installed: false, formats: OFFICE_FORMATS } : await moduleState(module);
+    const rStudioInstalled = isR ? await rStudioInstalledState() : false;
     const entries = isMd
       ? [
           {
@@ -150,7 +167,7 @@ export function attachOpenWithMenu(button, name, choose, { extra = [], fallback 
           },
           ...(!installed ? [{ label: INSTALL_HINT, icon: 'settings', run: () => openSetupModules() }] : []),
         ]
-      : openWithEntries(name, { installed, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
+      : openWithEntries(name, { installed, rStudioInstalled, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
     openContextMenu(event.clientX, event.clientY, [{ label: 'Open', icon: 'open', run: () => choose() }, ...entries, ...(extra.length ? ['-', ...extra] : [])], { title: name });
   };
 }
