@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.16
+
+- **Rnote covers.** Rnote notes get a cover on Home right away: their ink drawn small on the canvas colour, with PDF pages as white sheets (a generic Rnote cover when the note is empty or too large); the real first page replaces it once the note has been opened.
+- **Model Explorer names fit the panel.** Long names (such as "Textual Analysis: Sistema de Reservas (p. 1)") were cut off at the panel's edge; they now end in … and slide to show the rest on hover, like folder names on Home.
+- **README brought up to date** with Rnote, `.notecomp`/`.notepart`, R formats, Moodle, Home search, folder browsing, One of each, ODT export, T3 Code failover and the MCP's Drive tools.
+
 ## 2.0.15
 
 - **Rnote notes open in NoteComplete.** `.rnote` files open as editable notes like Goodnotes and Notability notebooks: pen strokes stay ink, shapes, text and pictures come along, PDF pages Rnote imported become page backgrounds, and the canvas colour is kept. An infinite canvas is cut into pages, each PDF page together with the notes written beside it.
