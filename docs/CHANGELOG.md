@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.14
+
+- **Moodle file-type organization, filter pills & icons.** Moodle course sections and folders now group resources into vertically listed file-type subcategories with grid content underneath — **PDF (`.pdf`)** first, then **R (`.R` / `.Rmd`)**, **Office**, **Code & Notes**, **Images & Media**, **Archives**, **Folders**, **Files**, and **Activities & Links** — each with its corresponding icon and color badge plus dynamic filter pills.
+- **Moodle polish & SSO autofill.** Added encrypted remember-login/autofill in the Moodle SSO window, full Moodle 4.x `core_courseformat_get_state` + sub-section loading so every Tema and document appears, redesigned Moodle cards with **Show images** persistence, SVG browser icon in the Moodle sidebar, and hover marquee scrolling for overflowing folder titles.
+- **Convert directly to OpenOffice / OpenDocument (`.odt`).** Added **File → Export → OpenOffice (.odt)…** in the normal editor, supporting both **PDF Move Tool** extraction (editable text frames placed at their exact coordinates on each page, with optional page background) and **Direct visual pages**, with 1-click **Save .odt** or **Convert & open**.
+
 ## 2.0.13
 
 - **T3 Code integration & automatic AI harness failover for document generation.** Added **T3 Code** as a selectable AI harness (with 1-click cross-platform installer and automatic on-demand start / idle auto-close matching R Commander Studio). AI document generation now routes through T3 Code and automatically hands off the orchestrator chat and regenerates remaining subagents on the next harness in your **Harness failover priority** list (configurable in **Setup wizard → AI** and **Help → Connect AI tools…**) whenever a harness errors out or hits usage limits, without losing completed work.

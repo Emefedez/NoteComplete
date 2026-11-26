@@ -1,7 +1,9 @@
-## What's new in 2.0.14
+## What's new in 2.0.15
 
-- **Moodle file-type organization, filter pills & icons.** Moodle course sections and folders now group resources into vertically listed file-type subcategories with grid content underneath — **PDF (`.pdf`)** first, then **R (`.R` / `.Rmd`)**, **Office**, **Code & Notes**, **Images & Media**, **Archives**, **Folders**, **Files**, and **Activities & Links** — each with its corresponding icon and color badge plus dynamic filter pills.
-- **Moodle polish & SSO autofill.** Added encrypted remember-login/autofill in the Moodle SSO window, full Moodle 4.x `core_courseformat_get_state` + sub-section loading so every Tema and document appears, redesigned Moodle cards with **Show images** persistence, SVG browser icon in the Moodle sidebar, and hover marquee scrolling for overflowing folder titles.
-- **Convert directly to OpenOffice / OpenDocument (`.odt`).** Added **File → Export → OpenOffice (.odt)…** in the normal editor, supporting both **PDF Move Tool** extraction (editable text frames placed at their exact coordinates on each page, with optional page background) and **Direct visual pages**, with 1-click **Save .odt** or **Convert & open**.
+- **Rnote notes open in NoteComplete.** `.rnote` files open as editable notes like Goodnotes and Notability notebooks: pen strokes stay ink, shapes, text and pictures come along, PDF pages Rnote imported become page backgrounds, and the canvas colour is kept. An infinite canvas is cut into pages, each PDF page together with the notes written beside it.
+- **Folders show their subfolders and every file.** A folder opened from disk is browsed on Home one level at a time (subfolder cards, the path in the heading, Back goes up). Files NoteComplete can't open are listed too, marked as such; clicking one opens your system's **Open with** app chooser.
+- **One of each for Drive and Dropbox.** A new Home filter chip (on by default) shows same-named items, such as the copies Noteful backups leave, as one card with a ×N count; opening it lists every copy, newest first, to choose from.
+- **Google Drive tools for AI agents.** The bundled MCP server can search, list, download, upload, move, rename and trash Drive files, find duplicates and merge folders (a dry run first; nothing is deleted, only trashed). Sign in once with `drive_connect` or `noteful drive-login`.
+- **Fixed:** imported notebook pages with a coloured background drew a broken background PDF.
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.

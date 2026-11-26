@@ -11,14 +11,14 @@
 </p>
 
 <p align="center">
-  <code>.nfedit</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>DOCX / DOC / ODT / RTF</code> · <code>XLSX / XLS / ODS / CSV</code> · <code>PPTX / PPT / ODP</code> · <code>EPUB / IPYNB</code> · <code>PNG / JPG / WebP / GIF / AVIF</code> · <code>PlantUML</code> · <code>ZIP / TAR</code> · <code>MP3 / WAV / FLAC / MP4</code>
+  <code>.nfedit</code> · <code>.notecomp / .notepart</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>.rnote</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>DOCX / DOC / ODT / RTF</code> · <code>XLSX / XLS / ODS / CSV</code> · <code>PPTX / PPT / ODP</code> · <code>EPUB / IPYNB</code> · <code>PNG / JPG / WebP / GIF / AVIF</code> · <code>PlantUML</code> · <code>R / Rmd / qmd / RData</code> · <code>ZIP / TAR</code> · <code>MP3 / WAV / FLAC / MP4</code>
 </p>
 
 # NoteComplete
 
 **Handwritten notes, PDFs, text documents, Chinese tools, and AI study — local-first, on every screen.**
 
-Everything runs on your device with no account required. Try it in the browser at **[emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/)**. Technical notes on third-party notebook compatibility (`.noteful`, `.goodnotes`, `.ntb`) live in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
+Everything runs on your device with no account required. Try it in the browser at **[emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/)**. Noteful, Goodnotes, Notability and Rnote notebooks open as editable notes; technical notes on that compatibility (`.noteful`, `.goodnotes`, `.ntb`) live in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
 
 <p align="center"><img src="docs/images/reader.png" alt="NoteComplete page editor with handwriting, moon Dark pages toggle, and global-bar MP3 player" width="100%"></p>
 
@@ -32,7 +32,8 @@ Everything runs on your device with no account required. Try it in the browser a
 - **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock, and z-order stacking (**Bring to front / forward / backward / to back**, `Ctrl ]` / `Ctrl [`).
 - **Quick menu & gestures:** `Shift+S`, pen side button, or two-finger hold; two-finger pinch/scroll/undo, three-finger redo; drag tools to reorder; dockable toolbar (top, bottom, left, right).
 - **Pages & canvas:** Infinite canvas or fixed pages; insert blank/PDF pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
-- **Auto-save & export:** Automatic local recovery slots; export pages to PDF, SVG, PNG/JPEG, or Anki study decks.
+- **Other apps' notebooks:** Goodnotes (`.goodnotes`), Notability (`.ntb`) and Rnote (`.rnote`) notebooks open as editable notes: ink stays ink, shapes, text and pictures come along, and imported PDF pages become page backgrounds. Rnote's infinite canvas is cut into pages, each PDF page with the notes written beside it.
+- **Auto-save & export:** Automatic local recovery slots; reopening a file returns to where you were reading; export pages to PDF, SVG, PNG/JPEG, OpenDocument (`.odt`: editable text frames at their place on the page, or the pages as pictures), or Anki study decks.
 
 </details>
 
@@ -97,8 +98,10 @@ Everything runs on your device with no account required. Try it in the browser a
 
 ### Library, Cloud & Search
 
-- **Local folders & Recent:** Open any folder on disk as a sidebar document group, star files, rename/trash in place, filter by type/date/source/size/audio/tags, and switch between cover cards and compact list view.
-- **Cloud & repositories:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, or **GitHub** note repositories directly from Home; check for newer versions, compare page-by-page, and migrate study material/notes across copies.
+- **Local folders & Recent:** Open any folder on disk as a sidebar document group and browse it on Home folder by folder, with every file listed (ones NoteComplete can't open go to your system's **Open with** app chooser); star files, rename/trash/show in folder, filter by type/date/source/size/audio/tags, and switch between cover cards and compact list view.
+- **Cloud & repositories:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, or **GitHub** note repositories directly from Home; check for newer versions, compare page-by-page, and migrate study material/notes across copies. **One of each** shows same-named Drive and Dropbox items (the copies Noteful backups leave) as one card and lets you pick the copy when you open it.
+- **Moodle courses:** Sign in to a Moodle site (built-in **Moovi — Universidade de Vigo** single sign-on, or any server with a token), browse courses, sections and folders grouped by file type, download one file or a whole queue, and use the **Moodle tools** sidebar for deadlines, grades, forums and Ask AI.
+- **One search box on Home:** searches Recent, every connected cloud and the open Moodle course at once.
 - **Unified Search & Batch OCR (`Ctrl+F`):** Search across typed text, PDF text, audio transcripts, and on-device handwriting OCR (multi-language), or search text across your entire library from Home.
 
 <p align="center"><img src="docs/images/home.png" alt="NoteComplete Home screen with Cloud provider dropdown open" width="100%"></p>
@@ -107,7 +110,7 @@ Everything runs on your device with no account required. Try it in the browser a
 
 ### Study & AI
 
-All AI features run through **your own existing AI subscription** on desktop (Claude Code, Codex, Antigravity, or OpenCode) or an optional local **WebLLM** model in the browser — sending only the page/selection you choose.
+All AI features run through **your own existing AI subscription** on desktop (Claude Code, Codex, Antigravity, OpenCode, or **T3 Code**) or an optional local **WebLLM** model in the browser — sending only the page/selection you choose. When one tool fails or runs out of usage, document generation carries on with the next one in your **harness failover** order without losing finished work.
 
 <details open>
 <summary><b>AI Study Tools, Handwriting Synthesis, Transcription &amp; MCP</b></summary>
@@ -117,7 +120,7 @@ All AI features run through **your own existing AI subscription** on desktop (Cl
 - **Fact Check (`Shift+F`):** Check pages for calculation, date, or consistency errors.
 - **Handwriting from Markdown & New Note with AI:** Turn Markdown + math into real, editable, immediately searchable handwriting ink (`File → New note…`) with live preview, or have your AI tool draft full handwritten notebooks from a topic or folder.
 - **Speech Transcription & AI Revision:** Local Whisper (browser/desktop) or Voxtype transcription with word-level timestamps, click-to-seek, SRT/VTT/JSON export, and AI transcript revision that preserves timings and flags classroom noise.
-- **Bundled MCP Server:** One-click *Help → Connect AI tools…* registers NoteComplete's MCP server so agents can read notes, edit Markdown, and write editable handwriting ([docs/MCP.md](docs/MCP.md)).
+- **Bundled MCP Server:** One-click *Help → Connect AI tools…* registers NoteComplete's MCP server so agents can read notes, edit Markdown, insert prefabs into notes, Markdown, HTML and Office files, and write editable handwriting. Its **Google Drive tools** let an agent search, move, upload and download files, find duplicates and merge backup folders (always a dry run first; removal is Drive's trash) ([docs/MCP.md](docs/MCP.md)).
 
 <p align="center"><img src="docs/images/handwriting.png" alt="Handwritten pages generated from Markdown with live ink preview" width="100%"></p>
 
@@ -135,7 +138,7 @@ From the desktop app's **Share** menu:
 
 ### Desktop, Web & Mobile
 
-- **Multi-tab & multi-window** (`Ctrl+T`, drag tab out), first-run **Setup wizard** (`Help → Setup wizard…`) for look, performance, AI, optional modules, and prefab packs, floating resizable windows with a shared tray, command palette (`Ctrl+K`), keyboard shortcut badges (`?`), interface zoom (`Ctrl+Shift+−/+/0`), and automatic update checks.
+- **Multi-tab & multi-window** (`Ctrl+T`, drag tab out), first-run **Setup wizard** (`Help → Setup wizard…`) for look, performance, AI, optional modules, and prefab packs, colour themes with a theme editor (`View ▸ More themes…`), floating resizable windows with a shared tray, command palette (`Ctrl+K`), keyboard shortcut badges (`?`), interface zoom (`Ctrl+Shift+−/+/0`), and automatic update checks (also beta builds from a branch: `Help → Check for updates (branch)…`).
 - **Adaptive mobile & narrow layout:** Compact bottom bars, horizontally scrollable tool rows with edge fades, touch-friendly zoom/drag handling, and offline PWA support.
 
 ---
@@ -146,7 +149,7 @@ NoteComplete saves notes natively as **`.nfedit`** — a single non-destructive 
 
 | Stored inside `.nfedit` | What it preserves |
 | --- | --- |
-| **Original source file** | Untouched `.noteful`, `.pdf`, `.goodnotes`, `.ntb`, or image base |
+| **Original source file** | Untouched `.noteful`, `.pdf`, `.goodnotes`, `.ntb`, `.rnote`, or image base |
 | **Edits & full history** | Every stroke, shape, text box, crop, layer change, and full undo/redo timeline |
 | **Markdown notes** | Side-panel notes (`N`) and `+ Page` section links |
 | **Searchable text & OCR** | Recognized handwriting text and synthesized Markdown-handwriting text |
@@ -155,7 +158,7 @@ NoteComplete saves notes natively as **`.nfedit`** — a single non-destructive 
 | **Chinese metadata** | Note Pinyin-over-characters toggle, script preference, and per-character reading overrides |
 | **Prefabs & interactive HTML** | Editable figure/diagram specs and embedded interactive exam HTML |
 
-You can also export directly to **`.noteful`**, **PDF**, **SVG**, **images**, **Markdown**, or **Anki** decks. For details on `.noteful`, Goodnotes, and Notability compatibility, see [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
+Lighter siblings: **`.notecomp`** (a note with its Markdown notes, recordings and study material) and **`.notepart`** (part of a note). You can also export directly to **`.noteful`**, **PDF**, **SVG**, **images**, **OpenDocument (`.odt`)**, **Markdown**, or **Anki** decks. For details on `.noteful`, Goodnotes, and Notability compatibility, see [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
 
 ---
 
