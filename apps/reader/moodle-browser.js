@@ -356,7 +356,8 @@ export function moodleBrowser({
         const actions = document.createElement('span');
         actions.className = 'moodle-card-actions';
         if (queue && item.isDownloadable && !selectingQueue) {
-          actions.append(queueButton(item.name, () => queue.enqueue([queueItemOf(item)])));
+          const qItem = queueItemOf(item);
+          actions.append(queueButton({ queue, id: qItem.id, item: qItem }));
         }
         const ext = document.createElement('button');
         ext.type = 'button';
