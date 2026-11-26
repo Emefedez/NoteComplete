@@ -890,7 +890,12 @@ app.whenReady().then(async () => {
     return true;
   }));
   ipcMain.handle('tabs:list', guarded(event => tabs.list(tabs.windowOf(event.sender.id)).map(t => ({ ...t, current: t.id === event.sender.id }))));
-  ipcMain.handle('tabs:new', guarded(event => { const win = windowOf(event.sender); if (win) openTab(win); }));
+  ipcMain.handle('tabs:new', guarded((event, filePath) => {
+    const win = windowOf(event.sender);
+    if (!win) return;
+    const target = typeof filePath === 'string' && filePath.trim() ? openablePath(filePath) : null;
+    openTab(win, target);
+  }));
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
   ipcMain.handle('tabs:close', guarded((event, id) => { if (tabs.windowOf(id) === tabs.windowOf(event.sender.id)) requestClose(id); }));
   ipcMain.handle('tabs:close-self', guarded(event => closeTab(event.sender.id)));

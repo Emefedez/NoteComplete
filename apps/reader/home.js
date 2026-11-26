@@ -381,9 +381,22 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
         }
         library.facts(coverKey(entry)).then(facts => { if (facts) { button.note.facts = facts; applyFilters(); } });
       }
-      button.onclick = () => {
+      button.onclick = async (event) => {
         if (batches.some((batch) => batch.handleCardClick(button, entry))) return;
+        if ((event?.ctrlKey || event?.metaKey) && window.notecompleteTabs?.open && library?.pathOf) {
+          const diskPath = await library.pathOf(entry).catch(() => '');
+          if (diskPath) {
+            await window.notecompleteTabs.open(diskPath);
+            return;
+          }
+        }
         void openEntry(entry);
+      };
+      button.onauxclick = async (event) => {
+        if (event.button !== 1 || !window.notecompleteTabs?.open || !library?.pathOf) return;
+        event.preventDefault();
+        const diskPath = await library.pathOf(entry).catch(() => '');
+        if (diskPath) await window.notecompleteTabs.open(diskPath);
       };
       item.append(button, remove);
       // In a folder: a star keeps the document at the top of it.

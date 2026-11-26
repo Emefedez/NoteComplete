@@ -298,7 +298,7 @@ contextBridge.exposeInMainWorld('notecompleteWindows', {
 // unsaved state; closing asks the reader first (onCloseRequest).
 contextBridge.exposeInMainWorld('notecompleteTabs', {
   list: () => ipcRenderer.invoke('tabs:list'),
-  open: () => ipcRenderer.invoke('tabs:new'),
+  open: filePath => ipcRenderer.invoke('tabs:new', typeof filePath === 'string' ? filePath : ''),
   activate: id => ipcRenderer.invoke('tabs:activate', id),
   close: id => ipcRenderer.invoke('tabs:close', id),
   closeSelf: () => ipcRenderer.invoke('tabs:close-self'),

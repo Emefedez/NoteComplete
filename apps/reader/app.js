@@ -5953,9 +5953,12 @@ const downloadQueue = createDownloadQueue({
     drive?.onQueueItemDone?.(item);
     dropbox?.onQueueItemDone?.(item);
     archive?.onQueueItemDone?.(item);
+    moodle?.onQueueItemDone?.(item);
+    if (item?.source === "moodle") home?.refresh?.();
   },
   onUpdate: (stats) => {
     queueView.update(stats);
+    moodle?.onQueueUpdate?.(stats);
     // Desktop: a tab with downloads running is not throttled while another tab is shown. Only
     // while one is actually downloading: a paused or finished queue gives the throttling back,
     // so hidden tabs cost no more than before.

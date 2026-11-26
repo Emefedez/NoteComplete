@@ -155,8 +155,12 @@ export function queueWindow({ queue, $ = (id) => document.getElementById(id), do
         statusEl.textContent = `Downloading ${stats.completed + 1} of ${stats.total}: ${stats.activeItem.name}${pct}`;
       } else if (stats.pending > 0) {
         statusEl.textContent = `${stats.pending} item${stats.pending === 1 ? "" : "s"} waiting in queue…`;
+      } else if (stats.errors > 0 && stats.completed === 0) {
+        const firstErr = stats.items.find((i) => i.status === "error")?.error;
+        statusEl.textContent = firstErr ? `Download failed: ${firstErr}` : `${stats.errors} download${stats.errors === 1 ? "" : "s"} failed`;
       } else {
-        statusEl.textContent = `Batch download complete (${stats.completed} files saved to library)`;
+        const errNote = stats.errors ? `, ${stats.errors} failed` : "";
+        statusEl.textContent = `Batch download complete (${stats.completed} files saved to library${errNote})`;
       }
     }
     const listEl = $("cloudQueueList");

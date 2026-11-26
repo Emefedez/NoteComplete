@@ -7,7 +7,7 @@
 //    Ask AI about your Moodle context, and MCP setup snippets (`open-moodle` / `moodle-student-bridge`).
 import { icon } from './icons.js';
 import { floatingWindow } from './floating.js';
-import { queueButton, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
+import { queueButton, markQueueDone, setQueueButton, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
 const CONFIG_KEY = 'notecomplete-moodle-config-v1';
 
@@ -180,7 +180,9 @@ export function moodleBrowser({
     updateQueueControls();
   }
 
-  async function downloadAndOpen(item) {
+  const queueButtons = new Map();
+
+  async function downloadAndOpen(item, { newTab = false } = {}) {
     if (!api) return;
     msg(`Downloading ${item.name}…`);
     loading = true;
@@ -194,6 +196,14 @@ export function moodleBrowser({
         entry = await library.rememberImported(file, { origin: `Moodle · ${currentCourse?.fullname || session?.label || 'Moodle'}` }).catch(() => null);
       }
       msg('');
+      if (newTab && entry && library?.pathOf && window.notecompleteTabs?.open) {
+        const diskPath = await library.pathOf(entry).catch(() => '');
+        if (diskPath) {
+          await window.notecompleteTabs.open(diskPath);
+          status(`Opened ${file.name} in a new tab.`);
+          return;
+        }
+      }
       await open?.(file, { ...item, name: file.name, entry });
     } catch (e) {
       msg(e?.message || String(e));
@@ -326,6 +336,7 @@ export function moodleBrowser({
   function renderList() {
     const list = $('moodleList');
     if (!list) return;
+    queueButtons.clear();
     list.replaceChildren();
     const q = search.trim().toLowerCase();
 
@@ -425,7 +436,7 @@ export function moodleBrowser({
       btn.append(badge, body);
       bindTitleMarquee(btn, title);
 
-      btn.onclick = () => {
+      btn.onclick = (e) => {
         if (selectingQueue && item.isDownloadable) {
           if (selectedIds.has(item.id)) selectedIds.delete(item.id);
           else selectedIds.add(item.id);
@@ -433,15 +444,25 @@ export function moodleBrowser({
           renderList();
           return;
         }
+        const wantNewTab = Boolean(e?.ctrlKey || e?.metaKey);
         if (item.isFolder) openFolder(item);
-        else if (item.isDownloadable) downloadAndOpen(item);
+        else if (item.isDownloadable) downloadAndOpen(item, { newTab: wantNewTab });
         else openExternalUrl(item.url);
+      };
+      btn.onauxclick = (e) => {
+        if (e.button === 1 && item.isDownloadable && !item.isFolder) {
+          e.preventDefault();
+          downloadAndOpen(item, { newTab: true });
+        }
       };
 
       const actions = document.createElement('span');
       actions.className = 'moodle-card-actions';
       if (queue && item.isDownloadable && !selectingQueue) {
-        actions.append(queueButton({ queue, id: `moodle:${item.id}`, item: () => queueItemOf(item) }));
+        const qid = `moodle:${item.id}`;
+        const qb = queueButton({ queue, id: qid, item: () => queueItemOf(item) });
+        queueButtons.set(qid, qb);
+        actions.append(qb);
       }
       const ext = document.createElement('button');
       ext.type = 'button';
@@ -966,6 +987,22 @@ export function moodleBrowser({
       }
     },
     hide() { visible = false; },
+    onQueueItemDone(item) {
+      if (!item || item.source !== 'moodle') return;
+      const btn = queueButtons.get(item.id);
+      if (btn) markQueueDone(btn);
+      status(`Downloaded ${item.name} from Moodle to Recent.`);
+    },
+    onQueueUpdate(stats) {
+      for (const it of stats?.items || []) {
+        if (it.source !== 'moodle') continue;
+        const btn = queueButtons.get(it.id);
+        if (btn) setQueueButton(btn, it.status === 'error' ? null : it.status);
+        if (it.status === 'error' && it.error) {
+          msg(`Download failed (${it.name}): ${it.error}`);
+        }
+      }
+    },
     openSidebar,
     search(q) {
       search = String(q || '');
