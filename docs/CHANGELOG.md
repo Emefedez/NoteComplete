@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.1
+
+- **Open in Euro-Office from the Markdown editor works.** The button did nothing for Markdown files, because the file's name was read without its `.md`. It also works for a new Markdown note that was never saved (it goes as *Untitled.md*), and it no longer asks to discard unsaved edits, since they go along to Euro-Office. A message says it is opening, as Euro-Office can take a while to start.
+- **One prefab icon everywhere.** Insert prefab in the Markdown editor's toolbar and right-click menu now uses the same graph icon as Insert prefab on pages and in menus.
+- **Clearer table headers.** A table's header had a small blue ▲/▼ and a grey ▾ that both looked like arrows. Now the only arrow is the sort one: ↑ or ↓ in the accent colour on the sorted column, ↕ when you point at another column. Filtering by values is a funnel icon of the same size.
+- **Number keys in the New note menu.** Its choices are numbered 1–9 like Import, export and share: press the number to choose, or use the arrows.
+
 ## 2.0.0
 
 - **Every prefab in Markdown.** UML and Visual Paradigm diagrams, charts, algorithms, number lines, truth tables, sticky notes, R figures and the rest now go into Markdown the way stroke order already did: from the new **Insert prefab** button at the end of the Markdown editor's toolbar, or by right-clicking in the text and choosing **Insert prefab…**. It works in the document editor and in the Notes panel. Each one shows as a pill in the editor and as the figure in the preview; double-click it or right-click it to edit it again in its own editor. The Table card puts in a Markdown table.
