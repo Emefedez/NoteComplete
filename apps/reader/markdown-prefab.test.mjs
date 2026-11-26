@@ -51,17 +51,24 @@ test('insertPrefabInto pastes after the selection, at the caret kept before the 
   const editor = {
     sel: { focus: { row: 1, col: 2 }, anchor: { row: 3, col: 0 } },
     getSelection(anchor) { return anchor ? this.sel.anchor : this.sel.focus; },
+    getContent() { return 'a\nbb\n\nline three\nfour'; },
     paste(text, a, f) { pasted.push([text, a, f]); },
   };
   let after = 0;
   assert.equal(await insertPrefabInto(editor, async () => ({ kind: 'table' }), () => { after++; }), true);
-  assert.deepEqual(pasted[0], [`\n\n${MARKDOWN_TABLE}\n`, { row: 3, col: 0 }, { row: 3, col: 0 }]);
+  assert.deepEqual(pasted[0], [`\n\n${MARKDOWN_TABLE}\n`, { row: 3, col: 10 }, { row: 3, col: 10 }]);
   assert.equal(after, 1);
   // A right-click's place wins; a cancelled picker pastes nothing.
-  await insertPrefabInto(editor, async () => ({ kind: 'table' }), () => {}, { row: 0, col: 4 });
-  assert.deepEqual(pasted[1].slice(1), [{ row: 0, col: 4 }, { row: 0, col: 4 }]);
+  await insertPrefabInto(editor, async () => ({ kind: 'table' }), () => {}, { row: 0, col: 0 });
+  assert.deepEqual(pasted[1].slice(1), [{ row: 0, col: 1 }, { row: 0, col: 1 }]);
+  await insertPrefabInto(editor, async () => ({ kind: 'table' }), () => {}, { row: 1, col: 0 });
+  assert.equal(pasted.at(-1)[0], `\n\n${MARKDOWN_TABLE}`, 'a blank line follows bb');
+  pasted.pop();
+  // On an empty line: no blank lines before it.
+  await insertPrefabInto(editor, async () => ({ kind: 'table' }), () => {}, { row: 2, col: 0 });
+  assert.equal(pasted[2][0], `\n${MARKDOWN_TABLE}\n`, 'bb above: one blank line');
   assert.equal(await insertPrefabInto(editor, async () => null), false);
-  assert.equal(pasted.length, 2);
+  assert.equal(pasted.length, 3);
   const cmd = prefabCommand(() => {});
   assert.equal(cmd.name, 'prefab');
   assert.match(cmd.innerHTML, /^<svg/);

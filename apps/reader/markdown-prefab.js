@@ -45,11 +45,18 @@ export async function prefabMarkdown(chosen) {
 export async function insertPrefabInto(editor, choose, after = () => {}, place = null) {
   if (!editor || !choose) return false;
   const at = place || editor.getSelection(false), anchor = place || editor.getSelection(true) || at;
-  const block = await prefabMarkdown(await choose());
+  let block = await prefabMarkdown(await choose());
   if (!block) return false;
-  // After the selection, not over it.
+  // After the line the caret (or the end of the selection) is on: a paragraph is not split.
   const end = at && anchor && (anchor.row > at.row || (anchor.row === at.row && anchor.col > at.col)) ? anchor : at;
-  if (end) editor.paste(block, end, end); else editor.paste(block);
+  if (!end) { editor.paste(block); after(); return true; }
+  const lines = String(editor.getContent?.() ?? '').split('\n'), line = lines[end.row] ?? '';
+  // On an empty line: a blank line before it only when the line above has text.
+  if (!line.trim()) block = block.replace(/^\n+/, end.row > 0 && lines[end.row - 1].trim() ? '\n' : '');
+  // A blank line already follows: no second one.
+  if (end.row + 1 < lines.length && !lines[end.row + 1].trim()) block = block.replace(/\n+$/, '');
+  const spot = { row: end.row, col: line.length };
+  editor.paste(block, spot, spot);
   after();
   return true;
 }
