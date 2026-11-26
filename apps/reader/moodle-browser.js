@@ -53,6 +53,7 @@ export function moodleBrowser({
   let currentFolder = null;
   let currentFolderFiles = [];
   let search = '';
+  let activeTypeFilter = 'all';
   let selectingQueue = false;
   const selectedIds = new Set();
   let showImages = cfg.showImages === true;
@@ -203,14 +204,77 @@ export function moodleBrowser({
   }
 
   const IMAGE_NAME_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+  const TYPE_CATEGORIES = [
+    { id: 'pdf', label: 'PDF (.pdf)', glyph: 'pages', tone: 'pdf' },
+    { id: 'r', label: 'R (.R / .Rmd)', glyph: 'rstudio', tone: 'r' },
+    { id: 'office', label: 'Office (.docx / .pptx / .odt)', glyph: 'text', tone: 'office' },
+    { id: 'code', label: 'Code & Notes', glyph: 'code', tone: 'code' },
+    { id: 'images', label: 'Images & Media', glyph: 'image', tone: 'image' },
+    { id: 'archives', label: 'Archives (.zip)', glyph: 'archive', tone: 'archive' },
+    { id: 'folders', label: 'Folders', glyph: 'folder', tone: 'folder' },
+    { id: 'other-files', label: 'Files', glyph: 'note', tone: 'file' },
+    { id: 'activities', label: 'Activities & Links', glyph: 'link', tone: 'link' },
+  ];
+  const TYPE_RANK = Object.fromEntries(TYPE_CATEGORIES.map((c, i) => [c.id, i]));
+  const TYPE_INFO = Object.fromEntries(TYPE_CATEGORIES.map((c) => [c.id, c]));
+
+  function classifyMoodleItem(item) {
+    if (item.isFolder || item.modname === 'folder') return 'folders';
+    const probe = `${item.fileName || ''} ${item.name || ''} ${item.downloadUrl || ''} ${item.url || ''}`.toLowerCase();
+    if (/\.pdf\b/i.test(probe)) return 'pdf';
+    if (/\.(?:r|rmd|qmd)\b/i.test(probe)) return 'r';
+    if (/\.(?:docx?|odt|pptx?|odp|xlsx?|ods|csv|rtf)\b/i.test(probe)) return 'office';
+    if (/\.(?:md|markdown|txt|py|java|c|cpp|h|hpp|js|mjs|ts|tsx|jsx|html?|css|json|sql|sh|noteful|nfedit)\b/i.test(probe)) return 'code';
+    if (/\.(?:png|jpe?g|webp|gif|avif|bmp|svg|mp3|wav|ogg|m4a|mp4|webm)\b/i.test(probe)) return 'images';
+    if (/\.(?:zip|tar|gz|tgz|7z|rar)\b/i.test(probe)) return 'archives';
+    if (item.isDownloadable || item.modname === 'resource' || item.modname === 'file') return 'other-files';
+    return 'activities';
+  }
+
+  function renderTypeFilters(allItems) {
+    const bar = $('moodleTypeFilters');
+    if (!bar) return;
+    if (view === 'courses' || !allItems.length) {
+      bar.hidden = true;
+      bar.replaceChildren();
+      return;
+    }
+    const counts = new Map();
+    for (const item of allItems) {
+      const cat = classifyMoodleItem(item);
+      counts.set(cat, (counts.get(cat) || 0) + 1);
+    }
+    if (activeTypeFilter !== 'all' && !counts.has(activeTypeFilter)) activeTypeFilter = 'all';
+    const buttons = [];
+    const mkPill = (id, text) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = `chip moodle-type-pill${activeTypeFilter === id ? ' active' : ''}`;
+      b.setAttribute('aria-pressed', String(activeTypeFilter === id));
+      b.textContent = text;
+      b.onclick = () => {
+        activeTypeFilter = activeTypeFilter === id && id !== 'all' ? 'all' : id;
+        renderList();
+      };
+      return b;
+    };
+    buttons.push(mkPill('all', `All (${allItems.length})`));
+    for (const cat of TYPE_CATEGORIES) {
+      const n = counts.get(cat.id) || 0;
+      if (n > 0) buttons.push(mkPill(cat.id, `${cat.label} (${n})`));
+    }
+    bar.replaceChildren(...buttons);
+    bar.hidden = buttons.length <= 2;
+  }
+
   const MOD_META = {
     folder: { glyph: 'folder', label: 'Folder', tone: 'folder' },
     resource: { glyph: 'note', label: 'File', tone: 'file' },
     file: { glyph: 'note', label: 'File', tone: 'file' },
-    assign: { glyph: 'edit', label: 'Assignment', tone: 'assign' },
+    assign: { glyph: 'draw', label: 'Assignment', tone: 'assign' },
     quiz: { glyph: 'exam', label: 'Quiz', tone: 'quiz' },
     forum: { glyph: 'chat', label: 'Forum', tone: 'forum' },
-    url: { glyph: 'open', label: 'Link', tone: 'link' },
+    url: { glyph: 'link', label: 'Link', tone: 'link' },
     page: { glyph: 'text', label: 'Page', tone: 'page' },
   };
 
@@ -266,6 +330,7 @@ export function moodleBrowser({
     const q = search.trim().toLowerCase();
 
     if (view === 'courses') {
+      renderTypeFilters([]);
       const shown = courses.filter((c) => !q || `${c.fullname} ${c.shortname}`.toLowerCase().includes(q));
       if (!shown.length) {
         msg(courses.length ? 'No courses match your search.' : 'No enrolled courses found.');
@@ -316,9 +381,88 @@ export function moodleBrowser({
       ? [{ sectionName: currentFolder?.name || 'Folder', items: currentFolderFiles }]
       : currentSections.map((s) => ({ sectionName: s.name, items: s.items }));
 
+    const allViewItems = flatItems.flatMap((g) => g.items);
+    renderTypeFilters(allViewItems);
+
+    const buildItemCard = (item) => {
+      const li = document.createElement('li');
+      li.className = 'note-card moodle-card';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'moodle-card-open';
+      if (selectedIds.has(item.id)) btn.classList.add('is-selected');
+
+      const catId = classifyMoodleItem(item);
+      const catInfo = TYPE_INFO[catId];
+      const modInfo = MOD_META[item.modname];
+      const useFileTypeIcon = ['pdf', 'r', 'office', 'code', 'images', 'archives'].includes(catId);
+      const kindInfo = useFileTypeIcon
+        ? { glyph: catInfo.glyph, label: catInfo.label.split(' ')[0], tone: catInfo.tone }
+        : (modInfo || (item.isFolder ? MOD_META.folder : item.isDownloadable ? MOD_META.resource : MOD_META.url));
+      const badge = document.createElement('span');
+      badge.className = `moodle-card-icon tone-${kindInfo.tone}`;
+      badge.append(icon(kindInfo.glyph));
+      if (showImages && item.isDownloadable && IMAGE_NAME_RE.test(item.fileName || item.name || '')) {
+        attachCoverImage(badge, item.downloadUrl || item.url);
+      }
+
+      const body = document.createElement('span');
+      body.className = 'moodle-card-text';
+      const title = document.createElement('strong');
+      title.textContent = item.name;
+      const meta = document.createElement('span');
+      meta.className = 'moodle-card-meta';
+      meta.textContent = item.isFolder
+        ? 'Folder · click to browse'
+        : item.isDownloadable
+          ? `${kindInfo.label} · click to open`
+          : `${kindInfo.label} · opens in browser`;
+      body.append(title, meta);
+
+      if (selectingQueue && item.isDownloadable) {
+        btn.append(selectionCheck(selectedIds.has(item.id)));
+      }
+      btn.append(badge, body);
+      bindTitleMarquee(btn, title);
+
+      btn.onclick = () => {
+        if (selectingQueue && item.isDownloadable) {
+          if (selectedIds.has(item.id)) selectedIds.delete(item.id);
+          else selectedIds.add(item.id);
+          updateQueueControls();
+          renderList();
+          return;
+        }
+        if (item.isFolder) openFolder(item);
+        else if (item.isDownloadable) downloadAndOpen(item);
+        else openExternalUrl(item.url);
+      };
+
+      const actions = document.createElement('span');
+      actions.className = 'moodle-card-actions';
+      if (queue && item.isDownloadable && !selectingQueue) {
+        const qItem = queueItemOf(item);
+        actions.append(queueButton({ queue, id: qItem.id, item: qItem }));
+      }
+      const ext = document.createElement('button');
+      ext.type = 'button';
+      ext.className = 'icon-button moodle-ext-btn';
+      ext.title = 'Open in browser';
+      ext.setAttribute('aria-label', `Open ${item.name} in browser`);
+      ext.append(icon('open'));
+      ext.onclick = (e) => { e.stopPropagation(); openExternalUrl(item.url); };
+      actions.append(ext);
+
+      li.append(btn, actions);
+      return li;
+    };
+
     let shownCount = 0;
     for (const group of flatItems) {
-      const filtered = group.items.filter((it) => !q || `${it.name} ${it.modname} ${group.sectionName}`.toLowerCase().includes(q));
+      const filtered = group.items.filter((it) => {
+        if (activeTypeFilter !== 'all' && classifyMoodleItem(it) !== activeTypeFilter) return false;
+        return !q || `${it.name} ${it.modname} ${group.sectionName}`.toLowerCase().includes(q);
+      });
       if (!filtered.length) continue;
 
       if (view === 'course') {
@@ -328,73 +472,42 @@ export function moodleBrowser({
         list.append(header);
       }
 
+      // Group items by file type in priority order (PDF first, then R, Office, Code, Images, Archives, Folders, Files, Activities).
+      const byType = new Map();
       for (const item of filtered) {
-        shownCount += 1;
-        const li = document.createElement('li');
-        li.className = 'note-card moodle-card';
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'moodle-card-open';
-        if (selectedIds.has(item.id)) btn.classList.add('is-selected');
-
-        const kindInfo = MOD_META[item.modname] || (item.isFolder ? MOD_META.folder : item.isDownloadable ? MOD_META.resource : MOD_META.url);
-        const badge = document.createElement('span');
-        badge.className = `moodle-card-icon tone-${kindInfo.tone}`;
-        badge.append(icon(kindInfo.glyph));
-        if (showImages && item.isDownloadable && IMAGE_NAME_RE.test(item.fileName || item.name || '')) {
-          attachCoverImage(badge, item.downloadUrl || item.url);
-        }
-
-        const body = document.createElement('span');
-        body.className = 'moodle-card-text';
-        const title = document.createElement('strong');
-        title.textContent = item.name;
-        const meta = document.createElement('span');
-        meta.className = 'moodle-card-meta';
-        meta.textContent = item.isFolder
-          ? 'Folder · click to browse'
-          : item.isDownloadable
-            ? `${kindInfo.label} · click to open`
-            : `${kindInfo.label} · opens in browser`;
-        body.append(title, meta);
-
-        if (selectingQueue && item.isDownloadable) {
-          btn.append(selectionCheck(selectedIds.has(item.id)));
-        }
-        btn.append(badge, body);
-        bindTitleMarquee(btn, title);
-
-        btn.onclick = () => {
-          if (selectingQueue && item.isDownloadable) {
-            if (selectedIds.has(item.id)) selectedIds.delete(item.id);
-            else selectedIds.add(item.id);
-            updateQueueControls();
-            renderList();
-            return;
-          }
-          if (item.isFolder) openFolder(item);
-          else if (item.isDownloadable) downloadAndOpen(item);
-          else openExternalUrl(item.url);
-        };
-
-        const actions = document.createElement('span');
-        actions.className = 'moodle-card-actions';
-        if (queue && item.isDownloadable && !selectingQueue) {
-          const qItem = queueItemOf(item);
-          actions.append(queueButton({ queue, id: qItem.id, item: qItem }));
-        }
-        const ext = document.createElement('button');
-        ext.type = 'button';
-        ext.className = 'icon-button moodle-ext-btn';
-        ext.title = 'Open in browser';
-        ext.setAttribute('aria-label', `Open ${item.name} in browser`);
-        ext.append(icon('open'));
-        ext.onclick = (e) => { e.stopPropagation(); openExternalUrl(item.url); };
-        actions.append(ext);
-
-        li.append(btn, actions);
-        list.append(li);
+        const cat = classifyMoodleItem(item);
+        if (!byType.has(cat)) byType.set(cat, []);
+        byType.get(cat).push(item);
       }
+      const orderedTypes = [...byType.keys()].sort((a, b) => (TYPE_RANK[a] ?? 99) - (TYPE_RANK[b] ?? 99));
+
+      const subList = document.createElement('li');
+      subList.className = 'moodle-subcat-list';
+      for (const cat of orderedTypes) {
+        const catItems = byType.get(cat);
+        const catMeta = TYPE_INFO[cat] || { label: cat, glyph: 'note', tone: 'file' };
+        shownCount += catItems.length;
+        const row = document.createElement('div');
+        row.className = 'moodle-subcat-row';
+        const subHead = document.createElement('div');
+        subHead.className = 'moodle-type-subhead';
+        const subIco = document.createElement('span');
+        subIco.className = `moodle-type-subhead-ico tone-${catMeta.tone}`;
+        subIco.append(icon(catMeta.glyph));
+        const subLbl = document.createElement('span');
+        subLbl.className = 'moodle-type-subhead-label';
+        subLbl.textContent = catMeta.label;
+        const subCnt = document.createElement('span');
+        subCnt.className = 'moodle-type-subhead-count';
+        subCnt.textContent = String(catItems.length);
+        subHead.append(subIco, subLbl, subCnt);
+        const grid = document.createElement('ul');
+        grid.className = 'note-grid moodle-subgrid';
+        for (const item of catItems) grid.append(buildItemCard(item));
+        row.append(subHead, grid);
+        subList.append(row);
+      }
+      list.append(subList);
     }
 
     if (!shownCount) msg('No resources match your filter.');

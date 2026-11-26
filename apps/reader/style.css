@@ -5958,11 +5958,19 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
 .moodle-card-icon.has-thumb { width: 52px; height: 42px; padding: 0; background: var(--chrome); }
 .moodle-card-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
 .moodle-card-icon.tone-course, .moodle-card-icon.tone-folder { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
+.moodle-card-icon.tone-pdf { background: rgba(239, 68, 68, 0.16); color: #ef4444; }
+.moodle-card-icon.tone-r { background: rgba(37, 99, 235, 0.18); color: #3b82f6; }
+.moodle-card-icon.tone-office { background: rgba(14, 165, 233, 0.16); color: #0ea5e9; }
+.moodle-card-icon.tone-code { background: rgba(16, 185, 129, 0.16); color: #10b981; }
+.moodle-card-icon.tone-image { background: rgba(236, 72, 153, 0.16); color: #ec4899; }
+.moodle-card-icon.tone-archive { background: rgba(234, 179, 8, 0.16); color: #eab308; }
 .moodle-card-icon.tone-file { background: rgba(56, 189, 248, 0.16); color: #38bdf8; }
 .moodle-card-icon.tone-quiz { background: rgba(168, 85, 247, 0.16); color: #a855f7; }
 .moodle-card-icon.tone-forum { background: rgba(20, 184, 166, 0.16); color: #14b8a6; }
 .moodle-card-icon.tone-assign { background: rgba(244, 63, 94, 0.16); color: #f43f5e; }
 .moodle-card-icon.tone-link, .moodle-card-icon.tone-page { background: rgba(99, 102, 241, 0.16); color: #818cf8; }
+.moodle-type-subhead-ico { display: inline-flex; width: 15px; height: 15px; align-items: center; justify-content: center; }
+.moodle-type-subhead-ico svg { width: 14px; height: 14px; }
 .moodle-card-text { flex: 1; min-width: 0; display: grid; gap: 3px; overflow: hidden; }
 .moodle-card-text strong {
   font-size: 13.5px;
@@ -6074,4 +6082,49 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
   font-weight: 600;
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* Moodle file-type filter bar & subcategory list + grid layout */
+.moodle-type-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+.moodle-type-pill.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.moodle-subcat-list {
+  grid-column: 1 / -1;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  padding: 2px 0 6px;
+}
+.moodle-subcat-row {
+  display: grid;
+  gap: 6px;
+}
+.moodle-type-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 2px 2px;
+}
+.moodle-type-subhead-count {
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  background: var(--fill);
+  color: var(--ink);
+}
+.moodle-subgrid {
+  margin: 0;
+  padding: 0;
 }

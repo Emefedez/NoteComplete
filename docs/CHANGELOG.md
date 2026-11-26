@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.13
+
+- **T3 Code integration & automatic AI harness failover for document generation.** Added **T3 Code** as a selectable AI harness (with 1-click cross-platform installer and automatic on-demand start / idle auto-close matching R Commander Studio). AI document generation now routes through T3 Code and automatically hands off the orchestrator chat and regenerates remaining subagents on the next harness in your **Harness failover priority** list (configurable in **Setup wizard → AI** and **Help → Connect AI tools…**) whenever a harness errors out or hits usage limits, without losing completed work.
+- **Moodle Cloud section, UVIGO Moovi SAML2 SSO & Student Assistant sidebar.** Added **Moodle** to Home → Cloud and the Setup Wizard with a built-in **Moovi — Universidade de Vigo (UVIGO)** SAML2 SSO preset (plus custom Moodle servers & tokens), course/section/folder navigation, single & bulk download, external browser launch, and the **Moodle tools** sidebar (deadlines, grades, forums, Ask AI, MCP configs).
+- **Global Home search bar.** Added a unified search bar at the top of the Home screen that searches across **Recent**, all currently enabled **Cloud** providers, and the currently chosen **Moodle** course at once.
+
 ## 2.0.12
 
 - **Open with for R scripts (`.R`, `.Rmd`, `.qmd`), matching Euro-Office.** Creating or opening an R script no longer forces R Commander Studio every time. You can now choose **Text view (code editor)**, **R Commander Studio**, or **Ask each time** (with the same **Open with** picker popup, `1`/`2` shortcuts, and *Remember for R scripts* checkbox) in **Setup wizard → Modules → Math & R → R Commander Studio**, **Math Mode & R Bridge settings**, and right-click **Open with ▸** menus.
