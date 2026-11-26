@@ -56,6 +56,7 @@ import { quizController } from "./quiz.js";
 import { jobChip } from "./jobs.js";
 import { floatingWindow } from "./floating.js";
 import { pageExporter } from "./page-export.js";
+import { odtExportController } from "./odt-export.js";
 import { versionChooser, carryStudy, mergeStudy } from "./versions.js";
 import { receiveNativeFiles } from "./import.js";
 import { SelectionController } from "./selection.js";
@@ -5296,6 +5297,21 @@ const { exportRequest, exportRequested } = pageExporter({
   closeMenus,
   $,
 });
+const odtExporter = odtExportController({
+  call,
+  pageCanvas,
+  documentInfo: () => ({ pages: doc?.pages || 0, title: doc?.title || "Note" }),
+  getPanels: () => panels,
+  backgrounds: () => backgrounds,
+  filename,
+  download,
+  openGeneratedFile: async (file) => openChosen(file),
+  jobs: { start: (...a) => jobs.start(...a) },
+  status,
+  busy,
+  closeMenus,
+});
+if ($("exportOdt")) $("exportOdt").onclick = () => odtExporter.open();
 // Chinese settings kept in the note, and pinyin over characters (chinese/ruby.js).
 configureRuby({
   getNote: () => (doc ? call("getChinese") : Promise.resolve({})),
@@ -7098,7 +7114,7 @@ function documentControls() {
   if ($("textIntoNote")) $("textIntoNote").hidden = !(textView.hasDocument && textView.diagram);
   if ($("textOpenRStudio")) $("textOpenRStudio").hidden = !(textView.hasDocument && isRScriptName(docMember?.name || textView.key || textView.name));
   officeButton();
-  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
+  for (const id of ["save", "native", "nativeMarkdown", "exportProject", "shareNoteQr", "exportPdf", "exportOdt", "exportImage", "importImage", "gotoPage", "ocrOpen", "insertBlank", "insertPdf", "insertHandwritten", "resizePage", "resizeDrag", "changePageBg", "pagesChangeBg", "tapeReveal", "tapeCover", "tapeNote"])
     if ($(id)) $(id).disabled = !open;
   // Noteful has no infinite page: a canvas exports to .nfedit only.
   for (const id of ["native", "nativeMarkdown"]) {

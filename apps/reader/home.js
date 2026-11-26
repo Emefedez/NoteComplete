@@ -125,6 +125,18 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
     meta.className = 'folder-meta';
     meta.append(name, detail);
     button.append(icon('folder'), meta);
+    button.onpointerenter = () => {
+      const overflow = name.scrollWidth - name.clientWidth;
+      if (overflow > 2) {
+        name.style.setProperty('--marquee-shift', `-${overflow + 12}px`);
+        name.style.setProperty('--marquee-dur', `${Math.max(2.6, Math.min(12, overflow / 34)).toFixed(2)}s`);
+        name.classList.add('is-marquee');
+      }
+    };
+    button.onpointerleave = () => {
+      name.classList.remove('is-marquee');
+      name.style.removeProperty('--marquee-shift');
+    };
     button.onclick = () => showFolder(group);
     const more = document.createElement('button');
     more.type = 'button'; more.className = 'note-more'; more.textContent = '⋯'; more.title = 'More';

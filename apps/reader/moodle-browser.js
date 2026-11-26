@@ -214,8 +214,23 @@ export function moodleBrowser({
     page: { glyph: 'text', label: 'Page', tone: 'page' },
   };
 
+  function bindTitleMarquee(cardBtn, titleEl) {
+    cardBtn.addEventListener('pointerenter', () => {
+      const overflow = titleEl.scrollWidth - titleEl.clientWidth;
+      if (overflow > 2) {
+        titleEl.style.setProperty('--marquee-shift', `-${overflow + 12}px`);
+        titleEl.style.setProperty('--marquee-dur', `${Math.max(2.6, Math.min(12, overflow / 34)).toFixed(2)}s`);
+        titleEl.classList.add('is-marquee');
+      }
+    });
+    cardBtn.addEventListener('pointerleave', () => {
+      titleEl.classList.remove('is-marquee');
+      titleEl.style.removeProperty('--marquee-shift');
+    });
+  }
+
   function attachCoverImage(holder, url) {
-    if (!showImages || !url || !api?.image) return;
+    if (!showImages || !url) return;
     const apply = (dataUrl) => {
       if (!dataUrl || !holder.isConnected) return;
       const img = document.createElement('img');
@@ -226,14 +241,21 @@ export function moodleBrowser({
       holder.replaceChildren(img);
       holder.classList.add('has-thumb');
     };
-    if (imageCache.has(url)) {
-      const cached = imageCache.get(url);
-      if (cached) apply(cached);
+    if (String(url).startsWith('data:image/')) {
+      apply(url);
+      return;
+    }
+    if (!api?.image) return;
+    const cached = imageCache.get(url);
+    if (cached) {
+      apply(cached);
       return;
     }
     api.image(url).then((dataUrl) => {
-      imageCache.set(url, dataUrl || '');
-      if (dataUrl) apply(dataUrl);
+      if (dataUrl) {
+        imageCache.set(url, dataUrl);
+        apply(dataUrl);
+      }
     }, () => {});
   }
 
@@ -272,6 +294,7 @@ export function moodleBrowser({
         body.append(title, meta);
 
         btn.append(badge, body);
+        bindTitleMarquee(btn, title);
         btn.onclick = () => openCourse(course);
 
         const ext = document.createElement('button');
@@ -339,6 +362,7 @@ export function moodleBrowser({
           btn.append(selectionCheck(selectedIds.has(item.id)));
         }
         btn.append(badge, body);
+        bindTitleMarquee(btn, title);
 
         btn.onclick = () => {
           if (selectingQueue && item.isDownloadable) {
@@ -498,7 +522,7 @@ export function moodleBrowser({
       <div class="float-head moodle-sb-head">
         <h2>Moodle Assistant</h2>
         <div class="moodle-sb-head-actions">
-          <button id="moodleSbOpenBrowser" type="button" class="chip" title="Open current Moodle page in browser">Browser</button>
+          <button id="moodleSbOpenBrowser" type="button" class="icon-button" aria-label="Open in browser" title="Open current Moodle page in browser"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/></svg></button>
           <button id="moodleSbClose" type="button" class="icon-button" aria-label="Close" title="Close"></button>
         </div>
       </div>
