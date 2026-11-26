@@ -234,6 +234,15 @@ export function officeViewer({
     return res;
   }
 
+  // App shortcuts pressed in the editor (desktop preload.cjs officeKeyHook): passed on as the
+  // same key press on this page, so Ctrl S saves, Ctrl O opens… as everywhere else.
+  globalThis.addEventListener?.('message', (e) => {
+    const d = e.data;
+    if (!active || d?.type !== 'nc-office-key' || !/^http:\/\/127\.0\.0\.1:\d+$/.test(String(e.origin || ''))) return;
+    const doc = host?.ownerDocument || globalThis.document;
+    doc?.dispatchEvent(new KeyboardEvent('keydown', { key: String(d.key || ''), code: String(d.code || ''), ctrlKey: Boolean(d.ctrlKey), metaKey: Boolean(d.metaKey), shiftKey: Boolean(d.shiftKey), bubbles: true, cancelable: true }));
+  });
+
   async function close({ save = true } = {}) {
     if (!active) return;
     const state = active;
