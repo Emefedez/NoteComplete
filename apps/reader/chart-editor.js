@@ -9,6 +9,7 @@
 import { renderVisualSvg } from './exam-html.js';
 import { sortable } from './reorder.js';
 import { orderedIds, saveOrder, keyFor, indexOfKey } from './palette-order.js';
+import { toolSearch } from './tool-search.js';
 import { editorQuickMenu } from './editor-quick.js';
 import { icon } from './icons.js';
 import { codeBox, jsonErrorAt } from './json-code.js';
@@ -574,6 +575,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
     const ids = orderedIds(orderName(), list.map((b) => b.value));
     return ids.map((id) => list.find((b) => b.value === id));
   }
+  const brushQuery = {}; // The brush search, for each kind of chart.
   function buildPalette() {
     palette.replaceChildren();
     if (kind === 'states' || kind === 'timeline') {
@@ -582,7 +584,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
       const order = kind === 'timeline' ? labelsOf(grid) : null;
       const box = make('div', { className: 'ch-brushes' }, ...list.map((b, i) => brushButton(b.value, b.label, swatchOf(b.value, order), i)));
       sortable(box, { items: '.ch-brush', key: (el) => el.dataset.value, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-      palette.append(make('h4', { textContent: 'Paint' }), box);
+      palette.append(make('h4', { textContent: 'Paint' }), toolSearch(box, { items: '.ch-brush', name: (b) => b.querySelector('span')?.textContent, state: (brushQuery[kind] ||= { query: '' }), className: 'ch-tool-search' }), box);
       if (kind === 'timeline') {
         const input = make('input', { type: 'text', placeholder: 'New: P4, Idle…', className: 'ch-new-label', spellcheck: false });
         input.setAttribute('aria-label', 'New label to paint with');
