@@ -72,6 +72,8 @@ export function officeViewer({
   confirmLossy = (name, copyName) => (globalThis.confirm?.(`Editing "${name}" in place may lose some formatting.\n\nOK: save in place\nCancel: save as a new ${copyName} copy beside it`) ? 'in-place' : 'copy'),
   onSaveBytes = async () => ({ savedName: '' }),
   onOpenAsText = () => {},
+  // A file the text view does not open itself but can go back to (a document made from Markdown).
+  canOpenAsText = () => false,
   onDirtyChange = () => {},
   onStatus = () => {},
 } = {}) {
@@ -110,7 +112,7 @@ export function officeViewer({
     if (title) title.textContent = file.name;
     setState('Starting Euro-Office…');
     if (textBtn) {
-      textBtn.hidden = !textViewOpens(file.name);
+      textBtn.hidden = !(textViewOpens(file.name) || canOpenAsText(file));
       textBtn.onclick = async () => {
         const currentFile = active?.file || file;
         await close({ save: true });
@@ -231,6 +233,15 @@ export function officeViewer({
     if (!res?.ok && res?.error === 4) setState('No changes to save');
     return res;
   }
+
+  // App shortcuts pressed in the editor (desktop preload.cjs officeKeyHook): passed on as the
+  // same key press on this page, so Ctrl S saves, Ctrl O opens… as everywhere else.
+  globalThis.addEventListener?.('message', (e) => {
+    const d = e.data;
+    if (!active || d?.type !== 'nc-office-key' || !/^http:\/\/127\.0\.0\.1:\d+$/.test(String(e.origin || ''))) return;
+    const doc = host?.ownerDocument || globalThis.document;
+    doc?.dispatchEvent(new KeyboardEvent('keydown', { key: String(d.key || ''), code: String(d.code || ''), ctrlKey: Boolean(d.ctrlKey), metaKey: Boolean(d.metaKey), shiftKey: Boolean(d.shiftKey), bubbles: true, cancelable: true }));
+  });
 
   async function close({ save = true } = {}) {
     if (!active) return;

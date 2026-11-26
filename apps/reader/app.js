@@ -4965,8 +4965,27 @@ async function openTextInOffice(anchor = $("textOpenOffice")) {
   // does not ask to discard them; they are kept if it does not open.
   const before = { dirty, changed };
   dirty = changed = false;
+  // The way back (Open as text in the Euro-Office bar): this Markdown as it was, its prefabs still
+  // SVG with their specs, its place on disk and its unsaved edits.
+  const origin = { name: mdName, text: textView.text || "", member: docMember, unsaved: Boolean(before.dirty && before.changed) };
+  markdownOrigin = origin;
   const opened = await reopenWith(new File([md], mdName, { type: "text/markdown" }), "euro-office");
-  if (!opened && activeDocKind === "text") ({ dirty, changed } = before);
+  if (!opened && activeDocKind === "text") { ({ dirty, changed } = before); markdownOrigin = null; }
+  return opened;
+}
+// The Markdown the open Euro-Office document was made from (openTextInOffice), or null.
+let markdownOrigin = null;
+// Open as text from Euro-Office: an office file in the text view; a document made from Markdown
+// goes back to that Markdown, where it was, edits and all.
+async function openOfficeAsText(file) {
+  const origin = markdownOrigin && file?.name === markdownOrigin.name ? markdownOrigin : null;
+  markdownOrigin = null;
+  if (!origin) return reopenWith(file, "text");
+  const member = origin.member;
+  const opened = await reopenWith(new File([origin.text], origin.name, { type: "text/markdown" }), "text");
+  if (!opened) return opened;
+  if (member) await setDocMember(member);
+  if (origin.unsaved) { dirty = changed = true; savedState(); }
   return opened;
 }
 // The .md name the text view's document goes to Euro-Office under, or "" when it is not Markdown.
@@ -5013,7 +5032,8 @@ const officeView = officeViewer({
   textBtn: $("officeOpenText"),
   getTheme: () => (document.documentElement.dataset.theme === "dark" ? "dark" : "light"),
   getLang: () => "en",
-  onOpenAsText: (file) => void reopenWith(file, "text"),
+  onOpenAsText: (file) => void openOfficeAsText(file),
+  canOpenAsText: (file) => Boolean(markdownOrigin && file?.name === markdownOrigin.name),
   onDirtyChange: (isDirty, name) => {
     dirty = changed = isDirty;
     tabBar.update({ title: name || activeFileName || "Document", dirty: isDirty });

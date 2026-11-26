@@ -40,6 +40,25 @@ function officePaintHook(activeMs = 1000) {
     else Object.defineProperty(window, 'AscCommon', { configurable: true, enumerable: true, get() { return common; }, set(value) { common = value; hook(value); } });
   } catch { /* The editor keeps its own timing. */ }
 }
+// NoteComplete's own Ctrl shortcuts inside Euro-Office: its editor frame takes every key, so
+// Ctrl S (save), Ctrl O (open), Ctrl N / Ctrl Shift N (new) and Ctrl 1–9 (tabs) never reached
+// the app. They go up to the reader instead (office-view.js passes them on as key presses).
+// The editor's own shortcuts (Ctrl Z, C, V, B, I, K, F, P…) stay with it.
+const OFFICE_APP_KEYS = /^(KeyS|KeyO|KeyN|Digit[1-9])$/;
+function officeKeyTarget(e) {
+  if (!e || e.type !== 'keydown' || !(e.ctrlKey || e.metaKey) || e.altKey || !OFFICE_APP_KEYS.test(e.code || '')) return null;
+  if (/^Digit/.test(e.code) && e.shiftKey) return null;
+  return { type: 'nc-office-key', key: e.key, code: e.code, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey };
+}
+function officeKeyHook(win = globalThis) {
+  win.addEventListener?.('keydown', (e) => {
+    const data = officeKeyTarget(e);
+    if (!data) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try { win.top.postMessage(data, '*'); } catch { /* No reader above. */ }
+  }, true);
+}
 // The DocumentServer runs on 127.0.0.1 at a random port (office-bridge.js).
 const isOfficeFrame = (origin) => /^http:\/\/127\.0\.0\.1:\d+$/.test(String(origin || ''));
 const isMainFrame = typeof process?.isMainFrame === 'boolean' ? process.isMainFrame : globalThis.top === globalThis;
@@ -47,13 +66,14 @@ if (!isMainFrame) {
   // Sub-frames get this script only for the hook above (nodeIntegrationInSubFrames in
   // main.js): no bridge is exposed to them, whatever their origin.
   if (isOfficeFrame(globalThis.location?.origin)) {
+    try { officeKeyHook(); } catch { /* Keys stay with the editor. */ }
     try {
       if (typeof contextBridge.executeInMainWorld === 'function') contextBridge.executeInMainWorld({ func: officePaintHook });
       else webFrame.executeJavaScript(`(${officePaintHook})()`);
     } catch { /* The editor keeps its own timing. */ }
   }
 } else exposeReaderBridges();
-if (typeof module === 'object' && module) module.exports = { officePaintHook, isOfficeFrame };
+if (typeof module === 'object' && module) module.exports = { officePaintHook, isOfficeFrame, officeKeyTarget };
 function exposeReaderBridges() {
 contextBridge.exposeInMainWorld('notecompleteFiles', {
   folder: () => ipcRenderer.invoke('files:folder'),
