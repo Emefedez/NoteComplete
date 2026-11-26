@@ -2225,6 +2225,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   let help = null;
   function toggleHelp() {
     help ||= cheatSheet(root, {
+      button: helpBtn,
       key: 'uml', title: 'UML editor',
       sections: [
         { title: 'Mouse', icon: 'select', rows: [

@@ -27,7 +27,9 @@ function ensureStyles() {
   document.head.append(link);
 }
 // sections: [{ title, icon?, rows: [{ keys?: 'Ctrl Z', icon?: 'name' | svg, does: 'Undo' }] }]
-export function cheatSheet(host, { key, title = 'Cheat sheet', sections }) {
+// `button`: the ? that opens it, shown pressed while it is open however it is closed (its ×,
+// Escape, the ? again).
+export function cheatSheet(host, { key, title = 'Cheat sheet', sections, button = null }) {
   ensureStyles();
   const close = make('button', { type: 'button', className: 'icon-button cheat-close', title: 'Close (Esc)' }, icon('close'));
   close.setAttribute('aria-label', 'Close');
@@ -40,11 +42,13 @@ export function cheatSheet(host, { key, title = 'Cheat sheet', sections }) {
   const dialog = make('dialog', { className: 'cheat-window' }, head, body);
   dialog.setAttribute('aria-label', title);
   host.append(dialog);
+  const pressed = () => button?.setAttribute('aria-pressed', String(dialog.open));
+  dialog.addEventListener('close', pressed);
   close.onclick = () => dialog.close();
   dialog.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); dialog.close(); } });
   floatingWindow(dialog, { key: `notecomplete-${key}-cheat`, head, close, label: title, compact: { cls: 'minimized' }, minWidth: 300, minHeight: 220, scroll: true });
   return {
-    toggle() { if (dialog.open) dialog.close(); else dialog.show(); return dialog.open; },
+    toggle() { if (dialog.open) dialog.close(); else dialog.show(); pressed(); return dialog.open; },
     get open() { return dialog.open; },
     destroy() { dialog.close(); dialog.remove(); },
   };

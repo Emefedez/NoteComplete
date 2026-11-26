@@ -204,6 +204,7 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       if (!helpSheet) {
         const { cheatSheet } = await import('./cheat-sheet.js');
         helpSheet = cheatSheet(root, {
+      button: helpBtn,
           key: 'markdown-editor',
           title: 'Markdown & Chinese Cheat Sheet',
           sections: [

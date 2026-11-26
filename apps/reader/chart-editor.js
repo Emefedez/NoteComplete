@@ -503,6 +503,7 @@ export function mountChartEditor(root, initial, { mode: startMode = 'author', on
   let help = null;
   function toggleHelp() {
     help ||= cheatSheet(root, {
+      button: helpBtn,
       key: 'chart', title: 'Chart editor',
       sections: [
         { title: 'Mouse', icon: 'select', rows: [
