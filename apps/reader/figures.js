@@ -742,6 +742,29 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     const frame = await compoundFrame(item);
     return placePrefab(p, newSpec, frame, item.compound.items, partId);
   }
+  // A figure for a Markdown editor (markdown-prefab.js): chosen in the picker and set in its
+  // editor, but not placed on a page. Resolves with { spec }, { kind: "table" } (Markdown has
+  // its own tables), or null. The function graph is an ink object of a page: not offered.
+  async function chooseFigureSpec() {
+    const choice = await oneFigure(() => choosePrefab({ only: (c) => c.kind === "prefab" || c.kind === "uml" || c.kind === "table" }));
+    if (!choice) return null;
+    if (choice.kind === "uml-import") {
+      try {
+        const imported = await importDiagramSpec(choice.text, choice.fileName);
+        const spec = await umlEditor(imported, false);
+        return spec ? { spec } : null;
+      } catch (e) {
+        status(e.message, true);
+        return null;
+      }
+    }
+    notePrefabUsed(choice.id);
+    if (choice.kind === "table") return { kind: "table" };
+    const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
+    const spec = await figureEditor(start);
+    queuedFigures.length = 0;
+    return spec ? { spec } : null;
+  }
   $("editCompound").onclick = () => editCompound(selection.item);
-  return { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
+  return { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
 }
