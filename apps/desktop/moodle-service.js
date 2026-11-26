@@ -53,6 +53,152 @@ export function stripTags(html) {
   return decodeHtmlEntities(String(html || '').replace(/<[^>]*>/g, ' '));
 }
 
+const SERVER_SCRIPT_EXTS = new Set(['php', 'asp', 'aspx', 'jsp', 'cgi', 'cfm', 'do']);
+const VIDEO_HOST_RE = /\b(?:youtube\.com|youtu\.be|vimeo\.com|tv\.uvigo\.es|campusremotouvigo|panopto|kaltura|mediasite|loom\.com|dailymotion\.com|twitch\.tv|stream\.microsoft\.com)\b/i;
+const VIDEO_MOD_RE = /(?:video|kalvid|kaltura|panopto|vimeo|youtube|stream|ubicast|mediasite|mediagallery)/i;
+const MOODLE_ICON_FORMAT = {
+  pdf: 'PDF',
+  document: 'DOC',
+  writer: 'ODT',
+  powerpoint: 'PPT',
+  impress: 'ODP',
+  spreadsheet: 'XLS',
+  calc: 'ODS',
+  archive: 'ZIP',
+  sourcecode: 'CODE',
+  text: 'TXT',
+  html: 'HTML',
+  markup: 'HTML',
+  mpeg: 'VIDEO',
+  video: 'VIDEO',
+  quicktime: 'VIDEO',
+  avi: 'VIDEO',
+  wmv: 'VIDEO',
+  flash: 'VIDEO',
+  mp3: 'AUDIO',
+  audio: 'AUDIO',
+  wav: 'AUDIO',
+  image: 'IMG',
+  jpeg: 'JPG',
+  png: 'PNG',
+  gif: 'GIF',
+  bmp: 'BMP',
+  svg: 'SVG',
+  eps: 'EPS',
+  psd: 'PSD',
+};
+
+function extFromString(str) {
+  let raw = String(str || '').trim();
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) {
+    try { raw = new URL(raw).pathname; } catch { return ''; }
+  } else {
+    raw = raw.split(/[?#]/)[0];
+  }
+  const base = raw.split('/').pop() || '';
+  if (!base) return '';
+  let decoded = base;
+  try { decoded = decodeURIComponent(base); } catch { /* ignore */ }
+  const m = decoded.match(/\.([a-z0-9]{1,7})$/i);
+  if (!m) return '';
+  const ext = m[1].toLowerCase();
+  if (SERVER_SCRIPT_EXTS.has(ext)) return '';
+  return ext.toUpperCase();
+}
+
+export function inferMoodleFileFormat({
+  fileName = '',
+  name = '',
+  url = '',
+  downloadUrl = '',
+  mimeType = '',
+  iconUrl = '',
+  modname = '',
+  detailsText = '',
+} = {}) {
+  for (const candidate of [fileName, downloadUrl, url, name]) {
+    const ext = extFromString(candidate);
+    if (ext) return ext;
+  }
+
+  const mime = String(mimeType || '').toLowerCase().split(';')[0].trim();
+  if (mime) {
+    if (mime === 'application/pdf') return 'PDF';
+    if (mime.includes('wordprocessingml')) return 'DOCX';
+    if (mime === 'application/msword') return 'DOC';
+    if (mime.includes('presentationml')) return 'PPTX';
+    if (mime === 'application/vnd.ms-powerpoint') return 'PPT';
+    if (mime.includes('spreadsheetml')) return 'XLSX';
+    if (mime === 'application/vnd.ms-excel') return 'XLS';
+    if (mime.includes('opendocument.text')) return 'ODT';
+    if (mime.includes('opendocument.presentation')) return 'ODP';
+    if (mime.includes('opendocument.spreadsheet')) return 'ODS';
+    if (mime === 'text/html') return 'HTML';
+    if (mime === 'text/csv') return 'CSV';
+    if (mime === 'text/plain') return 'TXT';
+    if (mime === 'application/zip' || mime.includes('compressed') || mime.includes('archive')) return 'ZIP';
+    if (mime.startsWith('video/')) return mime.slice(6).toUpperCase().replace(/^X-/, '').slice(0, 6) || 'VIDEO';
+    if (mime.startsWith('audio/')) return 'AUDIO';
+    if (mime.startsWith('image/')) return mime.slice(6).toUpperCase().replace('JPEG', 'JPG').slice(0, 6) || 'IMG';
+  }
+
+  const iconMatch = String(iconUrl || '').match(/\/f\/([a-z0-9]+?)(?:-\d+)?(?:\.[a-z]+)?(?:[?#]|$)/i);
+  if (iconMatch) {
+    const mapped = MOODLE_ICON_FORMAT[iconMatch[1].toLowerCase()];
+    if (mapped) return mapped;
+  }
+
+  const details = String(detailsText || '');
+  if (details) {
+    if (/\bpdf\b/i.test(details)) return 'PDF';
+    if (/\bdocx\b/i.test(details)) return 'DOCX';
+    if (/\b(?:word|doc)\b/i.test(details)) return 'DOC';
+    if (/\bpptx\b/i.test(details)) return 'PPTX';
+    if (/\b(?:powerpoint|ppt)\b/i.test(details)) return 'PPT';
+    if (/\bxlsx\b/i.test(details)) return 'XLSX';
+    if (/\b(?:excel|xls)\b/i.test(details)) return 'XLS';
+    if (/\bodt\b/i.test(details)) return 'ODT';
+    if (/\bzip\b|\barchive\b|\bcomprimid/i.test(details)) return 'ZIP';
+    if (/\b(?:mp4|webm|vídeo|video)\b/i.test(details)) return 'VIDEO';
+    if (/\b(?:mp3|audio|wav)\b/i.test(details)) return 'AUDIO';
+    if (/\bhtml\b/i.test(details)) return 'HTML';
+    if (/\bcsv\b/i.test(details)) return 'CSV';
+  }
+
+  const mod = String(modname || '').toLowerCase();
+  const probe = `${url} ${downloadUrl} ${name}`;
+  if (VIDEO_MOD_RE.test(mod) || VIDEO_HOST_RE.test(probe)) return 'VIDEO';
+  if (mod === 'folder') return 'FOLDER';
+  if (mod === 'url') return 'WEB';
+  if (mod === 'page') return 'WEB';
+  return '';
+}
+
+export function extractModuleFormatsFromHtml(html) {
+  const src = String(html || '');
+  const map = new Map();
+  const modStarts = [];
+  const modRe = /<li\b[^>]*\bid=["']module-(\d+)["'][^>]*>/gi;
+  let m;
+  while ((m = modRe.exec(src))) {
+    modStarts.push({ cmid: Number(m[1]), index: m.index });
+  }
+  for (let i = 0; i < modStarts.length; i += 1) {
+    const cur = modStarts[i];
+    const end = i + 1 < modStarts.length ? Math.min(modStarts[i + 1].index, cur.index + 4000) : Math.min(src.length, cur.index + 4000);
+    const chunk = src.slice(cur.index, end);
+    const iconMatch = chunk.match(/<img\b[^>]*src=["']([^"']*\/f\/[a-z0-9_-]+[^"']*)["']/i);
+    const detailsMatch = chunk.match(/<span\b[^>]*class=["'][^"']*resourcelinkdetails[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
+    const fmt = inferMoodleFileFormat({
+      iconUrl: iconMatch ? decodeHtmlEntities(iconMatch[1]) : '',
+      detailsText: detailsMatch ? stripTags(detailsMatch[1]) : '',
+    });
+    if (fmt) map.set(cur.cmid, fmt);
+  }
+  return map;
+}
+
 export function parseCoursesFromHtml(html, baseUrl) {
   const seen = new Map();
   const re = /<a\b[^>]*href=["']([^"']*\/course\/view\.php\?id=(\d+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -105,13 +251,24 @@ export function parseCourseStateJson(rawState, baseUrl) {
       const downloadUrl = modname === 'resource'
         ? `${absUrl}${absUrl.includes('?') ? '&' : '?'}redirect=1`
         : isDownloadable ? absUrl : '';
+      const cleanName = decodeHtmlEntities(cm.name || 'Resource');
+      const fileFormat = inferMoodleFileFormat({
+        fileName: cm.filename || '',
+        name: cleanName,
+        url: absUrl,
+        downloadUrl,
+        mimeType: cm.mimetype || '',
+        iconUrl: cm.icon || cm.iconurl || '',
+        modname,
+      });
       items.push({
         id: `cm:${cm.id}`,
         cmid: Number(cm.id) || 0,
-        name: decodeHtmlEntities(cm.name || 'Resource'),
+        name: cleanName,
         modname,
         url: absUrl,
         downloadUrl,
+        fileFormat,
         isFolder,
         isDownloadable,
       });
@@ -169,6 +326,7 @@ export function parseCourseSectionsFromHtml(html, baseUrl) {
 
     const items = [];
     const seenUrls = new Set();
+    const htmlFormats = extractModuleFormatsFromHtml(chunk.html);
     const linkRe = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
     let lm;
     while ((lm = linkRe.exec(chunk.html))) {
@@ -195,6 +353,12 @@ export function parseCourseSectionsFromHtml(html, baseUrl) {
       const downloadUrl = modname === 'resource'
         ? `${absUrl}${absUrl.includes('?') ? '&' : '?'}redirect=1`
         : isPluginFile ? absUrl : '';
+      const fileFormat = (cmid && htmlFormats.get(cmid)) || inferMoodleFileFormat({
+        name,
+        url: absUrl,
+        downloadUrl,
+        modname,
+      });
       items.push({
         id: cmid ? `cm:${cmid}` : `url:${absUrl}`,
         cmid,
@@ -202,6 +366,7 @@ export function parseCourseSectionsFromHtml(html, baseUrl) {
         modname,
         url: absUrl,
         downloadUrl,
+        fileFormat,
         isFolder,
         isDownloadable,
       });
@@ -224,12 +389,15 @@ export function parseFolderFilesFromHtml(html, baseUrl) {
     if (seen.has(absUrl)) continue;
     seen.add(absUrl);
     let name = stripTags(m[2]).trim();
-    if (!name) {
-      try { name = decodeURIComponent(path.basename(new URL(absUrl).pathname)); } catch { name = 'file'; }
-    }
+    let urlBase = '';
+    try { urlBase = decodeURIComponent(path.basename(new URL(absUrl).pathname)); } catch { /* ignore */ }
+    if (!name) name = urlBase || 'file';
+    const fileFormat = inferMoodleFileFormat({ fileName: urlBase, name, url: absUrl, downloadUrl: absUrl, modname: 'file' });
     files.push({
       id: `url:${absUrl}`,
       name,
+      fileName: urlBase || name,
+      fileFormat,
       modname: 'file',
       url: absUrl,
       downloadUrl: absUrl,
@@ -508,20 +676,33 @@ export function createMoodleService({
             const firstFile = files[0];
             const isFolder = mod.modname === 'folder';
             const isDownloadable = Boolean(firstFile) && !isFolder;
+            const cleanName = decodeHtmlEntities(mod.name || firstFile?.filename || 'Resource');
+            const fileFormat = inferMoodleFileFormat({
+              fileName: firstFile?.filename || '',
+              name: cleanName,
+              url: mod.url || courseUrl,
+              downloadUrl: firstFile?.fileurl || '',
+              mimeType: firstFile?.mimetype || '',
+              iconUrl: mod.modicon || '',
+              modname: mod.modname || 'resource',
+            });
             return {
               id: `cm:${mod.id}`,
               cmid: Number(mod.id),
-              name: decodeHtmlEntities(mod.name || firstFile?.filename || 'Resource'),
+              name: cleanName,
               modname: mod.modname || 'resource',
               url: mod.url || courseUrl,
               downloadUrl: firstFile?.fileurl || '',
               fileName: firstFile?.filename || '',
+              fileFormat,
               size: Number(firstFile?.filesize || 0),
               isFolder,
               isDownloadable,
               folderFiles: isFolder ? files.map((f) => ({
                 id: `url:${f.fileurl}`,
                 name: f.filename || 'file',
+                fileName: f.filename || 'file',
+                fileFormat: inferMoodleFileFormat({ fileName: f.filename || '', url: f.fileurl, mimeType: f.mimetype || '', modname: 'file' }),
                 modname: 'file',
                 url: f.fileurl,
                 downloadUrl: f.fileurl,
@@ -535,13 +716,34 @@ export function createMoodleService({
         return { courseUrl, sections };
       }
 
+      // Helper: enrich resource items lacking a fileFormat using Moodle's /f/<type> icons in course HTML.
+      const enrichFormats = async (secs, existingHtml = '') => {
+        const missing = secs.flatMap((sec) => sec.items).filter((it) => it.isDownloadable && !it.fileFormat && it.cmid);
+        if (!missing.length) return secs;
+        try {
+          let htmlText = existingHtml;
+          if (!htmlText) {
+            const r = await authedFetch(courseUrl);
+            if (r.ok) htmlText = await r.text();
+          }
+          if (htmlText) {
+            const map = extractModuleFormatsFromHtml(htmlText);
+            for (const it of missing) {
+              const found = map.get(it.cmid);
+              if (found) it.fileFormat = found;
+            }
+          }
+        } catch { /* best-effort enrichment */ }
+        return secs;
+      };
+
       // 1. Try Moodle 4.x AJAX course state (returns ALL Temas/sections & resources even in Tiles/Tabs/One-section-per-page courses!)
       if (s.sesskey) {
         try {
           const stateData = await ajaxCall('core_courseformat_get_state', { courseid: cid });
           const parsedState = parseCourseStateJson(stateData, s.baseUrl);
           if (parsedState.length) {
-            return { courseUrl, sections: parsedState };
+            return { courseUrl, sections: await enrichFormats(parsedState) };
           }
         } catch { /* Fall back to HTML parsing below. */ }
       }
@@ -562,7 +764,7 @@ export function createMoodleService({
           const stateData = await ajaxCall('core_courseformat_get_state', { courseid: cid });
           const parsedState = parseCourseStateJson(stateData, s.baseUrl);
           if (parsedState.length) {
-            return { courseUrl, sections: parsedState };
+            return { courseUrl, sections: await enrichFormats(parsedState, html) };
           }
         } catch { /* continue with HTML */ }
       }

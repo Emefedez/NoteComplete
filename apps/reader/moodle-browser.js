@@ -214,29 +214,83 @@ export function moodleBrowser({
   }
 
   const IMAGE_NAME_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+  const SERVER_SCRIPT_EXTS = new Set(['php', 'asp', 'aspx', 'jsp', 'cgi', 'cfm', 'do']);
+  const VIDEO_HOST_RE = /\b(?:youtube\.com|youtu\.be|vimeo\.com|tv\.uvigo\.es|campusremotouvigo|panopto|kaltura|mediasite|loom\.com|dailymotion\.com|twitch\.tv|stream\.microsoft\.com)\b/i;
+  const VIDEO_MOD_RE = /(?:video|kalvid|kaltura|panopto|vimeo|youtube|stream|ubicast|mediasite|mediagallery)/i;
   const TYPE_CATEGORIES = [
     { id: 'pdf', label: 'PDF (.pdf)', glyph: 'pages', tone: 'pdf' },
     { id: 'r', label: 'R (.R / .Rmd)', glyph: 'rstudio', tone: 'r' },
     { id: 'office', label: 'Office (.docx / .pptx / .odt)', glyph: 'text', tone: 'office' },
     { id: 'code', label: 'Code & Notes', glyph: 'code', tone: 'code' },
-    { id: 'images', label: 'Images & Media', glyph: 'image', tone: 'image' },
+    { id: 'videos', label: 'Videos & Audio', glyph: 'play', tone: 'video' },
+    { id: 'images', label: 'Images', glyph: 'image', tone: 'image' },
     { id: 'archives', label: 'Archives (.zip)', glyph: 'archive', tone: 'archive' },
     { id: 'folders', label: 'Folders', glyph: 'folder', tone: 'folder' },
     { id: 'other-files', label: 'Files', glyph: 'note', tone: 'file' },
-    { id: 'activities', label: 'Activities & Links', glyph: 'link', tone: 'link' },
+    { id: 'webs', label: 'Webs & Links', glyph: 'window', tone: 'web' },
+    { id: 'activities', label: 'Activities', glyph: 'link', tone: 'link' },
   ];
   const TYPE_RANK = Object.fromEntries(TYPE_CATEGORIES.map((c, i) => [c.id, i]));
   const TYPE_INFO = Object.fromEntries(TYPE_CATEGORIES.map((c) => [c.id, c]));
 
+  function extractExtLabel(str) {
+    let raw = String(str || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) {
+      try { raw = new URL(raw).pathname; } catch { return ''; }
+    } else {
+      raw = raw.split(/[?#]/)[0];
+    }
+    const base = raw.split('/').pop() || '';
+    if (!base) return '';
+    let decoded = base;
+    try { decoded = decodeURIComponent(base); } catch { /* ignore */ }
+    const m = decoded.match(/\.([a-z0-9]{1,7})$/i);
+    if (!m) return '';
+    const ext = m[1].toLowerCase();
+    if (SERVER_SCRIPT_EXTS.has(ext)) return '';
+    return ext.toUpperCase();
+  }
+
+  function formatBadgeOf(item) {
+    if (item.fileFormat) return String(item.fileFormat).toUpperCase();
+    for (const candidate of [item.fileName, item.downloadUrl, item.url, item.name]) {
+      const ext = extractExtLabel(candidate);
+      if (ext) return ext;
+    }
+    const mod = String(item.modname || '').toLowerCase();
+    const probe = `${item.url || ''} ${item.downloadUrl || ''} ${item.name || ''}`;
+    if (VIDEO_MOD_RE.test(mod) || VIDEO_HOST_RE.test(probe)) return 'VIDEO';
+    if (item.isFolder || mod === 'folder') return 'FOLDER';
+    if (mod === 'url') return 'WEB';
+    if (mod === 'page') return 'WEB';
+    if (mod === 'assign') return 'ASSIGN';
+    if (mod === 'quiz') return 'QUIZ';
+    if (mod === 'forum') return 'FORUM';
+    if (mod === 'book') return 'BOOK';
+    if (mod === 'lti') return 'LTI';
+    if (mod === 'h5pactivity') return 'H5P';
+    if (mod === 'scorm') return 'SCORM';
+    if (item.isDownloadable || mod === 'resource' || mod === 'file') return 'FILE';
+    return (mod || 'ITEM').toUpperCase();
+  }
+
   function classifyMoodleItem(item) {
     if (item.isFolder || item.modname === 'folder') return 'folders';
+    const fmt = String(item.fileFormat || '').toLowerCase();
     const probe = `${item.fileName || ''} ${item.name || ''} ${item.downloadUrl || ''} ${item.url || ''}`.toLowerCase();
-    if (/\.pdf\b/i.test(probe)) return 'pdf';
-    if (/\.(?:r|rmd|qmd)\b/i.test(probe)) return 'r';
-    if (/\.(?:docx?|odt|pptx?|odp|xlsx?|ods|csv|rtf)\b/i.test(probe)) return 'office';
-    if (/\.(?:md|markdown|txt|py|java|c|cpp|h|hpp|js|mjs|ts|tsx|jsx|html?|css|json|sql|sh|noteful|nfedit)\b/i.test(probe)) return 'code';
-    if (/\.(?:png|jpe?g|webp|gif|avif|bmp|svg|mp3|wav|ogg|m4a|mp4|webm)\b/i.test(probe)) return 'images';
-    if (/\.(?:zip|tar|gz|tgz|7z|rar)\b/i.test(probe)) return 'archives';
+    if (fmt === 'pdf' || /\.pdf\b/i.test(probe)) return 'pdf';
+    if (/^(?:r|rmd|qmd)$/.test(fmt) || /\.(?:r|rmd|qmd)\b/i.test(probe)) return 'r';
+    if (/^(?:docx?|odt|pptx?|odp|xlsx?|ods|csv|rtf)$/.test(fmt) || /\.(?:docx?|odt|pptx?|odp|xlsx?|ods|csv|rtf)\b/i.test(probe)) return 'office';
+    if (/^(?:video|mp4|webm|mkv|mov|avi|m4v|audio|mp3|wav|ogg|m4a)$/.test(fmt)
+      || /\.(?:mp4|webm|mkv|mov|avi|m4v|mp3|wav|ogg|m4a)\b/i.test(probe)
+      || VIDEO_MOD_RE.test(String(item.modname || ''))
+      || VIDEO_HOST_RE.test(probe)) return 'videos';
+    if (/^(?:md|markdown|txt|py|java|c|cpp|h|hpp|js|mjs|ts|tsx|jsx|css|json|sql|sh|noteful|nfedit|code)$/.test(fmt)
+      || /\.(?:md|markdown|txt|py|java|c|cpp|h|hpp|js|mjs|ts|tsx|jsx|css|json|sql|sh|noteful|nfedit)\b/i.test(probe)) return 'code';
+    if (/^(?:img|png|jpe?g|webp|gif|avif|bmp|svg|eps|psd)$/.test(fmt) || /\.(?:png|jpe?g|webp|gif|avif|bmp|svg)\b/i.test(probe)) return 'images';
+    if (/^(?:zip|tar|gz|tgz|7z|rar)$/.test(fmt) || /\.(?:zip|tar|gz|tgz|7z|rar)\b/i.test(probe)) return 'archives';
+    if (fmt === 'web' || fmt === 'html' || /\.html?\b/i.test(probe) || item.modname === 'url' || item.modname === 'page') return 'webs';
     if (item.isDownloadable || item.modname === 'resource' || item.modname === 'file') return 'other-files';
     return 'activities';
   }
@@ -406,7 +460,7 @@ export function moodleBrowser({
       const catId = classifyMoodleItem(item);
       const catInfo = TYPE_INFO[catId];
       const modInfo = MOD_META[item.modname];
-      const useFileTypeIcon = ['pdf', 'r', 'office', 'code', 'images', 'archives'].includes(catId);
+      const useFileTypeIcon = ['pdf', 'r', 'office', 'code', 'videos', 'images', 'archives', 'webs'].includes(catId);
       const kindInfo = useFileTypeIcon
         ? { glyph: catInfo.glyph, label: catInfo.label.split(' ')[0], tone: catInfo.tone }
         : (modInfo || (item.isFolder ? MOD_META.folder : item.isDownloadable ? MOD_META.resource : MOD_META.url));
@@ -421,14 +475,20 @@ export function moodleBrowser({
       body.className = 'moodle-card-text';
       const title = document.createElement('strong');
       title.textContent = item.name;
+      const metaRow = document.createElement('span');
+      metaRow.className = 'moodle-card-meta-row';
+      const fmtBadge = document.createElement('span');
+      fmtBadge.className = `moodle-format-badge tone-${kindInfo.tone}`;
+      fmtBadge.textContent = formatBadgeOf(item);
       const meta = document.createElement('span');
       meta.className = 'moodle-card-meta';
       meta.textContent = item.isFolder
-        ? 'Folder · click to browse'
+        ? 'click to browse'
         : item.isDownloadable
-          ? `${kindInfo.label} · click to open`
-          : `${kindInfo.label} · opens in browser`;
-      body.append(title, meta);
+          ? 'click to open'
+          : 'opens in browser';
+      metaRow.append(fmtBadge, meta);
+      body.append(title, metaRow);
 
       if (selectingQueue && item.isDownloadable) {
         btn.append(selectionCheck(selectedIds.has(item.id)));

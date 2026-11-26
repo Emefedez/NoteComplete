@@ -11,6 +11,8 @@ import {
   extractSubSectionUrls,
   parseCourseSectionsFromHtml,
   parseFolderFilesFromHtml,
+  inferMoodleFileFormat,
+  extractModuleFormatsFromHtml,
   extractFilenameFromResponse,
   createMoodleService,
 } from './moodle-service.js';
@@ -81,6 +83,24 @@ test('HTML parsers extract courses, sections, resources, and folder files', () =
     99,
   );
   assert.equal(subUrls.length, 2);
+});
+
+test('inferMoodleFileFormat & extractModuleFormatsFromHtml detect PDF, R, video, web, and Moodle icons', () => {
+  assert.equal(inferMoodleFileFormat({ name: 'Script1.R', modname: 'resource' }), 'R');
+  assert.equal(inferMoodleFileFormat({ name: 'Tema 1', iconUrl: 'https://moovi.uvigo.gal/theme/image.php/moove/core/1/f/pdf-24' }), 'PDF');
+  assert.equal(inferMoodleFileFormat({ name: 'Clase grabada', url: 'https://tv.uvigo.es/video/1234', modname: 'url' }), 'VIDEO');
+  assert.equal(inferMoodleFileFormat({ name: 'Documentación oficial', url: 'https://cran.r-project.org', modname: 'url' }), 'WEB');
+  assert.equal(inferMoodleFileFormat({ name: 'Demo', fileName: 'demo.mp4', modname: 'file' }), 'MP4');
+
+  const html = `
+    <li id="module-701"><img src="/theme/image.php/boost/core/1/f/pdf-24" /><a href="/mod/resource/view.php?id=701">Tema 1</a></li>
+    <li id="module-702"><img src="/theme/image.php/boost/core/1/f/powerpoint" /><a href="/mod/resource/view.php?id=702">Diapositivas</a></li>
+    <li id="module-703"><span class="resourcelinkdetails">14 MB Vídeo MP4</span><a href="/mod/resource/view.php?id=703">Grabación</a></li>
+  `;
+  const map = extractModuleFormatsFromHtml(html);
+  assert.equal(map.get(701), 'PDF');
+  assert.equal(map.get(702), 'PPT');
+  assert.equal(map.get(703), 'VIDEO');
 });
 
 test('extractFilenameFromResponse decodes Content-Disposition and URL fallback', () => {

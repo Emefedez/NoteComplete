@@ -338,13 +338,17 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
-      // Office files: Open ▸ / Open with ▸ / Show in folder / More… (the ⋯ popup); others open the popup directly.
+      // Right-click menu on every Recent card: Open / (Open with ▸) / Show in folder / Remove from Recent / Remove file / More…
       const extra = [
         ...(canShowInFolder(entry) ? [{ label: 'Show in folder', icon: 'folder', run: () => revealEntry(entry).catch(error => status(error.message, true)) }] : []),
+        { label: 'Remove from Recent', icon: 'close', run: () => removeFromRecent(entry).catch(error => status(error.message, true)) },
+        ...(canRemoveFile(entry) ? [{ label: entry.source === 'local' ? 'Remove file (Move to Trash)' : 'Remove file', icon: 'trash', run: () => removeFileEntry(entry).catch(error => status(error.message, true)) }] : []),
+        '-',
         { label: 'More…', icon: 'menu', run: () => confirmRemove(entry, remove) },
       ];
       attachOpenWithMenu(button, entry.name || '', () => openEntry(entry), {
         extra,
+        alwaysMenu: true,
         fallback: () => confirmRemove(entry, remove),
       });
       button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, opened: entry.openedAt || 0, favourite: favourites.has(entry.key), size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
@@ -418,6 +422,33 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
     && entry
     && (entry.source === 'local' ? entry.path : entry.source !== 'web' && entry.source !== 'archive' && entry.filename)
   );
+  const canRemoveFile = (entry) => Boolean(
+    entry && (
+      (entry.source === 'local' && entry.path && globalThis.notecompleteFiles?.trashOpened)
+      || (entry.source !== 'local' && entry.source !== 'web' && entry.source !== 'archive' && entry.filename)
+    )
+  );
+  async function removeFromRecent(entry) {
+    await library.forget(entry.key, { deleteFile: false });
+    status(`Removed ${entryTitle(entry)} from Recent.`);
+    renderRecent();
+  }
+  async function removeFileEntry(entry) {
+    if (entry.source === 'local' && entry.path && globalThis.notecompleteFiles?.trashOpened) {
+      await globalThis.notecompleteFiles.trashOpened(entry.path);
+      await library.forget(entry.key);
+      await groups?.forget?.(entry.key);
+      status(`${entry.name} moved to the trash.`);
+      renderRecent();
+      return;
+    }
+    if (entry.filename && entry.source !== 'local') {
+      await library.forget(entry.key, { deleteFile: true });
+      await groups?.forget?.(entry.key);
+      status(`Removed file ${entry.name} from this device.`);
+      renderRecent();
+    }
+  }
   async function revealEntry(entry) {
     const target = await library.pathOf(entry);
     if (!target) throw Error('This file is not stored in a folder on this device.');

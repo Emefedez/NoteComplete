@@ -148,26 +148,30 @@ export function openWithEntries(name, { open, installed = false, rStudioInstalle
 // Right-click (or a long press) on a list card of an office or R file: Open with ▸ …, then `extra`
 // entries (Home's "More…"). `choose()` opens it the usual way (the card's click); the menu sets
 // the opener for that one opening first. Other files keep `fallback` (their own menu), if any.
-export function attachOpenWithMenu(button, name, choose, { extra = [], fallback = null, module = officeModule } = {}) {
+export function attachOpenWithMenu(button, name, choose, { extra = [], fallback = null, alwaysMenu = false, module = officeModule } = {}) {
   const isMd = isMarkdownName(name);
   const isR = isRScriptName(name);
-  if (!hasOpenWith(name) && !isMd) { if (fallback) button.oncontextmenu = (e) => { e.preventDefault(); fallback(e); }; return; }
+  const hasSpecial = hasOpenWith(name) || isMd;
+  if (!hasSpecial && !alwaysMenu) { if (fallback) button.oncontextmenu = (e) => { e.preventDefault(); fallback(e); }; return; }
   button.oncontextmenu = async (event) => {
     event.preventDefault();
     event.stopPropagation();
-    const { installed, formats } = isR ? { installed: false, formats: OFFICE_FORMATS } : await moduleState(module);
-    const rStudioInstalled = isR ? await rStudioInstalledState() : false;
-    const entries = isMd
-      ? [
-          {
-            label: installed ? 'Turn into Euro-Office document (.docx)' : 'Turn into Euro-Office document (not installed)',
-            icon: 'office',
-            disabled: !installed,
-            run: () => { openOnceWith(name, 'euro-office'); choose(); },
-          },
-          ...(!installed ? [{ label: INSTALL_HINT, icon: 'settings', run: () => openSetupModules() }] : []),
-        ]
-      : openWithEntries(name, { installed, rStudioInstalled, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
+    let entries = [];
+    if (hasSpecial) {
+      const { installed, formats } = isR ? { installed: false, formats: OFFICE_FORMATS } : await moduleState(module);
+      const rStudioInstalled = isR ? await rStudioInstalledState() : false;
+      entries = isMd
+        ? [
+            {
+              label: installed ? 'Turn into Euro-Office document (.docx)' : 'Turn into Euro-Office document (not installed)',
+              icon: 'office',
+              disabled: !installed,
+              run: () => { openOnceWith(name, 'euro-office'); choose(); },
+            },
+            ...(!installed ? [{ label: INSTALL_HINT, icon: 'settings', run: () => openSetupModules() }] : []),
+          ]
+        : openWithEntries(name, { installed, rStudioInstalled, formats, open: (opener) => { openOnceWith(name, opener); choose(); } });
+    }
     openContextMenu(event.clientX, event.clientY, [{ label: 'Open', icon: 'open', run: () => choose() }, ...entries, ...(extra.length ? ['-', ...extra] : [])], { title: name });
   };
 }
