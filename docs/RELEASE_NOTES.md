@@ -1,4 +1,4 @@
-## What's new in 2.0.2
+## What's new in 2.0.3
 
 - **Typing in a UML diagram no longer opens the notes.** Pressing N (or ?, or a tool's number) while typing a name, an attribute, the PlantUML text or the diagram's notes now just types the letter.
 - **Click a relation to write on it.** A click on the middle of a relation starts renaming it. A click near either end lets you type the text at that end, such as a multiplicity like `1..n`, which is saved and drawn by that end. Right-click also offers **Multiplicity at the start / end**.
