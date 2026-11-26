@@ -576,12 +576,18 @@ impl Drive {
     }
 }
 
+/// The name folders are matched by when merging: case and surrounding spaces ignored.
+fn folder_key(name: &str) -> String {
+    name.trim().to_lowercase()
+}
+
 /// What merging a set of folders into one does, built as a plan and then
 /// (with `apply`) carried out.
 #[derive(Default)]
 struct Merge {
     apply: bool,
     dedupe: bool,
+    keep_newest: bool,
     moved: Vec<Value>,
     trashed: Vec<Value>,
     folders_merged: Vec<Value>,
@@ -619,7 +625,7 @@ impl Drive {
             }
             at = self.names[&id].1.clone();
         }
-        let mut m = Merge { apply: args["apply"] == true, dedupe: args["dedupe"] != false, ..Default::default() };
+        let mut m = Merge { apply: args["apply"] == true, dedupe: args["dedupe"] != false, keep_newest: args["same_name"] == "keep_newest", ..Default::default() };
         let target_path = self.path(&target);
         let source_paths: Vec<String> = sources.iter().map(|s| self.path(s)).collect();
         self.merge_level(&target, &sources, &target_path, &mut m)?;
@@ -636,7 +642,7 @@ impl Drive {
             "target": target_path,
             "sources": source_paths,
             "summary": {"moved": m.moved.len(), "trashed_duplicates": m.trashed.len(), "folders_merged": m.folders_merged.len(),
-                "same_name_different_content": m.clashes.len(), "sources_removed": m.sources_removed.len(), "errors": m.errors.len()},
+                "same_name_different_content": m.clashes.len(), "older_versions_trashed": m.trashed.iter().filter(|t| t["reason"] == "older version").count(), "sources_removed": m.sources_removed.len(), "errors": m.errors.len()},
             "moved": cap(&m.moved), "trashed": cap(&m.trashed), "folders_merged": m.folders_merged,
             "same_name_different_content": cap(&m.clashes), "sources_removed": m.sources_removed, "errors": m.errors,
             "note": if m.apply { "Done. Trashed items stay in Drive's trash for 30 days." } else { "Dry run: nothing changed. Call again with apply: true to do it." },
@@ -667,20 +673,37 @@ impl Drive {
             items.extend(self.children(s)?.into_iter().map(|f| (f, s.clone(), false)));
         }
         let (folders, files): (Vec<_>, Vec<_>) = items.into_iter().partition(|(f, _, _)| f["mimeType"] == FOLDER);
-        // Folders: same names merge into one, the target's own first.
+        // Folders: names that differ only in case or surrounding spaces ("Untagged" and
+        // "Untagged ", as Noteful backups make them) merge into one: the target's own
+        // first, then the one whose name has no stray spaces.
         let mut by_name: BTreeMap<String, Vec<(Value, String, bool)>> = BTreeMap::new();
         for item in folders {
-            by_name.entry(item.0["name"].as_str().unwrap_or("").into()).or_default().push(item);
+            by_name.entry(folder_key(item.0["name"].as_str().unwrap_or(""))).or_default().push(item);
         }
-        for (name, mut group) in by_name {
-            group.sort_by_key(|(_, _, in_target)| !*in_target);
+        for (_, group) in by_name {
+            // Then the fullest: fewer moves, and its links (shared folders) keep working.
+            let several = group.len() > 1;
+            let mut sized = Vec::new();
+            for item in group {
+                let n = if several { self.children(item.0["id"].as_str().unwrap_or("")).map_or(0, |c| c.len()) } else { 0 };
+                sized.push((item, n));
+            }
+            sized.sort_by_key(|((f, _, in_target), n)| {
+                let name = f["name"].as_str().unwrap_or("");
+                (!*in_target, name != name.trim(), std::cmp::Reverse(*n))
+            });
+            let mut group: Vec<_> = sized.into_iter().map(|(item, _)| item).collect();
             let (keep, keep_parent, keep_in_target) = group.remove(0);
             let keep_id = keep["id"].as_str().unwrap_or("").to_string();
-            let sub = format!("{path}/{name}");
+            let sub = format!("{path}/{}", keep["name"].as_str().unwrap_or(""));
             if !keep_in_target {
                 self.step_move(&keep, &keep_parent, target, &sub, m);
             }
             if group.is_empty() {
+                // Still tidied inside: identical copies within it, same-named subfolders.
+                if m.dedupe {
+                    self.merge_level(&keep_id, &[], &sub, m)?;
+                }
                 continue;
             }
             m.folders_merged.push(json!({"path": sub, "copies": group.len() + 1}));
@@ -702,34 +725,49 @@ impl Drive {
             };
             groups.entry(key).or_default().push(item);
         }
-        let mut kept_names: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+        // Identical copies first: one keeper per content, the rest to the trash.
+        let mut by_name: BTreeMap<String, Vec<(Value, String, bool)>> = BTreeMap::new();
         for (_, mut group) in groups {
             group.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| b.0["modifiedTime"].as_str().cmp(&a.0["modifiedTime"].as_str())));
-            let (keep, keep_parent, keep_in_target) = group.remove(0);
-            let name = keep["name"].as_str().unwrap_or("").to_string();
-            let file_path = format!("{path}/{name}");
-            if !keep_in_target {
-                self.step_move(&keep, &keep_parent, target, &file_path, m);
-            }
+            let keep = group.remove(0);
+            let file_path = format!("{path}/{}", keep.0["name"].as_str().unwrap_or(""));
             for (dupe, parent, _) in group {
-                let id = dupe["id"].as_str().unwrap_or("").to_string();
-                if m.apply {
-                    if let Err(e) = self.set_trashed(&id, true) {
-                        m.errors.push(format!("trash {file_path}: {e}"));
-                        continue;
+                self.step_trash(&dupe, &parent, &file_path, &keep.0, "identical", m);
+            }
+            by_name.entry(keep.0["name"].as_str().unwrap_or("").to_string()).or_default().push(keep);
+        }
+        // Then one name, several contents: all kept, or (keep_newest) the newest only.
+        for (name, mut versions) in by_name {
+            let file_path = format!("{path}/{name}");
+            versions.sort_by(|a, b| b.0["modifiedTime"].as_str().cmp(&a.0["modifiedTime"].as_str()));
+            if versions.len() > 1 {
+                m.clashes.push(json!({"path": file_path, "versions": versions.iter().map(|v| entry(&v.0)).collect::<Vec<_>>()}));
+                if m.keep_newest {
+                    let newest = versions[0].0.clone();
+                    for (old, parent, _) in versions.drain(1..) {
+                        self.step_trash(&old, &parent, &file_path, &newest, "older version", m);
                     }
                 }
-                let from = self.names.get(&parent).map(|e| e.0.clone()).unwrap_or_default();
-                m.trashed.push(json!({"name": dupe["name"], "id": id, "in": from, "modified": dupe["modifiedTime"], "same_as": file_path, "kept_id": keep["id"]}));
             }
-            kept_names.entry(name).or_default().push(entry(&keep));
-        }
-        for (name, versions) in kept_names {
-            if versions.len() > 1 {
-                m.clashes.push(json!({"path": format!("{path}/{name}"), "versions": versions}));
+            for (keep, parent, in_target) in versions {
+                if !in_target {
+                    self.step_move(&keep, &parent, target, &file_path, m);
+                }
             }
         }
         Ok(())
+    }
+
+    fn step_trash(&mut self, item: &Value, parent: &str, path: &str, kept: &Value, reason: &str, m: &mut Merge) {
+        let id = item["id"].as_str().unwrap_or("").to_string();
+        if m.apply {
+            if let Err(e) = self.set_trashed(&id, true) {
+                m.errors.push(format!("trash {path}: {e}"));
+                return;
+            }
+        }
+        let from = self.names.get(parent).map(|e| e.0.clone()).unwrap_or_default();
+        m.trashed.push(json!({"name": item["name"], "id": id, "in": from, "modified": item["modifiedTime"], "size": entry(item)["size"], "reason": reason, "same_as": path, "kept_id": kept["id"], "kept_modified": kept["modifiedTime"]}));
     }
 
     fn step_move(&mut self, item: &Value, from: &str, to: &str, path: &str, m: &mut Merge) {
@@ -759,7 +797,7 @@ pub(super) fn tools() -> Vec<Value> {
         tool("drive_move", "Move and/or rename a Drive file or folder: `folder` moves it there (out of its current folders), `name` renames it.", json!({"id":id("File or folder id"),"folder":id("Destination folder id"),"name":{"type":"string","description":"New name"}}), &["id"]),
         tool("drive_trash", "Move Drive files or folders to the trash (recoverable for 30 days), or take them back out with restore: true. Never deletes permanently. Confirm with the user before trashing anything they did not ask to remove.", json!({"ids":{"type":"array","items":{"type":"string"},"minItems":1},"restore":{"type":"boolean"}}), &["ids"]),
         tool("drive_duplicates", "Find duplicate files in a Drive folder (default root, recursive): groups with identical content (same MD5) wherever they are, and paths that hold different versions under the same name.", json!({"folder":id("Folder id"),"recursive":{"type":"boolean","description":"Default true"}}), &[]),
-        tool("drive_merge_folders", "Merge Drive folders into one. Everything in `sources` moves into `target`; subfolders with the same name merge recursively; files with identical content (same MD5) keep one copy (one already in the target, else the newest) and the others go to the trash; files with the same name but different content are all kept and reported. Emptied source folders are trashed. A DRY RUN unless apply is true: show the user the plan first, then apply.", json!({"target":id("Folder id to keep"),"sources":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Folder ids to merge into the target"},"apply":{"type":"boolean","description":"Carry the plan out (default false: only report it)"},"dedupe":{"type":"boolean","description":"Trash identical copies (default true)"},"remove_empty_sources":{"type":"boolean","description":"Trash source folders left empty (default true)"}}), &["target","sources"]),
+        tool("drive_merge_folders", "Merge Drive folders into one. Everything in `sources` moves into `target`; subfolders with the same name merge recursively; files with identical content (same MD5) keep one copy (one already in the target, else the newest) and the others go to the trash; files with the same name but different content are all kept and reported (or, with same_name keep_newest, only the newest). Emptied source folders are trashed. A DRY RUN unless apply is true: show the user the plan first, then apply.", json!({"target":id("Folder id to keep"),"sources":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Folder ids to merge into the target"},"apply":{"type":"boolean","description":"Carry the plan out (default false: only report it)"},"dedupe":{"type":"boolean","description":"Trash identical copies (default true)"},"same_name":{"type":"string","enum":["keep_all","keep_newest"],"description":"Files with the same name and different content: keep_all (default) keeps every version; keep_newest keeps the most recently modified and trashes the older ones (ask the user first)"},"remove_empty_sources":{"type":"boolean","description":"Trash source folders left empty (default true)"}}), &["target","sources"]),
     ]
 }
 
@@ -876,6 +914,12 @@ mod tests {
         assert!(id_arg(&json!({"id": "1dqfDL6p32ZDO6RYGe6ZY1KsJ1-xQOJcZ"}), "id").is_ok());
         assert!(id_arg(&json!({"id": "root"}), "id").is_ok());
         assert!(id_arg(&json!({"id": "x' or '1'='1"}), "id").is_err());
+    }
+
+    #[test]
+    fn folder_names_match_ignoring_case_and_stray_spaces() {
+        assert_eq!(folder_key("Untagged "), folder_key("untagged"));
+        assert_ne!(folder_key("Teor"), folder_key("Teoría"));
     }
 
     #[test]
