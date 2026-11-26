@@ -1,3 +1,8 @@
+## What's new in 1.2.97
+
+- **Cancel resizing by dragging.** Resizing a page by dragging its borders now has a × next to Done. It puts the page back to the size it had before you started dragging, however many drags you made; Done and Esc still keep the new size.
+- **Euro-Office first-launch hint.** Only show "(first launch builds fonts, ~45 s)" when Euro-Office has not yet generated its fonts, instead of on every slow cold start.
+
 ## What's new in 1.2.96
 
 - **Show in folder (desktop).** Right-click or open the `⋯` menu on any file in Recents to reveal it in your system file manager, or choose **File → Show in folder** while a file is open.

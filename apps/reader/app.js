@@ -7264,13 +7264,21 @@ function resizeFrame(p) {
   done.type = "button";
   done.textContent = "Done";
   done.onclick = () => endResizeDrag();
+  // × puts the page back as it was before resizing by dragging: each drag is one undo step.
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "page-resize-cancel";
+  cancel.textContent = "×";
+  cancel.title = "Cancel: put the page back to its size before resizing";
+  cancel.setAttribute("aria-label", "Cancel resizing");
+  cancel.onclick = () => cancelResizeDrag();
   const text = document.createElement("span");
   const show = (size) => {
     frame.style.width = `${(size[0] / p.size[0]) * 100}%`;
     frame.style.height = `${(size[1] / p.size[1]) * 100}%`;
     text.textContent = `${mm(size[0])} × ${mm(size[1])} mm`;
   };
-  label.append(text, done);
+  label.append(text, done, cancel);
   frame.append(label);
   for (const edge of ["e", "s", "se"]) {
     const handle = document.createElement("div");
@@ -7293,8 +7301,10 @@ function resizeFrame(p) {
       handle.onpointerup = handle.onpointercancel = (u) => {
         handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
         const next = size.map((v) => Math.round(v));
-        if (u.type === "pointerup" && next.some((v, i) => Math.abs(v - p.size[i]) >= 1))
+        if (u.type === "pointerup" && next.some((v, i) => Math.abs(v - p.size[i]) >= 1)) {
+          if (resizeMode) resizeMode.steps++;
           action("resizePage", { page: p.index, size: next, focus: p.index });
+        }
         else show(p.size);
       };
     };
@@ -7307,14 +7317,28 @@ function startResizeDrag() {
   const p = panels[page];
   if (!doc || !p?.view) return;
   endResizeDrag();
-  resizeMode = { page };
+  resizeMode = { page, steps: 0, edits: doc.edit_count, size: [...p.view.size] };
   p.el.append(resizeFrame(p));
-  status("Drag the right or bottom border of the page. Done or Esc to finish.");
+  status("Drag the right or bottom border of the page. Done or Esc to finish, × to cancel.");
 }
 function endResizeDrag() {
   if (!resizeMode) return;
   resizeMode = null;
   for (const frame of document.querySelectorAll(".page-resize-frame")) frame.remove();
+}
+// Undoes the resizes made since resizing by dragging began, then leaves it.
+// If something else was edited meanwhile, undoing would take that back too, so the
+// page is resized back to its old size instead.
+async function cancelResizeDrag() {
+  const mode = resizeMode;
+  endResizeDrag();
+  if (!mode?.steps || !doc) return;
+  if (doc.edit_count === mode.edits + mode.steps) {
+    for (let k = 0; k < mode.steps && doc?.can_undo; k++) await action("undo");
+  } else {
+    const view = panels[mode.page]?.view;
+    if (view && view.size.some((v, i) => v !== mode.size[i])) await action("resizePage", { page: mode.page, size: mode.size, focus: mode.page });
+  }
 }
 $("resizeDrag").onclick = startResizeDrag;
 $("resizeDragInstead").onclick = () => { $("resizeDialog").close(); startResizeDrag(); };

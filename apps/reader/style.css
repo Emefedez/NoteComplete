@@ -2327,6 +2327,8 @@ body.touch-pointer .text-layer tspan { pointer-events: none !important; }
 .page-resize-handle.se { right: -11px; bottom: -11px; width: 18px; height: 18px; border-radius: 50%; cursor: nwse-resize; }
 .page-resize-label { position: absolute; right: 16px; top: 8px; display: flex; gap: 8px; align-items: center; padding: 4px 4px 4px 10px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: auto; box-shadow: 0 2px 8px #0003; }
 .page-resize-label button { min-height: 22px; padding: 0 10px; border: 0; border-radius: 6px; background: #fff; color: var(--accent); font-weight: 600; }
+.page-resize-label .page-resize-cancel { min-width: 22px; padding: 0; background: transparent; color: #fff; font-size: 16px; line-height: 1; }
+.page-resize-label .page-resize-cancel:hover { background: #fff3; }
 
 /* Tabs (desktop): the title area is a tab strip that scrolls sideways, also with a
    single tab; the centred #title is only for the web reader, which has no tabs. */

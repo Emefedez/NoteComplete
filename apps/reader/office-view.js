@@ -123,11 +123,19 @@ export function officeViewer({
     }
     if (root) root.hidden = false;
 
-    const slowHint = setTimeout(() => {
+    let firstLaunch = false;
+    if (typeof bridge.status === 'function') {
+      try {
+        const st = await bridge.status();
+        firstLaunch = Boolean(st?.installed && st.fontsGenerated === false);
+      } catch { /* Keep default message. */ }
+    }
+    if (active !== state) return false;
+    const slowHint = firstLaunch ? setTimeout(() => {
       if (active === state && stateEl?.textContent === 'Starting Euro-Office…') {
         setState('Starting Euro-Office… (first launch builds fonts, ~45 s)');
       }
-    }, 4000);
+    }, 4000) : null;
     let session;
     try {
       session = await bridge.open({
@@ -141,7 +149,7 @@ export function officeViewer({
       if (active === state) { active = null; if (root) root.hidden = true; }
       throw err;
     } finally {
-      clearTimeout(slowHint);
+      if (slowHint) clearTimeout(slowHint);
     }
     if (active !== state) return false;
 
