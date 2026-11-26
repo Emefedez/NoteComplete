@@ -172,7 +172,7 @@ pub(super) fn destination(
     let e = writable_ext(&source.map(ext).map_or_else(
         || "noteful".into(),
         |e| {
-            if matches!(e.as_str(), "goodnotes" | "ntb") {
+            if matches!(e.as_str(), "goodnotes" | "ntb" | "rnote") {
                 "nfedit".into()
             } else {
                 e
@@ -312,7 +312,7 @@ pub(super) fn tools() -> Vec<Value> {
             json!({"name":{"type":"string","enum":EXAMPLES.iter().map(|e| e.name).collect::<Vec<_>>()}}), &[]),
         tool("add_prefab", &add_prefab_description(),
             merge(json!({
-                "path":{"type":"string","description":"Path to a notebook (.noteful, .notecomp, .nfedit, .goodnotes, .ntb), Markdown (.md, .markdown, .txt), HTML (.html, .htm), or Euro-Office (.docx, .pptx, .odt, .odp) document"},
+                "path":{"type":"string","description":"Path to a notebook (.noteful, .notecomp, .nfedit, .goodnotes, .ntb, .rnote), Markdown (.md, .markdown, .txt), HTML (.html, .htm), or Euro-Office (.docx, .pptx, .odt, .odp) document"},
                 "page":{"type":"integer","minimum":1,"description":"Page or slide number starting at 1 (required for notebook canvas pages; optional slide number for .pptx/.odp or page marker for target='notes')"},
                 "spec":{"type":"object","description":"Prefab spec object"},
                 "box":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Optional [x, y, w, h] in page units (notebook canvas pages only)"},

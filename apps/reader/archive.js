@@ -21,8 +21,8 @@ export const LIMITS = Object.freeze({
 
 const ARCHIVE_NAME = /\.(zip|tar|tgz|tar\.gz|gz|7z|rar)$/i;
 // Formats that are zips or tars inside but are documents the app opens as such.
-const DOCUMENT_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|docx|docm|dotx|xlsx|xlsm|xlsb|pptx|pptm|odt|ods|odp|epub)$/i;
-const NOTE_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb)$/i;
+const DOCUMENT_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|rnote|docx|docm|dotx|xlsx|xlsm|xlsb|pptx|pptm|odt|ods|odp|epub)$/i;
+const NOTE_NAME = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|rnote)$/i;
 
 export const formatLabel = { zip: 'ZIP', tar: 'Tar', tgz: 'Tar + gzip', gz: 'gzip', '7z': '7-Zip', rar: 'RAR' };
 
@@ -84,7 +84,7 @@ export function typeLabel(name) {
     pdf: 'PDF', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', webp: 'WebP image', gif: 'GIF image', bmp: 'BMP image', svg: 'SVG image', avif: 'AVIF image', ico: 'ICO image',
     mp3: 'MP3 audio', m4a: 'M4A audio', wav: 'WAV audio', ogg: 'OGG audio', oga: 'OGG audio', opus: 'Opus audio', flac: 'FLAC audio', aac: 'AAC audio', weba: 'WebM audio',
     mp4: 'MP4 video', m4v: 'M4V video', webm: 'WebM video', mkv: 'MKV video', mov: 'MOV video', avi: 'AVI video', ogv: 'OGV video',
-    noteful: 'Noteful note', nfedit: 'NoteComplete project', goodnotes: 'Goodnotes notebook', ntb: 'Notability notebook',
+    noteful: 'Noteful note', nfedit: 'NoteComplete project', goodnotes: 'Goodnotes notebook', ntb: 'Notability notebook', rnote: 'Rnote note',
     zip: 'ZIP archive', tar: 'Tar archive', gz: 'gzip file', '7z': '7-Zip archive', rar: 'RAR archive',
     html: 'HTML page', htm: 'HTML page',
     docx: 'Word document', docm: 'Word document', dotx: 'Word template', doc: 'Word document', rtf: 'Rich Text document',

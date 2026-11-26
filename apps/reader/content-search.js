@@ -9,7 +9,7 @@ import { noteFingerprint, emptyStore, PDF_WORDS } from './find.js';
 import { isTextName } from './text-types.js';
 
 // Documents whose pages the engine reads: notes, notebooks, PDFs and pictures.
-export const PAGED = /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb|pdf|png|jpe?g|webp|gif|bmp)$/i;
+export const PAGED = /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb|rnote|pdf|png|jpe?g|webp|gif|bmp)$/i;
 const TEXT_LIMIT = 4 * 1024 * 1024;
 export const contentSearchable = (entry) => Boolean(entry && entry.source !== 'web' && entry.source !== 'archive' && (PAGED.test(entry.name || '') || isTextName(entry.name || '')));
 

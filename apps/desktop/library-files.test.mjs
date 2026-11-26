@@ -69,14 +69,14 @@ test('a chosen folder lists its notes and opens them; other folders stay closed'
 
   // `all` lists every file: formats NoteComplete does not open come back as `other`, never readable,
   // but they may go to the system's app; editor backups and locks stay out.
-  await put(path.join(nestedDir, 'Exams.rnote'), 'r');
-  for (const junk of ['Exams.rnote~', 'a.lck', 'b.bak_000f']) await put(path.join(nestedDir, junk), 'j');
+  await put(path.join(nestedDir, 'Exams.xopp'), 'r');
+  for (const junk of ['Exams.xopp~', 'a.lck', 'b.bak_000f']) await put(path.join(nestedDir, junk), 'j');
   const all = await files.listFolder(folder, { all: true });
-  assert.deepEqual(all.filter(f => f.other).map(f => f.name).sort(), ['Examenes_Anteriores/Exams.rnote', 'programa', 'tool.exe']);
+  assert.deepEqual(all.filter(f => f.other).map(f => f.name).sort(), ['Examenes_Anteriores/Exams.xopp', 'programa', 'tool.exe']);
   assert.ok(!all.some(f => /~$|\.lck$|bak_/.test(f.name)));
-  assert.ok(!(await files.listFolder(folder)).some(f => f.name.endsWith('.rnote')));
-  await assert.rejects(files.readRecent(path.join(nestedDir, 'Exams.rnote')), /not opened/);
-  await files.assertOpened(path.join(nestedDir, 'Exams.rnote'), { any: true });
+  assert.ok(!(await files.listFolder(folder)).some(f => f.name.endsWith('.xopp')));
+  await assert.rejects(files.readRecent(path.join(nestedDir, 'Exams.xopp')), /not opened/);
+  await files.assertOpened(path.join(nestedDir, 'Exams.xopp'), { any: true });
   await assert.rejects(files.assertOpened(path.join(root, 'outside.md'), { any: true }), /not opened/);
 });
 

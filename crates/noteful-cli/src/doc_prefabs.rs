@@ -1094,7 +1094,7 @@ pub(super) fn add_prefab_to_document(args: &Value, source: &Path, ext: &str) -> 
     }
 
     Err(format!(
-        "Unsupported document type '.{ext}' for add_prefab. Supported: .noteful, .notecomp, .nfedit, .goodnotes, .ntb, .md/.markdown/.txt, .html/.htm, and Euro-Office (.docx, .pptx, .odt, .odp)."
+        "Unsupported document type '.{ext}' for add_prefab. Supported: .noteful, .notecomp, .nfedit, .goodnotes, .ntb, .rnote, .md/.markdown/.txt, .html/.htm, and Euro-Office (.docx, .pptx, .odt, .odp)."
     )
     .into())
 }

@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::io::{Cursor, Read, Write};
 
 pub mod pdf_edit;
+pub mod rnote;
 
 /// Noteful page units per PDF point.
 const UNITS_PER_POINT: f64 = 11. / 6.;
@@ -30,8 +31,11 @@ pub struct Imported {
     pub warnings: Vec<String>,
 }
 
-/// `"goodnotes"` or `"notability"` when `bytes` is a notebook this crate imports.
+/// `"goodnotes"`, `"notability"` or `"rnote"` when `bytes` is a notebook this crate imports.
 pub fn format_of(bytes: &[u8]) -> Option<&'static str> {
+    if rnote::is_rnote(bytes) {
+        return Some("rnote");
+    }
     if !bytes.starts_with(b"PK\x03\x04") {
         return None;
     }
@@ -83,9 +87,14 @@ pub fn import(name: &str, bytes: &[u8]) -> Result<Imported, String> {
 /// The Noteful note (or `.nfedit` project archive with preserved editable shapes and sticky
 /// notes) a notebook becomes (the browser builds the editor in its own engine).
 pub fn convert(name: &str, bytes: &[u8]) -> Result<Converted, String> {
-    let format = format_of(bytes).ok_or("Not a Goodnotes or Notability notebook")?;
+    let format = format_of(bytes).ok_or("Not a Goodnotes, Notability or Rnote notebook")?;
+    let mut warnings = Warnings::default();
     let (doc, pages, scale) = match format {
         "goodnotes" => goodnotes(bytes)?,
+        "rnote" => {
+            let (doc, pages) = rnote::pages(bytes, &mut |w| warnings.add(w))?;
+            (doc, pages, UNITS_PER_POINT)
+        }
         _ => notability(bytes)?,
     };
     if pages.is_empty() {
@@ -98,7 +107,6 @@ pub fn convert(name: &str, bytes: &[u8]) -> Result<Converted, String> {
         .rsplit_once('.')
         .map_or(name, |(stem, _)| stem);
     let title: String = title.chars().take(200).collect();
-    let mut warnings = Warnings::default();
     let stacking = if format == "goodnotes" {
         Stacking::PicturesUnderInk
     } else {
@@ -633,6 +641,10 @@ fn paper_pdf<'a>(sizes: &[[f32; 2]], contents: impl Iterator<Item = &'a [u8]>) -
         white.rect(0., 0., size[0], size[1]);
         white.fill_nonzero();
         let mut bytes = white.finish().to_vec();
+        // The page's own drawing follows on its own line ("f" + "0 0 0 rg" read as "f0 …").
+        if !bytes.ends_with(b"\n") {
+            bytes.push(b'\n');
+        }
         bytes.extend_from_slice(content);
         pdf.stream(content_id, &bytes);
     }

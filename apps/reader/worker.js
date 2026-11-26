@@ -9,7 +9,7 @@ async function importModule() {
 async function convertNotebook(name, bytes) {
   const m = await importModule();
   const format = m.notebook_format(bytes);
-  if (!format) throw Error("This is not a Goodnotes or Notability notebook.");
+  if (!format) throw Error("This is not a Goodnotes, Notability or Rnote notebook.");
   const noteful = m.convert_notebook(name, bytes);
   return { noteful, format, warnings: JSON.parse(m.notebook_warnings()) };
 }

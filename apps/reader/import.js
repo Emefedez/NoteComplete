@@ -1,6 +1,6 @@
 import {fileKind} from './media-import.js';
 import {hasExtension} from './text-types.js';
-const OWN={note:/\.noteful$/i,project:/\.nfedit$/i,notecomplete:/\.(notecomp|notecomplete|notepart)$/i,notebook:/\.(goodnotes|ntb)$/i,'study-pack':/\.ncstudy$/i,json:/\.json$/i};
+const OWN={note:/\.noteful$/i,project:/\.nfedit$/i,notecomplete:/\.(notecomp|notecomplete|notepart)$/i,notebook:/\.(goodnotes|ntb|rnote)$/i,'study-pack':/\.ncstudy$/i,json:/\.json$/i};
 const SUFFIX={note:'.noteful',project:'.nfedit',notecomplete:'.notecomp',notebook:'.goodnotes','study-pack':'.ncstudy',json:'.json',pdf:'.pdf',image:'.png',html:'.html',text:'.txt'};
 // The file keeps its own name and extension (Report.docx opens as Word). Only a missing
 // extension, or one of ours that the bytes contradict (providers guess), is replaced by the

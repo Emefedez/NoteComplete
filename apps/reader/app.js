@@ -1029,7 +1029,7 @@ async function load(file, preparedDocument = null) {
     // A Goodnotes or Notability notebook is now a note: it is saved as a .nfedit that keeps it.
     if (prepared.kind === "notebook") {
       const left = result.import_warnings || [];
-      status(`${result.origin?.format === "notability" ? "Notability" : "Goodnotes"} notebook opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, false);
+      status(`${({ notability: "Notability notebook", rnote: "Rnote note" })[result.origin?.format] || "Goodnotes notebook"} opened as a note. Save keeps it as a .nfedit project with the notebook inside.${left.length ? ` Not brought over: ${left.join("; ")}.` : ""}`, false);
     } else status("Document opened.");
     collab?.documentChanged();
     autosave.opened(recovering);

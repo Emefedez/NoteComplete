@@ -54,7 +54,7 @@ export function studyImport({ $, library, quizIndex, quizIndexFp, quizzes, sideV
     for (const entry of await library.recent(60).catch(() => [])) {
       if (!entry?.key || seenKeys.has(entry.key)) continue;
       seenKeys.add(entry.key);
-      const cleanTitle = String(entry.name || "Note").replace(/\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i, "");
+      const cleanTitle = String(entry.name || "Note").replace(/\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb|rnote)$/i, "");
       options.push({
         id: `entry:${entry.key}`,
         entry,

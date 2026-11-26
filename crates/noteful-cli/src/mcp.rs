@@ -136,7 +136,7 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> 
     json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required}})
 }
 fn tools() -> Value {
-    let path = json!({"type":"string","description":"Path to a .noteful, .nfedit or .notecomp file, or a Goodnotes (.goodnotes) or Notability (.ntb) notebook (read as the Noteful note it imports to)"});
+    let path = json!({"type":"string","description":"Path to a .noteful, .nfedit or .notecomp file, or a Goodnotes (.goodnotes), Notability (.ntb) or Rnote (.rnote) notebook (read as the Noteful note it imports to)"});
     let page = json!({"type":"integer","minimum":1,"description":"Page number, starting at 1"});
     let mut tools = json!([
         tool("list_notes", "List notes in a folder (default: the NoteComplete downloads folder) with title, page count and size.", json!({"folder":{"type":"string"}}), &[]),
@@ -178,7 +178,7 @@ impl Server {
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("{pref_notice}Reads and writes Noteful notes (.noteful, .notecomp, .nfedit), reads Goodnotes (.goodnotes) and Notability (.ntb) notebooks as Noteful notes (writing makes a .nfedit that keeps the notebook), creates Markdown (.md) documents with editable prefabs (create_markdown), and inserts prefabs into notebooks, notebook notes, Markdown (.md), HTML (.html), and Euro-Office (.docx, .pptx, .odt, .odp) documents (add_prefab). .nfedit files are written as version 13 (a tar archive); older JSON projects still open. Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards, write_notes to add Markdown notes, and create_markdown to create standalone Markdown documents with embedded editable prefabs. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots, UML, math, or other prefabs into any supported document, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies unless you pass out or in_place; every write returns a picture to check.", library().display())}),
+                    "instructions":format!("{pref_notice}Reads and writes Noteful notes (.noteful, .notecomp, .nfedit), reads Goodnotes (.goodnotes), Notability (.ntb) and Rnote (.rnote) notebooks as Noteful notes (writing makes a .nfedit that keeps the notebook), creates Markdown (.md) documents with editable prefabs (create_markdown), and inserts prefabs into notebooks, notebook notes, Markdown (.md), HTML (.html), and Euro-Office (.docx, .pptx, .odt, .odp) documents (add_prefab). .nfedit files are written as version 13 (a tar archive); older JSON projects still open. Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards, write_notes to add Markdown notes, and create_markdown to create standalone Markdown documents with embedded editable prefabs. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots, UML, math, or other prefabs into any supported document, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
@@ -835,6 +835,7 @@ fn list_notes(folder: PathBuf) -> Res<Value> {
                 | "nfedit"
                 | "goodnotes"
                 | "ntb"
+                | "rnote"
                 | "md"
                 | "markdown"
                 | "docx"

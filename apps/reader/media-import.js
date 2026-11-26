@@ -39,8 +39,8 @@ export function fileKind(name, bytes) {
   if (bytes[0] === 0x42 && bytes[1] === 0x4d && isImageName(name)) return "image";
   if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00 && /\.ico$/i.test(name)) return "image";
   if (bytes.length >= 12 && new TextDecoder("latin1").decode(bytes.subarray(4, 12)).startsWith("ftypavi")) return "image";
-  // Goodnotes and Notability notebooks (zip archives), imported as Noteful notes.
-  if (/\.(goodnotes|ntb)$/i.test(name)) return "notebook";
+  // Goodnotes and Notability notebooks (zip archives) and Rnote notes (gzip JSON), imported as Noteful notes.
+  if (/\.(goodnotes|ntb|rnote)$/i.test(name)) return "notebook";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
   if (/\.html?$/i.test(name)) return "html";
   if (isOfficeName(name)) return "office";
@@ -70,7 +70,7 @@ export function fileKind(name, bytes) {
   // or the file would have gone to it before this).
   if (onlyEuroOffice(name)) throw Error(needsOfficeMessage(name));
   throw Error(
-    "Choose a Noteful note, NoteComplete project, Goodnotes or Notability notebook, PDF, HTML page, text or Markdown file, Office document (Word, OpenDocument, Excel, PowerPoint, RTF), EPUB, Jupyter notebook, image, audio or video file.",
+    "Choose a Noteful note, NoteComplete project, Goodnotes, Notability or Rnote notebook, PDF, HTML page, text or Markdown file, Office document (Word, OpenDocument, Excel, PowerPoint, RTF), EPUB, Jupyter notebook, image, audio or video file.",
   );
 }
 

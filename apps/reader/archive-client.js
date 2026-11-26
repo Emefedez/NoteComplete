@@ -4,7 +4,7 @@ import { isTextName, isOfficeName, isImageName, isAudioName, isVideoName } from 
 
 // Sources every install starts with; more can be added from an item link or identifier.
 export const PRELOADED_ARCHIVE = [{ id: '1GREIUvigo', title: '1 GREI ESEI UVIGO - Personal' }];
-const SUPPORTED = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf)$/i;
+const SUPPORTED = /\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|rnote|html?|pdf)$/i;
 export const supportedArchiveFile = name => SUPPORTED.test(name || '') || isImageName(name) || isAudioName(name) || isVideoName(name) || isTextName(name || '') || isOfficeName(name);
 
 // "https://archive.org/details/ID", ".../download/ID/..." or a bare identifier; null otherwise.
