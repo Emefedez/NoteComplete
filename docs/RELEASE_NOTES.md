@@ -1,6 +1,6 @@
-## What's new in 2.0.6
+## What's new in 2.0.7
 
-- **Back from Euro-Office to your Markdown.** After opening a Markdown file (such as *backlog.md*) in Euro-Office, **Open as text** at the far right of the bar takes you back to it: the same file, where it is saved, with its prefabs still editable and any edits you had not saved yet. Before, there was no way back.
-- **Ctrl shortcuts work inside Euro-Office.** The editor took every key, so Ctrl S did not save and Ctrl O, Ctrl N and Ctrl 1–9 did nothing while you were typing in a document. They now work as everywhere else in NoteComplete (Ctrl S saves the document). The editor's own shortcuts (undo, copy, paste, bold, links, find…) are unchanged.
+- **Theme editor.** **View ▸ More themes…** now has **Edit colours**, as in R Commander Studio: each colour of the interface (panels, bars, menus, behind the pages, buttons, text, accent, lines…) with a colour picker and its hex code. Changes show at once and are kept with the chosen theme; **Reset colours** goes back to the theme's own. **Copy JSON** and **Paste JSON…** keep or share a theme, and a theme copied from R Commander Studio pastes in too.
+- **A larger Setup wizard.** The window is bigger and the theme cards sit five to a row, so the Look step shows every theme without scrolling.
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.
