@@ -232,7 +232,7 @@ export function moodleBrowser({
   function attachCoverImage(holder, url) {
     if (!showImages || !url) return;
     const apply = (dataUrl) => {
-      if (!dataUrl || !holder.isConnected) return;
+      if (!dataUrl) return;
       const img = document.createElement('img');
       img.className = 'moodle-card-thumb';
       img.alt = '';
@@ -254,7 +254,7 @@ export function moodleBrowser({
     api.image(url).then((dataUrl) => {
       if (dataUrl) {
         imageCache.set(url, dataUrl);
-        apply(dataUrl);
+        if (holder.isConnected) apply(dataUrl);
       }
     }, () => {});
   }
