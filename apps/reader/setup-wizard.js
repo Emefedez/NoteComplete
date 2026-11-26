@@ -10,6 +10,7 @@ import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
 import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
+import { PRESETS } from './themes.js';
 
 export const SETUP_KEY = 'notecomplete-setup';
 // Raised when steps are added that everyone should see once.
@@ -90,7 +91,7 @@ function section(parent, title, hint, optional = false) {
 const label = (text) => make('div', { className: 'wizard-label', textContent: text });
 
 // Cards picked one of (theme, preset, format): `options` [{ value, title, sub, badge, swatch, disabled }].
-function choiceGrid(options, current, pick, columns = options.length) {
+export function choiceGrid(options, current, pick, columns = options.length) {
   const grid = make('div', { className: 'wizard-choice-grid' });
   grid.style.setProperty('--cols', String(columns));
   grid.setAttribute('role', 'radiogroup');
@@ -133,13 +134,29 @@ function toggle(setting, title, hint) {
 }
 const has = (settings, ...keys) => keys.some((k) => settings[k] && (settings[k].available?.() ?? true));
 
-// A small picture of the app in a theme, for the theme cards.
+// A small picture of the app in a theme, for the theme cards: `kind` is light, dark or
+// system, or a colour theme of themes.js, drawn in its own colours.
 function themeSwatch(kind) {
-  const swatch = make('span', { className: `wizard-swatch ${kind}` });
+  const preset = typeof kind === 'object' ? kind : null;
+  const swatch = make('span', { className: `wizard-swatch ${preset ? 'preset' : kind}` });
   swatch.setAttribute('aria-hidden', 'true');
   swatch.innerHTML = '<span class="bar"></span><span class="page"><i></i><i></i><i></i></span>';
+  if (preset) {
+    const t = preset.tokens;
+    for (const [k, v] of Object.entries({ bar: t.bgSidebar, line: t.border, page: preset.isLight ? t.bgActivity : t.bgChrome, text: t.fgMuted, accent: t.accent })) swatch.style.setProperty(`--sw-${k}`, v);
+  }
   return swatch;
 }
+// The theme cards: the three of View (light, dark, system), then the colour themes.
+export const BASE_THEMES = [
+  { value: 'light', title: 'Light', sub: 'Always light', kind: 'light' },
+  { value: 'dark', title: 'Dark', sub: 'Always dark', kind: 'dark' },
+  { value: 'system', title: 'Follow the system', sub: 'Light or dark as the system is', kind: 'system' },
+];
+export const themeOptions = (presets = PRESETS) => [
+  ...BASE_THEMES.map((o) => ({ ...o, swatch: themeSwatch(o.kind) })),
+  ...presets.map((p) => ({ value: p.id, title: p.name, sub: p.isLight ? 'Light colours' : 'Dark colours', swatch: themeSwatch(p) })),
+];
 
 // ---- Steps ----
 
@@ -153,11 +170,9 @@ export function buildSteps(env) {
       render(sec) {
         const body = section(sec, 'How NoteComplete looks', 'Changes show at once. They are also in the View menu.');
         if (s.theme) {
-          body.append(label('Theme'), choiceGrid([
-            { value: 'light', title: 'Light', sub: 'Always light', swatch: themeSwatch('light') },
-            { value: 'dark', title: 'Dark', sub: 'Always dark', swatch: themeSwatch('dark') },
-            { value: 'system', title: 'Follow the system', sub: 'Light or dark as the system is', swatch: themeSwatch('system') },
-          ], s.theme.get(), (v) => s.theme.set(v)));
+          const grid = choiceGrid(themeOptions(), s.theme.get(), (v) => s.theme.set(v), 4);
+          grid.classList.add('wizard-theme-grid');
+          body.append(label('Theme'), grid);
         }
         if (s.darkPages) body.append(toggle(s.darkPages, 'Dark pages', 'Pages and their previews are shown inverted, for reading at night (exports keep their colours). D switches it.'));
         if (s.uiSize) {

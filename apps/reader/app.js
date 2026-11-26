@@ -41,7 +41,8 @@ import { scratchpad } from "./scratchpad.js";
 import { dictation } from "./dictate.js";
 import { installNativeHoverBridge } from "./native-hover.js";
 import { chatController } from "./chat.js";
-import { themeController } from "./theme.js";
+import { themeController, savedTheme } from "./theme.js";
+import { themeDialog } from "./theme-dialog.js";
 import { setupWizard, autoOpen as autoOpenSetup, isPhoneOrTablet } from "./setup-wizard.js";
 import { chooseOpener, setOpenSetupModules, setReopenWith, reopenWith, notInstalledMenu, moduleState } from "./open-with-ui.js";
 import { readPosition, savePosition } from "./reading-position.js";
@@ -241,7 +242,8 @@ if (window.notecompleteTabs) {
   $("newTab").hidden = false;
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
-const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), status });
+const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), more: $("themeMore"), status });
+{ const themes = themeDialog({ get: () => theme.choice, set: (v) => theme.set(v) }); $("themeMore").onclick = () => themes.open(); }
 const chromeState = new ChromeState();
 let panels = [],
   observer = null,
@@ -8372,7 +8374,7 @@ $("uiReset").onclick = () => applyUiSize(0);
     mobile: isPhoneOrTablet({ userAgent: navigator.userAgent, maxTouchPoints: navigator.maxTouchPoints, coarse: matchMedia("(pointer: coarse)").matches && !matchMedia("(any-pointer: fine)").matches }),
     openExternal: (url) => window.open(url, "_blank", "noopener,noreferrer"),
     settings: {
-      theme: { get: () => { try { return localStorage.getItem("notecomplete-theme") || "system"; } catch { return "system"; } }, set: (v) => theme.set(v) },
+      theme: { get: () => savedTheme(), set: (v) => theme.set(v) },
       darkPages: { get: () => document.body.classList.contains("pages-dark"), set: (on) => setDarkPages(on) },
       uiSize: {
         get: () => (windows?.zoom ? null : webUiZoom),
