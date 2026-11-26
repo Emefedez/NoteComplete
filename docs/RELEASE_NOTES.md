@@ -1,6 +1,7 @@
-## What's new in 2.0.17
+## What's new in 2.0.18
 
-- **Several infinite canvases in one note, turned like pages.** A canvas note can now hold any number of canvases: **New canvas** below the last one, **Pages → Insert canvas**, or right-click **Insert canvas before/after**; drag them to reorder. Each canvas grows on its own as you write near its edge.
-- **Rnote infinite canvases open whole.** An infinite Rnote note is no longer cut into format-sized pages (which split handwriting crossing a page edge and scattered notes over mostly empty pages): it opens as one canvas with everything where it was drawn, as in Rnote, and keeps growing in NoteComplete. All the PDF pages Rnote imported are kept, as one vector background (before, only one per page survived). Fixed-size Rnote notes still open as pages.
+- **Find (Ctrl F) finds formulas.** A search such as `B(n,p)` used to split into the letters b, n and p, each also matching any word that starts with it, so nearly every page came up. A term written without spaces with signs inside (`B(n,p)`, `P(X≤3)`, `x-ray`) is now searched as one, also where the PDF or the handwriting recognition broke it into pieces; a single letter matches only that letter.
+- **Match case, whole word and regular expressions, as in VS Code.** The Find field has **Aa**, **ab** and **.\*** toggles on its right (Alt C, Alt W, Alt R), remembered between searches; an invalid regular expression is marked on the field. Accents are still ignored.
+- **Fixed:** with Chinese input on, its 中 button sat over the Find field and covered the text; it is now in the field's own row of buttons.
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.
