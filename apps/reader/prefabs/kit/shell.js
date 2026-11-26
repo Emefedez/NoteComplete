@@ -104,7 +104,7 @@ export function editorShell(root, { id = 'module', title = '', applyLabel = 'Ins
   let sheet = null;
   const toggleHelp = () => {
     if (!help) return;
-    sheet ||= cheatSheet(root, { key: `prefab-${id}`, title: title || 'Editor', sections: help });
+    sheet ||= cheatSheet(root, { key: `prefab-${id}`, title: title || 'Editor', sections: help, button: helpBtn });
     helpBtn.setAttribute('aria-pressed', String(sheet.toggle()));
   };
   if (helpBtn) helpBtn.onclick = toggleHelp;

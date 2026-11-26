@@ -124,6 +124,7 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       if (!helpSheet) {
         const { cheatSheet } = await import('./cheat-sheet.js');
         helpSheet = cheatSheet(panel, {
+      button: helpBtn,
           key: 'notes-markdown',
           title: 'Notes & Chinese Cheat Sheet',
           sections: [

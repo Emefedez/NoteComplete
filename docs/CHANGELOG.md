@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.4
+
+- **Search the tools in the chart editor too.** The brushes of state and timeline charts have the same search box as the UML editor's tools: type to show only the matching ones, Enter takes the first, Escape clears it. (The algorithm editor's list already had its own search.)
+
 ## 2.0.3
 
 - **Typing in a UML diagram no longer opens the notes.** Pressing N (or ?, or a tool's number) while typing a name, an attribute, the PlantUML text or the diagram's notes now just types the letter.
