@@ -31,6 +31,7 @@
         <div class="menu-content" role="menu">
           <button data-proxy="homeButton" data-icon="home">Home</button>
           <button id="open" data-icon="open" disabled>Open…<kbd>Ctrl O</kbd></button>
+          <button id="showInFolder" data-icon="folder" hidden disabled data-palette="Show in folder" title="Open the folder containing the current file on your computer">Show in folder</button>
           <hr />
           <button id="newTab" data-icon="plus" hidden>New tab<kbd>Ctrl T</kbd></button>
           <button id="newNoteOpen" data-icon="note" data-palette="New note…" title="Create a blank note or infinite canvas, Markdown note, prefab-first note, handwritten note from Markdown, or AI-generated note">New note…<kbd>Ctrl N</kbd></button>
@@ -1704,6 +1705,7 @@
   <button id="moveOpen" type="button" role="menuitem" aria-expanded="false" data-icon="folder" title="Keep this note in a folder made in NoteComplete">Move to folder…</button>
   <div id="moveRow" class="note-move" role="group" aria-label="Folders" hidden></div>
   <div id="moveNewRow" class="note-rename" hidden><div class="note-rename-field"><label for="moveNewName">Name</label><input id="moveNewName" type="text" maxlength="120" spellcheck="false" autocomplete="off" /></div></div>
+  <button id="forgetShowFolder" type="button" role="menuitem" data-icon="folder" title="Open the folder containing this file on your computer" hidden>Show in folder</button>
   <hr class="note-menu-sep" />
   <button id="forgetCheck" type="button" role="menuitem" data-icon="cloud" title="Ask Google Drive now whether this note has a newer version" hidden>Check Drive for updates</button>
   <button id="forgetCut" type="button" role="menuitem" data-icon="trim" title="Open this note and delete its undo history to make the file smaller; the note stays as it is until you save" hidden>Cut history…</button>

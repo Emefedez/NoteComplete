@@ -601,6 +601,11 @@ app.whenReady().then(async () => {
     if (err) throw Error(err);
     return true;
   }));
+  ipcMain.handle('files:show-in-folder', guarded(async (_event, file) => {
+    const resolved = await files.assertRevealable(file);
+    shell.showItemInFolder(resolved);
+    return true;
+  }));
   ipcMain.handle('files:read-local-note', guarded((_event, file) => files.readLocalNote(file)));
   ipcMain.handle('files:stat-local-note', guarded((_event, file) => files.statLocalNote(file)));
   // Groups: a whole folder, or several files added to the open document.

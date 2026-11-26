@@ -126,6 +126,36 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
   };
   return {
     async assertOpened(file) { await opened(file); },
+    // A file that may be revealed in the system file manager: either opened from disk/a folder,
+    // or a downloaded/imported copy stored inside NoteComplete's own downloads folder.
+    async assertRevealable(file) {
+      if (typeof file !== 'string' || !file || file.includes('\0') || !path.isAbsolute(file))
+        throw Error('That file was not opened from this device.');
+      const normalized = path.resolve(file);
+      let allowed = false;
+      try {
+        await opened(normalized);
+        allowed = true;
+      } catch {
+        const s = await load();
+        const base = path.basename(normalized);
+        if (base && !base.startsWith('.') && inside(s.folder, normalized)) {
+          try {
+            const [realRoot, realFile] = await Promise.all([realpath(s.folder), realpath(normalized)]);
+            allowed = inside(realRoot, realFile);
+          } catch (error) {
+            if (error.code === 'ENOENT') throw Error('That file is no longer in its folder.');
+            allowed = false;
+          }
+        }
+      }
+      if (!allowed) throw Error('That file was not opened from this device.');
+      try { await stat(normalized); } catch (error) {
+        if (error.code === 'ENOENT') throw Error('That file is no longer in its folder.');
+        throw error;
+      }
+      return normalized;
+    },
     // Saves an edited text document over its file: written beside it, then renamed, keeping its mode.
     async writeOpened(file, bytes) {
       await opened(file);

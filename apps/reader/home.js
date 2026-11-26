@@ -326,9 +326,13 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
       remove.type = 'button'; remove.className = 'note-more'; remove.textContent = '⋯';
       remove.title = 'More'; remove.setAttribute('aria-label', `More actions for ${entryTitle(entry)}`); remove.setAttribute('aria-haspopup', 'menu');
       remove.onclick = event => { event.stopPropagation(); confirmRemove(entry, remove); };
-      // Office files: Open ▸ / Open with ▸ / More… (the ⋯ popup); others open the popup directly.
+      // Office files: Open ▸ / Open with ▸ / Show in folder / More… (the ⋯ popup); others open the popup directly.
+      const extra = [
+        ...(canShowInFolder(entry) ? [{ label: 'Show in folder', icon: 'folder', run: () => revealEntry(entry).catch(error => status(error.message, true)) }] : []),
+        { label: 'More…', icon: 'menu', run: () => confirmRemove(entry, remove) },
+      ];
       attachOpenWithMenu(button, entry.name || '', () => openEntry(entry), {
-        extra: [{ label: 'More…', icon: 'menu', run: () => confirmRemove(entry, remove) }],
+        extra,
         fallback: () => confirmRemove(entry, remove),
       });
       button.note = { name: entry.name, title: entryTitle(entry), modified: Date.parse(entry.modifiedTime) || entry.openedAt, opened: entry.openedAt || 0, favourite: favourites.has(entry.key), size: Number(entry.size) || 0, facts: null, starred: !!entry.starred };
@@ -384,6 +388,16 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   // Remove a note from this device; for Drive notes, optionally upload the open
   // document's changes first, or (typed confirmation) move the Drive file to trash.
   const migration = migrator({ library, drive, status, refresh: () => renderRecent() });
+  const canShowInFolder = (entry) => Boolean(
+    globalThis.notecompleteFiles?.showInFolder
+    && entry
+    && (entry.source === 'local' ? entry.path : entry.source !== 'web' && entry.source !== 'archive' && entry.filename)
+  );
+  async function revealEntry(entry) {
+    const target = await library.pathOf(entry);
+    if (!target) throw Error('This file is not stored in a folder on this device.');
+    await globalThis.notecompleteFiles.showInFolder(target);
+  }
   function confirmRemove(entry, anchor) {
     const isDrive = entry.source === 'drive', isDropbox = entry.source === 'dropbox', isGithub = entry.source === 'github', isWebdav = entry.source === 'webdav';
     const isCloud = isDrive || isDropbox || isGithub || isWebdav, now = current();
@@ -451,6 +465,14 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     $('moveRow').hidden = true; $('moveNewRow').hidden = true;
     $('moveOpen').hidden = !groups;
     $('moveOpen').onclick = async () => { const row = $('moveRow'); if (row.hidden) await moveRow(entry, close); row.hidden = !row.hidden; };
+    const showFolderBtn = $('forgetShowFolder');
+    if (showFolderBtn) {
+      showFolderBtn.hidden = !canShowInFolder(entry);
+      showFolderBtn.onclick = async () => {
+        close();
+        try { await revealEntry(entry); } catch (error) { status(error.message, true); }
+      };
+    }
     $('forgetCheck').hidden = (!isDrive && !isDropbox) || !versions;
     $('forgetCheck').textContent = isDropbox ? 'Check Dropbox for updates' : 'Check Drive for updates';
     $('forgetCheck').onclick = async () => {

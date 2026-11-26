@@ -1,3 +1,7 @@
+## What's new in 1.2.96
+
+- **Show in folder (desktop).** Right-click or open the `⋯` menu on any file in Recents to reveal it in your system file manager, or choose **File → Show in folder** while a file is open.
+
 ## What's new in 1.2.95
 
 - **UML editor: workspace tabs.** Several diagrams open at once in tabs above the editor; "+" starts a new diagram of any kind and the list button opens the note's other UML diagrams. Each tab keeps its own undo, selection and zoom, Ctrl+Page Up/Down switches, and open tabs are remembered per note.

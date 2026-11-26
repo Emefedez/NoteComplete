@@ -6688,6 +6688,16 @@ $("htmlSide").onclick = $("textSide").onclick = $("webSide").onclick = () => {
 };
 let docMember = null, lastNoteMember = null;
 const isNoteMemberName = (name) => /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i.test(name || "");
+function currentFilePath() {
+  if (!doc && !sideView()) return "";
+  if (docMember?.source === "local" && docMember.path) return docMember.path;
+  return notePath || "";
+}
+function syncShowInFolder() {
+  const btn = $("showInFolder");
+  if (!btn || btn.hidden) return;
+  btn.disabled = !currentFilePath();
+}
 function setDocMember(member) {
   docMember = member;
   if (doc && member && isNoteMemberName(member.name)) lastNoteMember = member;
@@ -6697,6 +6707,7 @@ function setDocMember(member) {
   else if (textView.hasDocument && textView.diagram && textView.markdown && /^\s*!include/m.test(textView.text)) textView.rerender();
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
+  syncShowInFolder();
   // Opening a document of a folder brings that folder to the front of Home's Folders.
   return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch((e) => console.warn("Group panel:", e));
 }
@@ -6744,6 +6755,19 @@ if (window.notecompleteFiles?.openFolder) {
     } catch (error) { status(error.message, true); }
   };
   $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
+}
+if (window.notecompleteFiles?.showInFolder && $("showInFolder")) {
+  $("showInFolder").hidden = false;
+  $("showInFolder").onclick = async () => {
+    const target = currentFilePath();
+    if (!target) return;
+    try {
+      await window.notecompleteFiles.showInFolder(target);
+    } catch (error) {
+      status(error.message, true);
+    }
+  };
+  syncShowInFolder();
 }
 // The quiz and Ask AI windows live in the page editor; a text document, which can be
 // studied too, takes them while it is shown (text-study.js).
@@ -6934,6 +6958,7 @@ function documentControls() {
   if ($("studyOpenDeck")) $("studyOpenDeck").disabled = false;
   if (!open) $("svg").disabled = true;
   syncPageMoveMenus();
+  syncShowInFolder();
 }
 // Menu items that mirror toolbar controls share their handler and state.
 const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #commandBar [data-proxy-tool]")];
@@ -6944,6 +6969,7 @@ function proxyTarget(item) {
 }
 function syncMenus() {
   syncPageMoveMenus();
+  syncShowInFolder();
   for (const item of proxies) {
     const target = proxyTarget(item);
     const inEditor = target?.closest("#editor");

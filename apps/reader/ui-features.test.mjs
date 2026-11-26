@@ -131,6 +131,10 @@ test('index.html cleans up File exam items, keeps Study exam items, uses doubleC
   const fileMenu = extractSection(indexHtml, 'id="fileMenu"', 'id="editMenu"');
   assert.equal(fileMenu.includes('id="fileCreateExam"'), false);
   assert.equal(fileMenu.includes('id="fileSolveExam"'), false);
+  assert.match(fileMenu, /id="showInFolder"[^>]*data-icon="folder"[^>]*hidden[^>]*disabled[^>]*>Show in folder<\/button>/);
+
+  const forgetDialog = extractSection(indexHtml, 'id="forgetDialog"', 'id="zipWindow"');
+  assert.match(forgetDialog, /id="forgetShowFolder"[^>]*data-icon="folder"[^>]*hidden>Show in folder<\/button>/);
 
   const studyMenu = extractSection(indexHtml, 'id="studyMenu"', 'id="helpMenu"');
   assert.equal(studyMenu.includes('id="studyCreateExam"'), true);

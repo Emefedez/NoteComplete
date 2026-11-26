@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   launched: () => ipcRenderer.invoke('files:launched'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),
   openExternalPath: file => ipcRenderer.invoke('files:open-external-path', file),
+  showInFolder: file => ipcRenderer.invoke('files:show-in-folder', file),
   readLocalNote: file => ipcRenderer.invoke('files:read-local-note', file),
   statLocalNote: file => ipcRenderer.invoke('files:stat-local-note', file),
   openFolder: () => ipcRenderer.invoke('files:open-folder'),
