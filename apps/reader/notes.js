@@ -8,7 +8,7 @@ import { renderMarkdown } from './rich-text.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { noteMode, setNoteMode } from './chinese/ruby.js';
-import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './markdown-prefab.js';
+import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu, prefabCommand, insertPrefabInto } from './markdown-prefab.js';
 import { highlightCommand, tinyMdeHighlightGrammar } from './md-highlight.js';
 import { paths as iconPaths } from './icons.js';
 
@@ -75,7 +75,7 @@ export function markerLine(text, page) {
   return i < 0 ? null : i;
 }
 
-export function notesController({ call, jump, currentPage, store, status, editPrefab = null }) {
+export function notesController({ call, jump, currentPage, store, status, editPrefab = null, choosePrefab = null }) {
   // `core`: notes of a note live in its session (saved with projects and .notecomplete);
   // an HTML page has no session or pages, so its notes are only kept on this device.
   let text = '', key = '', editor = null, bar = null, saveTimer = 0, previewing = false, core = true;
@@ -163,7 +163,7 @@ export function notesController({ call, jump, currentPage, store, status, editPr
     const TinyMDE = await loadEditor();
     if (editor || panel.hidden) return;
     editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: $('notesEditor'), content: text, placeholder: core ? 'Notes for this document. Markdown: # heading, **bold**, - list… “+ Page” ties a section to the page you are on.' : 'Notes for this page. Markdown: # heading, **bold**, - list…', });
-    bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor, commands: MARKDOWN_COMMANDS });
+    bar = new TinyMDE.CommandBar({ element: $('notesCommands'), editor, commands: choosePrefab ? [...MARKDOWN_COMMANDS, '|', prefabCommand((ed) => insertPrefabInto(ed, choosePrefab, () => requestAnimationFrame(markLines)))] : MARKDOWN_COMMANDS });
     editor.addEventListener('change', event => {
       if (shared?.applying) return;
       if (shared && !shared.canEdit) { if (event.content !== text) queueMicrotask(() => editor?.setContent(text)); return; }
@@ -223,6 +223,9 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       if (!shared || shared.persist) save();
     },
     editPrefab,
+    getEditor: () => (shared && !shared.canEdit ? null : editor),
+    choosePrefab,
+    afterInsert: () => requestAnimationFrame(markLines),
   });
   $('notesMarker').onclick = () => {
     if (!editor) return;

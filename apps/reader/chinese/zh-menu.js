@@ -242,8 +242,11 @@ export async function markdownPrefabBlockForSpec(rawSpec) {
     const caption = [han, spec.pinyin, spec.gloss].filter(Boolean).join(' · ');
     return `![${markdownAlt(`Stroke order ${caption}`)}](${markdownUri(svgWithSpec)})`;
   }
-  const { renderPrefab, prefabName } = await import('../prefabs.js');
-  const out = renderPrefab(rawSpec);
+  // Any other prefab (UML, charts, algorithms…): drawn by its module, with what the module
+  // fetches first when the spec alone draws nothing.
+  const { prefabSvg, prefabPrepare, prefabName } = await import('../prefabs.js');
+  let out = prefabSvg(rawSpec);
+  if (!out?.svg) out = prefabSvg(await prefabPrepare(rawSpec).catch(() => rawSpec));
   if (!out?.svg) return '';
   const svgWithSpec = embedPrefabSpecInSvg(out.svg, rawSpec);
   const title = prefabName(rawSpec) || rawSpec.type || 'Prefab';

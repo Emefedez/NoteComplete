@@ -4910,16 +4910,43 @@ function officeButton() {
 if ($("textOpenOffice")) $("textOpenOffice").onclick = () => {
   const b = $("textOpenOffice");
   if (b.getAttribute("aria-disabled") === "true") return notInstalledMenu(b);
-  if (officeFile && euroOfficeMode(officeFile.name)) {
-    void reopenWith(officeFile, "euro-office");
-    return;
-  }
-  const mdName = textView.name || activeFileName || "";
-  if (textView.hasDocument && isMarkdownName(mdName)) {
-    const file = new File([textView.text || ""], mdName, { type: "text/markdown" });
-    void reopenWith(file, "euro-office");
-  }
+  void openTextInOffice();
 };
+// The text view's document in Euro-Office (the bar button, and the Markdown editor's toolbar and
+// right-click menu): an office file shown as text as itself; Markdown as it is now, its prefab
+// pictures (SVG, which Euro-Office's converter does not draw) and the pictures beside it put in
+// as PNG/JPEG data, so the Word document it becomes shows them.
+async function openTextInOffice(anchor = document.querySelector("#textEditor .TMCommandButton[title^='Open in Euro-Office']") || $("textOpenOffice")) {
+  if (!(await moduleState()).installed) return anchor && notInstalledMenu(anchor);
+  if (officeFile && euroOfficeMode(officeFile.name)) return reopenWith(officeFile, "euro-office");
+  const mdName = textView.name || activeFileName || "";
+  if (!textView.hasDocument || !isMarkdownName(mdName)) return;
+  let md = textView.text || "";
+  if (/!\[[^\]]*\]\(/.test(md)) {
+    status("Preparing the pictures for Euro-Office…");
+    const { markdownForOffice, svgUriToPng } = await import("./markdown-prefab.js");
+    md = await markdownForOffice(md, (uri) => svgUriToPng(uri));
+    md = await inlineSiblingPictures(md);
+  }
+  return reopenWith(new File([md], mdName, { type: "text/markdown" }), "euro-office");
+}
+// Pictures a Markdown file links to beside it (![a](img/x.png)) as data URIs: the copy Euro-Office
+// converts has no folder around it.
+async function inlineSiblingPictures(md) {
+  const links = [...md.matchAll(/!\[([^\]\n]*)\]\(([^()\s]+)\)/g)].filter((m) => !/^[a-z][a-z0-9+.-]*:/i.test(m[2]));
+  let out = md;
+  for (const m of links) {
+    let path = m[2];
+    try { path = decodeURIComponent(path); } catch { /* As written. */ }
+    const url = await textImageUrl(path).catch(() => null);
+    if (!url) continue;
+    const blob = await fetch(url).then((r) => r.blob()).catch(() => null);
+    if (!blob) continue;
+    const data = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => resolve(null); r.readAsDataURL(blob); });
+    if (data) out = out.replace(m[0], () => `![${m[1]}](${data})`);
+  }
+  return out;
+}
 // Opening the same file again another way (the bar button above, and Sprint 6's "Open as text").
 setReopenWith(async (file, opener) => {
   if (!file || busy() || !canReplace()) return false;
@@ -5163,6 +5190,7 @@ function notesApi() {
       store: library.store,
       status,
       editPrefab: (spec) => figureEditor(spec, { editing: true }),
+      choosePrefab: () => chooseFigureSpec(),
     });
     if (doc) return notes.load(find.fingerprint).then(() => notes);
     if (htmlView.hasDocument || textView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
@@ -6111,6 +6139,8 @@ const textView = textViewer({
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   editPrefab: (spec) => figureEditor(spec, { editing: true }),
+  choosePrefab: () => chooseFigureSpec(),
+  openInOffice: () => openTextInOffice(),
   tablePage: (info) => tablePageMenu(info),
   tableNotify: (message, error = false) => status(message, error),
   // A relative link to another file opens it here, from this file's folder.
@@ -7504,7 +7534,7 @@ const projectModelController = {
   applyRename: (modelId, newName, opts) => applyProjectRename(modelId, newName, opts),
 };
 // Graphs, tables, prefabs, UML and the figure editors on the page (figures.js).
-const { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
+const { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
   $,
   TOOL_DEFAULTS,
   action,

@@ -74,7 +74,9 @@ const previewOf = (svgText) => {
 // pills, an eye toggle to hide uninstalled packs, the list on the left and a large preview of
 // the one pointed at on the right. Cards from packs not installed show a cloud icon: clicking
 // one downloads its pack with progress and then inserts it. Resolves with the chosen card, or null.
-export function choosePrefab() {
+// `only(card)`: the cards offered (the Markdown editors leave out the page-only function graph).
+export function choosePrefab({ only = null } = {}) {
+  const offered = (c) => !only || only(c);
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'ocr-dialog prefab-dialog prefab-picker' });
     dialog.setAttribute('aria-label', 'Insert prefab');
@@ -97,7 +99,7 @@ export function choosePrefab() {
     let sizes = {};
     packSizes().then((s) => { sizes = s || {}; if (dialog.isConnected && active) show(active); }).catch(() => {});
 
-    const visibleCards = () => cards({ all: !hiding }).filter((c) => !c.off);
+    const visibleCards = () => cards({ all: !hiding }).filter((c) => !c.off && offered(c));
     const visibleGroups = () => groups({ all: !hiding });
     function buildPills() {
       const gs = visibleGroups();
@@ -346,7 +348,7 @@ export function choosePrefab() {
         return c;
       };
       const out = [];
-      const recent = !q.length && !group ? recentPrefabs(4) : [];
+      const recent = !q.length && !group ? recentPrefabs(8).filter(offered).slice(0, 4) : [];
       if (recent.length) out.push(make('h4', { textContent: 'Recently used' }), ...recent.map(card));
       for (const [g, label] of gs) {
         const items = found.filter((p) => p.group === g);
