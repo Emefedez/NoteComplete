@@ -73,13 +73,26 @@ fn client() -> Res<Client> {
     let mut files: Vec<PathBuf> = std::env::var_os("NOTECOMPLETE_GOOGLE_CLIENT")
         .map(|p| vec![PathBuf::from(p)])
         .unwrap_or_default();
-    files.extend(config_dirs().into_iter().map(|d| d.join("google-desktop-client.json")));
+    files.extend(
+        config_dirs()
+            .into_iter()
+            .map(|d| d.join("google-desktop-client.json")),
+    );
     for file in files {
-        let Ok(raw) = std::fs::read_to_string(&file) else { continue };
-        let v: Value = serde_json::from_str(&raw).map_err(|e| format!("{}: {e}", file.display()))?;
+        let Ok(raw) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        let v: Value =
+            serde_json::from_str(&raw).map_err(|e| format!("{}: {e}", file.display()))?;
         let c = &v["installed"];
-        if let Some(id) = c["client_id"].as_str().filter(|id| id.ends_with(".apps.googleusercontent.com")) {
-            return Ok(Client { id: id.into(), secret: c["client_secret"].as_str().unwrap_or("").into() });
+        if let Some(id) = c["client_id"]
+            .as_str()
+            .filter(|id| id.ends_with(".apps.googleusercontent.com"))
+        {
+            return Ok(Client {
+                id: id.into(),
+                secret: c["client_secret"].as_str().unwrap_or("").into(),
+            });
         }
     }
     Err("No Google OAuth client found. In NoteComplete, connect Google Drive once (it saves google-desktop-client.json), or set NOTECOMPLETE_GOOGLE_CLIENT to the OAuth JSON of a Google Desktop app client.".into())
@@ -92,7 +105,10 @@ fn token_file() -> PathBuf {
     let dirs = config_dirs();
     dirs.iter()
         .find(|d| d.join("mcp-drive-token.json").exists())
-        .or_else(|| dirs.iter().find(|d| d.join("google-desktop-client.json").exists()))
+        .or_else(|| {
+            dirs.iter()
+                .find(|d| d.join("google-desktop-client.json").exists())
+        })
         .or_else(|| dirs.iter().find(|d| d.is_dir()))
         .or(dirs.first())
         .map(|d| d.join("mcp-drive-token.json"))
@@ -109,7 +125,9 @@ fn save_token(v: &Value) -> Res<()> {
     options.write(true).create(true).truncate(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(&tmp)?.write_all(serde_json::to_string_pretty(v)?.as_bytes())?;
+    options
+        .open(&tmp)?
+        .write_all(serde_json::to_string_pretty(v)?.as_bytes())?;
     std::fs::rename(&tmp, &file)?;
     Ok(())
 }
@@ -151,7 +169,13 @@ struct Reply {
 /// Runs curl with `stdin` (headers or a form body) on its standard input.
 fn curl(args: &[String], stdin: &[u8]) -> Res<Reply> {
     let mut child = Command::new("curl")
-        .args(["-sS", "--max-time", "900", "-w", "\n%header{location}\n%{http_code}"])
+        .args([
+            "-sS",
+            "--max-time",
+            "900",
+            "-w",
+            "\n%header{location}\n%{http_code}",
+        ])
         .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -161,7 +185,11 @@ fn curl(args: &[String], stdin: &[u8]) -> Res<Reply> {
     child.stdin.take().unwrap().write_all(stdin)?;
     let out = child.wait_with_output()?;
     if !out.status.success() {
-        return Err(format!("Google Drive could not be reached: {}", String::from_utf8_lossy(&out.stderr).trim()).into());
+        return Err(format!(
+            "Google Drive could not be reached: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )
+        .into());
     }
     let mut body = out.stdout;
     let cut = |body: &mut Vec<u8>| -> String {
@@ -172,23 +200,49 @@ fn curl(args: &[String], stdin: &[u8]) -> Res<Reply> {
     };
     let status = cut(&mut body).parse().unwrap_or(0);
     let location = cut(&mut body);
-    Ok(Reply { status, location, body })
+    Ok(Reply {
+        status,
+        location,
+        body,
+    })
 }
 
 fn google_error(reply: &Reply) -> String {
     let v: Value = serde_json::from_slice(&reply.body).unwrap_or(Value::Null);
-    let message = v["error"]["message"].as_str().or(v["error_description"].as_str()).or(v["error"].as_str());
-    format!("Drive answered {}: {}", reply.status, message.unwrap_or("no details"))
+    let message = v["error"]["message"]
+        .as_str()
+        .or(v["error_description"].as_str())
+        .or(v["error"].as_str());
+    format!(
+        "Drive answered {}: {}",
+        reply.status,
+        message.unwrap_or("no details")
+    )
 }
 
 fn token_request(form: &[(&str, &str)]) -> Res<Value> {
-    let body = form.iter().map(|(k, v)| format!("{k}={}", enc(v))).collect::<Vec<_>>().join("&");
-    let args = ["-X", "POST", "https://oauth2.googleapis.com/token", "-H", "Content-Type: application/x-www-form-urlencoded", "--data-binary", "@-"].map(String::from);
+    let body = form
+        .iter()
+        .map(|(k, v)| format!("{k}={}", enc(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    let args = [
+        "-X",
+        "POST",
+        "https://oauth2.googleapis.com/token",
+        "-H",
+        "Content-Type: application/x-www-form-urlencoded",
+        "--data-binary",
+        "@-",
+    ]
+    .map(String::from);
     let reply = curl(&args, body.as_bytes())?;
     if reply.status != 200 {
         let v: Value = serde_json::from_slice(&reply.body).unwrap_or(Value::Null);
         if v["error"] == "invalid_grant" {
-            return Err("The saved Google session was revoked or expired. Call drive_connect again.".into());
+            return Err(
+                "The saved Google session was revoked or expired. Call drive_connect again.".into(),
+            );
         }
         return Err(google_error(&reply).into());
     }
@@ -203,7 +257,13 @@ fn open_browser(url: &str) -> bool {
     } else {
         ("xdg-open", vec![url])
     };
-    Command::new(cmd).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().is_ok()
+    Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .is_ok()
 }
 
 /// Google sign-in with a loopback redirect and PKCE. `show` receives the
@@ -217,7 +277,10 @@ pub(crate) fn sign_in(browser: bool, show: &dyn Fn(&str)) -> Res<Value> {
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
-    let redirect = format!("http://127.0.0.1:{}/oauth2callback", listener.local_addr()?.port());
+    let redirect = format!(
+        "http://127.0.0.1:{}/oauth2callback",
+        listener.local_addr()?.port()
+    );
     let url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}&code_challenge={}&code_challenge_method=S256&access_type=offline&prompt=select_account%20consent",
         enc(&client.id), enc(&redirect), enc(SCOPE), state, challenge
@@ -246,17 +309,28 @@ pub(crate) fn sign_in(browser: bool, show: &dyn Fn(&str)) -> Res<Value> {
         let request = String::from_utf8_lossy(&buf[..n]);
         let target = request.split_whitespace().nth(1).unwrap_or("");
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
-        let params: HashMap<&str, &str> = query.split('&').filter_map(|kv| kv.split_once('=')).collect();
+        let params: HashMap<&str, &str> = query
+            .split('&')
+            .filter_map(|kv| kv.split_once('='))
+            .collect();
         let answer = |stream: &mut std::net::TcpStream, status: &str, text: &str| {
             let _ = write!(stream, "HTTP/1.1 {status}\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\nContent-Length: {}\r\n\r\n{text}", text.len());
         };
         if path != "/oauth2callback" || params.get("state") != Some(&state.as_str()) {
-            answer(&mut stream, "400 Bad Request", "Invalid authorization callback.");
+            answer(
+                &mut stream,
+                "400 Bad Request",
+                "Invalid authorization callback.",
+            );
             continue;
         }
         match params.get("code") {
             Some(code) if !params.contains_key("error") => {
-                answer(&mut stream, "200 OK", "NoteComplete's Drive tools are connected. You can close this tab.");
+                answer(
+                    &mut stream,
+                    "200 OK",
+                    "NoteComplete's Drive tools are connected. You can close this tab.",
+                );
                 break code.to_string();
             }
             _ => {
@@ -266,23 +340,47 @@ pub(crate) fn sign_in(browser: bool, show: &dyn Fn(&str)) -> Res<Value> {
         }
     };
     let code = code.replace("%2F", "/").replace("%2f", "/");
-    let mut form = vec![("client_id", client.id.as_str()), ("code", code.as_str()), ("code_verifier", verifier.as_str()), ("redirect_uri", redirect.as_str()), ("grant_type", "authorization_code")];
+    let mut form = vec![
+        ("client_id", client.id.as_str()),
+        ("code", code.as_str()),
+        ("code_verifier", verifier.as_str()),
+        ("redirect_uri", redirect.as_str()),
+        ("grant_type", "authorization_code"),
+    ];
     if !client.secret.is_empty() {
         form.push(("client_secret", client.secret.as_str()));
     }
     let token = token_request(&form)?;
-    if !token["scope"].as_str().unwrap_or("").split_whitespace().any(|s| s == SCOPE) {
+    if !token["scope"]
+        .as_str()
+        .unwrap_or("")
+        .split_whitespace()
+        .any(|s| s == SCOPE)
+    {
         return Err("Google did not grant full Drive access; tick the Drive permission on the consent page.".into());
     }
-    let refresh = token["refresh_token"].as_str().ok_or("Google returned no refresh token; try again.")?;
-    let access = token["access_token"].as_str().ok_or("Google returned no access token")?;
+    let refresh = token["refresh_token"]
+        .as_str()
+        .ok_or("Google returned no refresh token; try again.")?;
+    let access = token["access_token"]
+        .as_str()
+        .ok_or("Google returned no access token")?;
     // The account, so the agent can say which Drive it is working on.
     let headers = format!("Authorization: Bearer {access}\n");
-    let reply = curl(&[format!("{API}/about?fields=user(emailAddress,displayName)"), "-H".into(), "@-".into()], headers.as_bytes())?;
+    let reply = curl(
+        &[
+            format!("{API}/about?fields=user(emailAddress,displayName)"),
+            "-H".into(),
+            "@-".into(),
+        ],
+        headers.as_bytes(),
+    )?;
     let about: Value = serde_json::from_slice(&reply.body).unwrap_or(Value::Null);
     let saved = json!({"client_id": client.id, "refresh_token": refresh, "account": about["user"]["emailAddress"], "name": about["user"]["displayName"]});
     save_token(&saved)?;
-    Ok(json!({"connected": true, "account": saved["account"], "name": saved["name"], "token_file": token_file()}))
+    Ok(
+        json!({"connected": true, "account": saved["account"], "name": saved["name"], "token_file": token_file()}),
+    )
 }
 
 /// One file as tools report it.
@@ -307,8 +405,15 @@ fn entry(v: &Value) -> Value {
 }
 
 fn id_arg<'a>(args: &'a Value, key: &str) -> Res<&'a str> {
-    let id = args[key].as_str().filter(|s| !s.is_empty()).ok_or(format!("{key} is required"))?;
-    if id != "root" && !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    let id = args[key]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or(format!("{key} is required"))?;
+    if id != "root"
+        && !id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
         return Err(format!("{key} must be a Drive file id (or 'root'), not {id:?}").into());
     }
     Ok(id)
@@ -324,13 +429,23 @@ impl Drive {
         let saved = saved_token().ok_or(NOT_CONNECTED)?;
         let refresh = saved["refresh_token"].as_str().ok_or(NOT_CONNECTED)?;
         let client = client()?;
-        let mut form = vec![("client_id", client.id.as_str()), ("refresh_token", refresh), ("grant_type", "refresh_token")];
+        let mut form = vec![
+            ("client_id", client.id.as_str()),
+            ("refresh_token", refresh),
+            ("grant_type", "refresh_token"),
+        ];
         if !client.secret.is_empty() {
             form.push(("client_secret", client.secret.as_str()));
         }
         let token = token_request(&form)?;
-        let access = token["access_token"].as_str().ok_or("Google returned no access token")?.to_string();
-        let life = token["expires_in"].as_u64().unwrap_or(3600).saturating_sub(120);
+        let access = token["access_token"]
+            .as_str()
+            .ok_or("Google returned no access token")?
+            .to_string();
+        let life = token["expires_in"]
+            .as_u64()
+            .unwrap_or(3600)
+            .saturating_sub(120);
         self.token = Some((access.clone(), Instant::now() + Duration::from_secs(life)));
         Ok(access)
     }
@@ -401,18 +516,26 @@ impl Drive {
     }
 
     fn children(&mut self, folder: &str) -> Res<Vec<Value>> {
-        self.query(&format!("{} in parents and trashed=false", quoted(folder)), usize::MAX)
+        self.query(
+            &format!("{} in parents and trashed=false", quoted(folder)),
+            usize::MAX,
+        )
     }
 
     fn remember(&mut self, f: &Value) {
         if let Some(id) = f["id"].as_str() {
             let parent = f["parents"][0].as_str().map(String::from);
-            self.names.insert(id.into(), (f["name"].as_str().unwrap_or("").into(), parent));
+            self.names
+                .insert(id.into(), (f["name"].as_str().unwrap_or("").into(), parent));
         }
     }
 
     fn get(&mut self, id: &str) -> Res<Value> {
-        let f = self.json("GET", &format!("{API}/files/{id}?fields={FIELDS}&{ALL}"), None)?;
+        let f = self.json(
+            "GET",
+            &format!("{API}/files/{id}?fields={FIELDS}&{ALL}"),
+            None,
+        )?;
         self.remember(&f);
         Ok(f)
     }
@@ -446,7 +569,11 @@ impl Drive {
     }
 
     fn move_to(&mut self, id: &str, from: &str, to: &str) -> Res<()> {
-        self.json("PATCH", &format!("{API}/files/{id}?addParents={to}&removeParents={from}&fields=id&{ALL}"), Some(&json!({})))?;
+        self.json(
+            "PATCH",
+            &format!("{API}/files/{id}?addParents={to}&removeParents={from}&fields=id&{ALL}"),
+            Some(&json!({})),
+        )?;
         if let Some(e) = self.names.get_mut(id) {
             e.1 = Some(to.into());
         }
@@ -454,17 +581,32 @@ impl Drive {
     }
 
     fn set_trashed(&mut self, id: &str, trashed: bool) -> Res<Value> {
-        self.json("PATCH", &format!("{API}/files/{id}?fields={FIELDS}&{ALL}"), Some(&json!({"trashed": trashed})))
+        self.json(
+            "PATCH",
+            &format!("{API}/files/{id}?fields={FIELDS}&{ALL}"),
+            Some(&json!({"trashed": trashed})),
+        )
     }
 
-    fn tree(&mut self, folder: &str, prefix: &str, depth: usize, out: &mut Vec<Value>, limit: usize) -> Res<()> {
+    fn tree(
+        &mut self,
+        folder: &str,
+        prefix: &str,
+        depth: usize,
+        out: &mut Vec<Value>,
+        limit: usize,
+    ) -> Res<()> {
         for f in self.children(folder)? {
             if out.len() >= limit {
                 return Ok(());
             }
             let mut e = entry(&f);
             let name = f["name"].as_str().unwrap_or("");
-            let path = if prefix.is_empty() { name.to_string() } else { format!("{prefix}/{name}") };
+            let path = if prefix.is_empty() {
+                name.to_string()
+            } else {
+                format!("{prefix}/{name}")
+            };
             e["path"] = path.clone().into();
             out.push(e);
             if f["mimeType"] == FOLDER && depth > 1 {
@@ -474,10 +616,20 @@ impl Drive {
         Ok(())
     }
 
-    fn files_under(&mut self, folder: &str, prefix: &str, recursive: bool, out: &mut Vec<(String, Value)>) -> Res<()> {
+    fn files_under(
+        &mut self,
+        folder: &str,
+        prefix: &str,
+        recursive: bool,
+        out: &mut Vec<(String, Value)>,
+    ) -> Res<()> {
         for f in self.children(folder)? {
             let name = f["name"].as_str().unwrap_or("").to_string();
-            let path = if prefix.is_empty() { name } else { format!("{prefix}/{name}") };
+            let path = if prefix.is_empty() {
+                name
+            } else {
+                format!("{prefix}/{name}")
+            };
             if f["mimeType"] == FOLDER {
                 if recursive {
                     self.files_under(f["id"].as_str().unwrap_or(""), &path, true, out)?;
@@ -493,7 +645,12 @@ impl Drive {
         let f = self.get(id_arg(args, "id")?)?;
         let mime = f["mimeType"].as_str().unwrap_or("");
         if mime.starts_with("application/vnd.google-apps") {
-            return Err(format!("{} is a Google {} (no file content to download)", f["name"], mime.rsplit('.').next().unwrap_or("item")).into());
+            return Err(format!(
+                "{} is a Google {} (no file content to download)",
+                f["name"],
+                mime.rsplit('.').next().unwrap_or("item")
+            )
+            .into());
         }
         let name = safe(f["name"].as_str().unwrap_or("download"));
         let out = match args["out"].as_str() {
@@ -502,14 +659,24 @@ impl Drive {
             None => library().join(&name),
         };
         if out.exists() && args["overwrite"] != true {
-            return Err(format!("{} exists; pass overwrite: true or another out", out.display()).into());
+            return Err(format!(
+                "{} exists; pass overwrite: true or another out",
+                out.display()
+            )
+            .into());
         }
         if let Some(dir) = out.parent() {
             std::fs::create_dir_all(dir)?;
         }
         let part = out.with_extension("part");
-        let url = format!("{API}/files/{}?alt=media&{ALL}", f["id"].as_str().unwrap_or(""));
-        let reply = self.send(&["-L".into(), "-o".into(), part.display().to_string(), url], None);
+        let url = format!(
+            "{API}/files/{}?alt=media&{ALL}",
+            f["id"].as_str().unwrap_or("")
+        );
+        let reply = self.send(
+            &["-L".into(), "-o".into(), part.display().to_string(), url],
+            None,
+        );
         if let Err(e) = reply {
             let _ = std::fs::remove_file(&part);
             return Err(e);
@@ -520,8 +687,15 @@ impl Drive {
 
     fn upload(&mut self, args: &Value) -> Res<Value> {
         let local = PathBuf::from(args["path"].as_str().ok_or("path is required")?);
-        let size = std::fs::metadata(&local).map_err(|e| format!("{}: {e}", local.display()))?.len();
-        let name = args["name"].as_str().map(String::from).unwrap_or_else(|| local.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+        let size = std::fs::metadata(&local)
+            .map_err(|e| format!("{}: {e}", local.display()))?
+            .len();
+        let name = args["name"].as_str().map(String::from).unwrap_or_else(|| {
+            local
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        });
         let (method, url, meta) = match args["replace"].as_str() {
             Some(_) => {
                 let id = id_arg(args, "replace")?;
@@ -529,30 +703,64 @@ impl Drive {
                 if args["name"].is_string() {
                     meta["name"] = name.clone().into();
                 }
-                ("PATCH", format!("{UPLOAD}/files/{id}?uploadType=resumable&{ALL}"), meta)
+                (
+                    "PATCH",
+                    format!("{UPLOAD}/files/{id}?uploadType=resumable&{ALL}"),
+                    meta,
+                )
             }
             None => {
-                let folder = args["folder"].as_str().map(|_| id_arg(args, "folder")).transpose()?.unwrap_or("root");
-                ("POST", format!("{UPLOAD}/files?uploadType=resumable&{ALL}"), json!({"name": name, "parents": [folder]}))
+                let folder = args["folder"]
+                    .as_str()
+                    .map(|_| id_arg(args, "folder"))
+                    .transpose()?
+                    .unwrap_or("root");
+                (
+                    "POST",
+                    format!("{UPLOAD}/files?uploadType=resumable&{ALL}"),
+                    json!({"name": name, "parents": [folder]}),
+                )
             }
         };
         // A resumable session (any size), then the bytes in one PUT.
         let file = temp_file("meta");
         std::fs::write(&file, serde_json::to_vec(&meta)?)?;
-        let session = self.send(&["-X".into(), method.into(), url, "-H".into(), format!("X-Upload-Content-Length: {size}"), "--data-binary".into(), format!("@{}", file.display())], Some("application/json; charset=UTF-8"));
+        let session = self.send(
+            &[
+                "-X".into(),
+                method.into(),
+                url,
+                "-H".into(),
+                format!("X-Upload-Content-Length: {size}"),
+                "--data-binary".into(),
+                format!("@{}", file.display()),
+            ],
+            Some("application/json; charset=UTF-8"),
+        );
         let _ = std::fs::remove_file(&file);
         let session = session?;
         if session.location.is_empty() {
             return Err("Drive did not open an upload session".into());
         }
-        let reply = self.send(&["-T".into(), local.display().to_string(), format!("{}&fields={FIELDS}", session.location)], Some("application/octet-stream"))?;
+        let reply = self.send(
+            &[
+                "-T".into(),
+                local.display().to_string(),
+                format!("{}&fields={FIELDS}", session.location),
+            ],
+            Some("application/octet-stream"),
+        )?;
         let f: Value = serde_json::from_slice(&reply.body)?;
         self.remember(&f);
         Ok(json!({"uploaded": self.with_path(&f), "replaced": args["replace"].is_string()}))
     }
 
     fn duplicates(&mut self, args: &Value) -> Res<Value> {
-        let folder = args["folder"].as_str().map(|_| id_arg(args, "folder")).transpose()?.unwrap_or("root");
+        let folder = args["folder"]
+            .as_str()
+            .map(|_| id_arg(args, "folder"))
+            .transpose()?
+            .unwrap_or("root");
         let mut files = Vec::new();
         self.files_under(folder, "", args["recursive"] != false, &mut files)?;
         let mut by_md5: BTreeMap<String, Vec<&(String, Value)>> = BTreeMap::new();
@@ -563,16 +771,48 @@ impl Drive {
             }
             by_name.entry(f.0.clone()).or_default().push(f);
         }
-        let show = |group: &Vec<&(String, Value)>| group.iter().map(|(path, f)| { let mut e = entry(f); e["path"] = path.clone().into(); e }).collect::<Vec<_>>();
-        let same: Vec<Value> = by_md5.values().filter(|g| g.len() > 1).map(|g| json!({"copies": g.len(), "files": show(g)})).collect();
-        let wasted: u64 = by_md5.values().filter(|g| g.len() > 1).map(|g| g[0].1["size"].as_str().and_then(|s| s.parse::<u64>().ok()).unwrap_or(0) * (g.len() as u64 - 1)).sum();
+        let show = |group: &Vec<&(String, Value)>| {
+            group
+                .iter()
+                .map(|(path, f)| {
+                    let mut e = entry(f);
+                    e["path"] = path.clone().into();
+                    e
+                })
+                .collect::<Vec<_>>()
+        };
+        let same: Vec<Value> = by_md5
+            .values()
+            .filter(|g| g.len() > 1)
+            .map(|g| json!({"copies": g.len(), "files": show(g)}))
+            .collect();
+        let wasted: u64 = by_md5
+            .values()
+            .filter(|g| g.len() > 1)
+            .map(|g| {
+                g[0].1["size"]
+                    .as_str()
+                    .and_then(|s| s.parse::<u64>().ok())
+                    .unwrap_or(0)
+                    * (g.len() as u64 - 1)
+            })
+            .sum();
         let clashes: Vec<Value> = by_name
             .values()
-            .filter(|g| g.len() > 1 && g.iter().filter_map(|f| f.1["md5Checksum"].as_str()).collect::<HashSet<_>>().len() > 1)
+            .filter(|g| {
+                g.len() > 1
+                    && g.iter()
+                        .filter_map(|f| f.1["md5Checksum"].as_str())
+                        .collect::<HashSet<_>>()
+                        .len()
+                        > 1
+            })
             .map(|g| json!({"path": g[0].0, "versions": show(g)}))
             .collect();
-        Ok(json!({"folder": self.path(folder), "files": files.len(), "identical_groups": same.len(), "bytes_in_extra_copies": wasted,
-            "identical": same, "same_path_different_content": clashes}))
+        Ok(
+            json!({"folder": self.path(folder), "files": files.len(), "identical_groups": same.len(), "bytes_in_extra_copies": wasted,
+            "identical": same, "same_path_different_content": clashes}),
+        )
     }
 }
 
@@ -599,7 +839,13 @@ struct Merge {
 impl Drive {
     fn merge(&mut self, args: &Value) -> Res<Value> {
         let target = id_arg(args, "target")?.to_string();
-        let sources: Vec<String> = args["sources"].as_array().ok_or("sources is required (folder ids)")?.iter().filter_map(Value::as_str).map(String::from).collect();
+        let sources: Vec<String> = args["sources"]
+            .as_array()
+            .ok_or("sources is required (folder ids)")?
+            .iter()
+            .filter_map(Value::as_str)
+            .map(String::from)
+            .collect();
         if sources.is_empty() {
             return Err("sources is empty".into());
         }
@@ -625,7 +871,12 @@ impl Drive {
             }
             at = self.names[&id].1.clone();
         }
-        let mut m = Merge { apply: args["apply"] == true, dedupe: args["dedupe"] != false, keep_newest: args["same_name"] == "keep_newest", ..Default::default() };
+        let mut m = Merge {
+            apply: args["apply"] == true,
+            dedupe: args["dedupe"] != false,
+            keep_newest: args["same_name"] == "keep_newest",
+            ..Default::default()
+        };
         let target_path = self.path(&target);
         let source_paths: Vec<String> = sources.iter().map(|s| self.path(s)).collect();
         self.merge_level(&target, &sources, &target_path, &mut m)?;
@@ -635,7 +886,11 @@ impl Drive {
             }
         }
         let cap = |list: &Vec<Value>| -> Value {
-            if list.len() > 400 { json!({"count": list.len(), "first": &list[..400]}) } else { json!(list) }
+            if list.len() > 400 {
+                json!({"count": list.len(), "first": &list[..400]})
+            } else {
+                json!(list)
+            }
         };
         Ok(json!({
             "applied": m.apply,
@@ -651,7 +906,11 @@ impl Drive {
 
     fn remove_if_empty(&mut self, folder: &str, path: &str, m: &mut Merge) {
         // In a dry run the plan empties the folder unless something failed.
-        let empty = if m.apply { self.children(folder).map(|c| c.is_empty()).unwrap_or(false) } else { m.errors.is_empty() };
+        let empty = if m.apply {
+            self.children(folder).map(|c| c.is_empty()).unwrap_or(false)
+        } else {
+            m.errors.is_empty()
+        };
         if !empty {
             return;
         }
@@ -666,26 +925,46 @@ impl Drive {
 
     /// Merges the contents of `sources` into `target` (one folder level, then
     /// same-named subfolders recursively).
-    fn merge_level(&mut self, target: &str, sources: &[String], path: &str, m: &mut Merge) -> Res<()> {
+    fn merge_level(
+        &mut self,
+        target: &str,
+        sources: &[String],
+        path: &str,
+        m: &mut Merge,
+    ) -> Res<()> {
         // (item, parent it is in, already in the target)
-        let mut items: Vec<(Value, String, bool)> = self.children(target)?.into_iter().map(|f| (f, target.to_string(), true)).collect();
+        let mut items: Vec<(Value, String, bool)> = self
+            .children(target)?
+            .into_iter()
+            .map(|f| (f, target.to_string(), true))
+            .collect();
         for s in sources {
             items.extend(self.children(s)?.into_iter().map(|f| (f, s.clone(), false)));
         }
-        let (folders, files): (Vec<_>, Vec<_>) = items.into_iter().partition(|(f, _, _)| f["mimeType"] == FOLDER);
+        let (folders, files): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .partition(|(f, _, _)| f["mimeType"] == FOLDER);
         // Folders: names that differ only in case or surrounding spaces ("Untagged" and
         // "Untagged ", as Noteful backups make them) merge into one: the target's own
         // first, then the one whose name has no stray spaces.
         let mut by_name: BTreeMap<String, Vec<(Value, String, bool)>> = BTreeMap::new();
         for item in folders {
-            by_name.entry(folder_key(item.0["name"].as_str().unwrap_or(""))).or_default().push(item);
+            by_name
+                .entry(folder_key(item.0["name"].as_str().unwrap_or("")))
+                .or_default()
+                .push(item);
         }
         for (_, group) in by_name {
             // Then the fullest: fewer moves, and its links (shared folders) keep working.
             let several = group.len() > 1;
             let mut sized = Vec::new();
             for item in group {
-                let n = if several { self.children(item.0["id"].as_str().unwrap_or("")).map_or(0, |c| c.len()) } else { 0 };
+                let n = if several {
+                    self.children(item.0["id"].as_str().unwrap_or(""))
+                        .map_or(0, |c| c.len())
+                } else {
+                    0
+                };
                 sized.push((item, n));
             }
             sized.sort_by_key(|((f, _, in_target), n)| {
@@ -706,8 +985,12 @@ impl Drive {
                 }
                 continue;
             }
-            m.folders_merged.push(json!({"path": sub, "copies": group.len() + 1}));
-            let others: Vec<String> = group.iter().map(|(f, _, _)| f["id"].as_str().unwrap_or("").to_string()).collect();
+            m.folders_merged
+                .push(json!({"path": sub, "copies": group.len() + 1}));
+            let others: Vec<String> = group
+                .iter()
+                .map(|(f, _, _)| f["id"].as_str().unwrap_or("").to_string())
+                .collect();
             self.merge_level(&keep_id, &others, &sub, m)?;
             for other in &others {
                 self.remove_if_empty(other, &format!("{sub} (copy)"), m);
@@ -728,18 +1011,31 @@ impl Drive {
         // Identical copies first: one keeper per content, the rest to the trash.
         let mut by_name: BTreeMap<String, Vec<(Value, String, bool)>> = BTreeMap::new();
         for (_, mut group) in groups {
-            group.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| b.0["modifiedTime"].as_str().cmp(&a.0["modifiedTime"].as_str())));
+            group.sort_by(|a, b| {
+                b.2.cmp(&a.2).then_with(|| {
+                    b.0["modifiedTime"]
+                        .as_str()
+                        .cmp(&a.0["modifiedTime"].as_str())
+                })
+            });
             let keep = group.remove(0);
             let file_path = format!("{path}/{}", keep.0["name"].as_str().unwrap_or(""));
             for (dupe, parent, _) in group {
                 self.step_trash(&dupe, &parent, &file_path, &keep.0, "identical", m);
             }
-            by_name.entry(keep.0["name"].as_str().unwrap_or("").to_string()).or_default().push(keep);
+            by_name
+                .entry(keep.0["name"].as_str().unwrap_or("").to_string())
+                .or_default()
+                .push(keep);
         }
         // Then one name, several contents: all kept, or (keep_newest) the newest only.
         for (name, mut versions) in by_name {
             let file_path = format!("{path}/{name}");
-            versions.sort_by(|a, b| b.0["modifiedTime"].as_str().cmp(&a.0["modifiedTime"].as_str()));
+            versions.sort_by(|a, b| {
+                b.0["modifiedTime"]
+                    .as_str()
+                    .cmp(&a.0["modifiedTime"].as_str())
+            });
             if versions.len() > 1 {
                 m.clashes.push(json!({"path": file_path, "versions": versions.iter().map(|v| entry(&v.0)).collect::<Vec<_>>()}));
                 if m.keep_newest {
@@ -758,7 +1054,15 @@ impl Drive {
         Ok(())
     }
 
-    fn step_trash(&mut self, item: &Value, parent: &str, path: &str, kept: &Value, reason: &str, m: &mut Merge) {
+    fn step_trash(
+        &mut self,
+        item: &Value,
+        parent: &str,
+        path: &str,
+        kept: &Value,
+        reason: &str,
+        m: &mut Merge,
+    ) {
         let id = item["id"].as_str().unwrap_or("").to_string();
         if m.apply {
             if let Err(e) = self.set_trashed(&id, true) {
@@ -766,7 +1070,11 @@ impl Drive {
                 return;
             }
         }
-        let from = self.names.get(parent).map(|e| e.0.clone()).unwrap_or_default();
+        let from = self
+            .names
+            .get(parent)
+            .map(|e| e.0.clone())
+            .unwrap_or_default();
         m.trashed.push(json!({"name": item["name"], "id": id, "in": from, "modified": item["modifiedTime"], "size": entry(item)["size"], "reason": reason, "same_as": path, "kept_id": kept["id"], "kept_modified": kept["modifiedTime"]}));
     }
 
@@ -778,7 +1086,11 @@ impl Drive {
                 return;
             }
         }
-        let from_name = self.names.get(from).map(|e| e.0.clone()).unwrap_or_default();
+        let from_name = self
+            .names
+            .get(from)
+            .map(|e| e.0.clone())
+            .unwrap_or_default();
         m.moved.push(json!({"path": path, "id": id, "from": from_name, "folder": item["mimeType"] == FOLDER}));
     }
 }
@@ -806,17 +1118,29 @@ impl Server {
         if !name.starts_with("drive_") {
             return None;
         }
-        let text = |v: Value| -> Res<Value> { Ok(json!([{"type":"text","text":serde_json::to_string_pretty(&v)?}])) };
+        let text = |v: Value| -> Res<Value> {
+            Ok(json!([{"type":"text","text":serde_json::to_string_pretty(&v)?}]))
+        };
         let d = &mut self.drive;
         Some((|| match name {
             "drive_connect" => {
                 d.token = None;
-                text(sign_in(args["open_browser"] != false, &|line| eprintln!("notecomplete drive: {line}"))?)
+                text(sign_in(args["open_browser"] != false, &|line| {
+                    eprintln!("notecomplete drive: {line}")
+                })?)
             }
             "drive_status" => {
-                let Some(saved) = saved_token() else { return text(json!({"connected": false, "how": NOT_CONNECTED})) };
-                let about = d.json("GET", &format!("{API}/about?fields=user(emailAddress,displayName),storageQuota"), None)?;
-                text(json!({"connected": true, "account": about["user"]["emailAddress"], "name": about["user"]["displayName"], "storage": about["storageQuota"], "token_file": token_file(), "saved_account": saved["account"]}))
+                let Some(saved) = saved_token() else {
+                    return text(json!({"connected": false, "how": NOT_CONNECTED}));
+                };
+                let about = d.json(
+                    "GET",
+                    &format!("{API}/about?fields=user(emailAddress,displayName),storageQuota"),
+                    None,
+                )?;
+                text(
+                    json!({"connected": true, "account": about["user"]["emailAddress"], "name": about["user"]["displayName"], "storage": about["storageQuota"], "token_file": token_file(), "saved_account": saved["account"]}),
+                )
             }
             "drive_search" => {
                 let mut q = vec![];
@@ -844,12 +1168,23 @@ impl Server {
                 text(json!({"count": list.len(), "files": list}))
             }
             "drive_list" => {
-                let folder = args["folder"].as_str().map(|_| id_arg(args, "folder")).transpose()?.unwrap_or("root").to_string();
-                let depth = if args["recursive"] == true { args["max_depth"].as_u64().unwrap_or(5).clamp(1, 20) as usize } else { 1 };
+                let folder = args["folder"]
+                    .as_str()
+                    .map(|_| id_arg(args, "folder"))
+                    .transpose()?
+                    .unwrap_or("root")
+                    .to_string();
+                let depth = if args["recursive"] == true {
+                    args["max_depth"].as_u64().unwrap_or(5).clamp(1, 20) as usize
+                } else {
+                    1
+                };
                 let limit = args["limit"].as_u64().unwrap_or(2000).clamp(1, 20000) as usize;
                 let mut out = Vec::new();
                 d.tree(&folder, "", depth, &mut out, limit)?;
-                text(json!({"folder": d.path(&folder), "id": folder, "count": out.len(), "truncated": out.len() >= limit, "items": out}))
+                text(
+                    json!({"folder": d.path(&folder), "id": folder, "count": out.len(), "truncated": out.len() >= limit, "items": out}),
+                )
             }
             "drive_info" => {
                 let f = d.get(id_arg(args, "id")?)?;
@@ -860,9 +1195,20 @@ impl Server {
             "drive_download" => text(d.download(args)?),
             "drive_upload" => text(d.upload(args)?),
             "drive_create_folder" => {
-                let name = args["name"].as_str().filter(|n| !n.trim().is_empty()).ok_or("name is required")?;
-                let parent = args["parent"].as_str().map(|_| id_arg(args, "parent")).transpose()?.unwrap_or("root");
-                let f = d.json("POST", &format!("{API}/files?fields={FIELDS}&{ALL}"), Some(&json!({"name": name, "mimeType": FOLDER, "parents": [parent]})))?;
+                let name = args["name"]
+                    .as_str()
+                    .filter(|n| !n.trim().is_empty())
+                    .ok_or("name is required")?;
+                let parent = args["parent"]
+                    .as_str()
+                    .map(|_| id_arg(args, "parent"))
+                    .transpose()?
+                    .unwrap_or("root");
+                let f = d.json(
+                    "POST",
+                    &format!("{API}/files?fields={FIELDS}&{ALL}"),
+                    Some(&json!({"name": name, "mimeType": FOLDER, "parents": [parent]})),
+                )?;
                 d.remember(&f);
                 text(json!({"created": d.with_path(&f)}))
             }
@@ -872,8 +1218,16 @@ impl Server {
                 let mut url = format!("{API}/files/{id}?fields={FIELDS}&{ALL}");
                 if args["folder"].is_string() {
                     let to = id_arg(args, "folder")?;
-                    let from: Vec<&str> = f["parents"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
-                    url.push_str(&format!("&addParents={to}&removeParents={}", from.join(",")));
+                    let from: Vec<&str> = f["parents"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .collect();
+                    url.push_str(&format!(
+                        "&addParents={to}&removeParents={}",
+                        from.join(",")
+                    ));
                 }
                 let body = match args["name"].as_str() {
                     Some(n) => json!({"name": n}),
@@ -888,8 +1242,15 @@ impl Server {
                 let restore = args["restore"] == true;
                 let mut done = vec![];
                 let mut failed = vec![];
-                for id in args["ids"].as_array().ok_or("ids is required")?.iter().filter_map(Value::as_str) {
-                    match id_arg(&json!({ "id": id }), "id").and_then(|id| d.set_trashed(id, !restore)) {
+                for id in args["ids"]
+                    .as_array()
+                    .ok_or("ids is required")?
+                    .iter()
+                    .filter_map(Value::as_str)
+                {
+                    match id_arg(&json!({ "id": id }), "id")
+                        .and_then(|id| d.set_trashed(id, !restore))
+                    {
                         Ok(f) => done.push(entry(&f)),
                         Err(e) => failed.push(json!({"id": id, "error": e.to_string()})),
                     }
@@ -924,7 +1285,9 @@ mod tests {
 
     #[test]
     fn entries_report_folders_and_sizes() {
-        let e = entry(&json!({"id":"a","name":"Memoria 1.noteful","mimeType":"application/octet-stream","size":"1024","md5Checksum":"ff","modifiedTime":"2026-01-01T00:00:00Z"}));
+        let e = entry(
+            &json!({"id":"a","name":"Memoria 1.noteful","mimeType":"application/octet-stream","size":"1024","md5Checksum":"ff","modifiedTime":"2026-01-01T00:00:00Z"}),
+        );
         assert_eq!(e["size"], 1024);
         assert_eq!(e["md5"], "ff");
         let f = entry(&json!({"id":"b","name":"Noteful","mimeType":FOLDER}));
@@ -937,11 +1300,25 @@ mod tests {
         let list = tools();
         assert!(list.iter().any(|t| t["name"] == "drive_merge_folders"));
         let mut server = Server::default();
-        std::env::set_var("NOTECOMPLETE_DRIVE_TOKEN", "/nonexistent/notecomplete-test-token.json");
-        let status = server.call_drive("drive_status", &json!({})).unwrap().unwrap();
-        assert!(status[0]["text"].as_str().unwrap().contains("\"connected\": false"));
-        let err = server.call_drive("drive_list", &json!({})).unwrap().unwrap_err();
-        assert!(err.to_string().contains("drive_connect") || err.to_string().contains("OAuth client"));
+        std::env::set_var(
+            "NOTECOMPLETE_DRIVE_TOKEN",
+            "/nonexistent/notecomplete-test-token.json",
+        );
+        let status = server
+            .call_drive("drive_status", &json!({}))
+            .unwrap()
+            .unwrap();
+        assert!(status[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("\"connected\": false"));
+        let err = server
+            .call_drive("drive_list", &json!({}))
+            .unwrap()
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("drive_connect") || err.to_string().contains("OAuth client")
+        );
         assert!(server.call_drive("note_outline", &json!({})).is_none());
     }
 }
