@@ -83,6 +83,16 @@
 .wizard-swatch.dark .page i:nth-child(2) { background: #91b4ff; }
 .wizard-swatch.system .bar { background: linear-gradient(90deg, #f7f8fa 50%, #202328 50%); }
 .wizard-swatch.system .page { background: linear-gradient(90deg, #e9ecf0 50%, #15171b 50%); }
+/* A colour theme's card draws in that theme's colours (set by themeSwatch as --sw-*). */
+.wizard-swatch.preset .bar { background: var(--sw-bar); border-color: var(--sw-line); }
+.wizard-swatch.preset .page { background: var(--sw-page); }
+.wizard-swatch.preset .page i { background: var(--sw-text); }
+.wizard-swatch.preset .page i:nth-child(2) { background: var(--sw-accent); }
+.wizard-theme-grid .wizard-choice { padding: 10px 12px; }
+.wizard-theme-grid .wizard-swatch { height: 46px; }
+/* View ▸ More themes…: the same cards in a dialog. */
+.theme-dialog { width: min(720px, calc(100vw - 32px)); }
+.theme-dialog .wizard-theme-grid { max-height: min(60vh, 520px); overflow: auto; padding: 2px; }
 .wizard-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; cursor: pointer; }
 .wizard-check input { margin: 3px 0 0; flex: none; }
 .wizard-check > span { display: grid; gap: 1px; }
@@ -216,6 +226,7 @@
 .wizard-prefab-applying { display: grid; gap: 6px; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--chrome); }
 @media (max-width: 640px) {
   .wizard-choice-grid { grid-template-columns: 1fr; }
+  .wizard-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wizard-head { padding: 14px 16px 0; }
   .wizard-body { padding: 16px; }
   .wizard-module-settings, .wizard-module-children { padding-left: 0; }
