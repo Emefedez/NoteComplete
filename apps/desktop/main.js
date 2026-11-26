@@ -748,10 +748,12 @@ app.whenReady().then(async () => {
   const serverReady = existsSync(bundled)
     ? stableBinary({ bundled, folder: path.join(app.getPath('userData'), 'mcp') }).then(p => { stableServer = p; }, () => { stableServer = bundled; })
     : Promise.resolve();
-  const agents = agentSetup({ tools: () => ai.tools(), server: () => stableServer });
+  const skillsDir = app.isPackaged ? path.join(process.resourcesPath, 'skills') : fileURLToPath(new URL('../../skills', import.meta.url));
+  const agents = agentSetup({ tools: () => ai.tools(), server: () => stableServer, skillsDir: existsSync(skillsDir) ? skillsDir : null });
   const mcpSettingsFile = path.join(app.getPath('userData'), 'mcp-settings.json');
   ipcMain.handle('agents:status', guarded(async () => { await serverReady; return { server: stableServer, tools: await agents.status() }; }));
   ipcMain.handle('agents:connect', guarded(async (_event, id) => { await serverReady; return agents.connect(String(id)); }));
+  ipcMain.handle('agents:install-skills', guarded(async (_event, id) => agents.installSkills(String(id))));
   ipcMain.handle('agents:settings', guarded(() => readMcpSettings(mcpSettingsFile)));
   ipcMain.handle('agents:set-settings', guarded((_event, patch) => writeMcpSettings(mcpSettingsFile, patch && typeof patch === 'object' ? patch : {})));
   // Help → Keep a diagnostic log / Open the log (app-log.js).

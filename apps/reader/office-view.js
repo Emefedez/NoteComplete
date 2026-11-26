@@ -74,6 +74,7 @@ export function officeViewer({
   onOpenAsText = () => {},
   // A file the text view does not open itself but can go back to (a document made from Markdown).
   canOpenAsText = () => false,
+  onEditPrefab = null,
   onDirtyChange = () => {},
   onStatus = () => {},
 } = {}) {
@@ -234,13 +235,26 @@ export function officeViewer({
     return res;
   }
 
-  // App shortcuts pressed in the editor (desktop preload.cjs officeKeyHook): passed on as the
-  // same key press on this page, so Ctrl S saves, Ctrl O opens… as everywhere else.
+  // App shortcuts & "Edit prefab…" from the Euro-Office editor frame (desktop preload.cjs).
   globalThis.addEventListener?.('message', (e) => {
     const d = e.data;
-    if (!active || d?.type !== 'nc-office-key' || !/^http:\/\/127\.0\.0\.1:\d+$/.test(String(e.origin || ''))) return;
-    const doc = host?.ownerDocument || globalThis.document;
-    doc?.dispatchEvent(new KeyboardEvent('keydown', { key: String(d.key || ''), code: String(d.code || ''), ctrlKey: Boolean(d.ctrlKey), metaKey: Boolean(d.metaKey), shiftKey: Boolean(d.shiftKey), bubbles: true, cancelable: true }));
+    if (!active || !/^http:\/\/127\.0\.0\.1:\d+$/.test(String(e.origin || ''))) return;
+    if (d?.type === 'nc-office-key') {
+      const doc = host?.ownerDocument || globalThis.document;
+      doc?.dispatchEvent(new KeyboardEvent('keydown', { key: String(d.key || ''), code: String(d.code || ''), ctrlKey: Boolean(d.ctrlKey), metaKey: Boolean(d.metaKey), shiftKey: Boolean(d.shiftKey), bubbles: true, cancelable: true }));
+      return;
+    }
+    if (d?.type === 'nc-office-edit-prefab' && typeof onEditPrefab === 'function' && d.spec && typeof d.spec === 'object') {
+      const replyTarget = e.source;
+      const replyOrigin = e.origin;
+      Promise.resolve(onEditPrefab({ spec: d.spec, descr: d.descr || '', title: d.title || '' }))
+        .then((res) => {
+          if (res?.dataUrl && replyTarget?.postMessage) {
+            replyTarget.postMessage({ type: 'nc-office-apply-prefab', dataUrl: res.dataUrl, descr: res.descr || '', title: res.title || '' }, replyOrigin);
+          }
+        })
+        .catch((err) => onStatus(`Could not edit prefab: ${err?.message || err}`, true));
+    }
   });
 
   async function close({ save = true } = {}) {

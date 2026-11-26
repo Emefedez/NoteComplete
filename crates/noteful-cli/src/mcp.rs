@@ -138,7 +138,8 @@ fn tools() -> Value {
     let mut tools = json!([
         tool("list_notes", "List notes in a folder (default: the NoteComplete downloads folder) with title, page count and size.", json!({"folder":{"type":"string"}}), &[]),
         tool("note_outline", "Title, pages (size, PDF background, ink and typed-text counts, a text snippet) and recordings of a note.", json!({"path":path}), &["path"]),
-        tool("page_text", "Typed text, PDF text and the text of the handwriting of one page. The handwriting text is known when the ink was written from Markdown (NoteComplete or this server) or recognized with OCR in NoteComplete, in .notecomp, .notepart and .nfedit files; otherwise read the page with page_image.", json!({"path":path,"page":page}), &["path","page"]),
+        tool("page_text", "Typed text, PDF text, handwriting text (when written from Markdown or recognized with OCR), and audio_windows (recording timestamps for audio-synced ink on this page). If needs_page_image is true, call page_image to read the handwriting.", json!({"path":path,"page":page}), &["path","page"]),
+        tool("page_audio_timeline", "Correlate audio recordings with handwritten ink timestamps on a page (or across all timed pages when page is omitted). Returns per-recording writing bursts ([start_s, end_s] and MM:SS) and whether handwriting OCR text is present or page_image is needed.", json!({"path":path,"page":{"type":"integer","minimum":1,"description":"Optional 1-based page number; omit to inspect all pages with timed ink"},"gap_seconds":{"type":"number","minimum":0,"maximum":300,"description":"Merge stroke bursts separated by at most this many seconds (default 8)"}}), &["path"]),
         tool("page_image", "PNG of one page as the reader draws it: PDF background, handwriting, highlights, images and typed text. Use it to read handwritten notes.", json!({"path":path,"page":page,"width":{"type":"integer","minimum":200,"maximum":2400,"description":"Pixel width (default 1100)"}}), &["path","page"]),
         tool("search_note", "Find words in a note's typed text and PDF text (accent- and case-insensitive). Returns pages and snippets.", json!({"path":path,"query":{"type":"string"}}), &["path","query"]),
         tool("extract_resource", "Write a note's embedded PDFs, recordings or cover image to a folder. Without `index` it lists them.", json!({"path":path,"kind":{"type":"string","enum":["pdf","audio","cover"]},"index":{"type":"integer","minimum":0},"out_dir":{"type":"string"}}), &["path","kind"]),
@@ -257,7 +258,11 @@ impl Server {
                     None => (String::new(), None),
                 };
                 let (handwriting, source) = handwriting_text(&v);
-                let mut out = json!({"page":display + 1,"typed_text":typed_text(&v),"pdf_text":pdf,"handwriting_text":handwriting});
+                let audio_windows = page_audio_windows(&v, 8.0);
+                let mut out = json!({"page":display + 1,"typed_text":typed_text(&v),"pdf_text":pdf,"handwriting_text":handwriting,"needs_page_image":source.is_none()});
+                if !audio_windows.is_empty() {
+                    out["audio_windows"] = json!(audio_windows);
+                }
                 if let Some(e) = pdf_error {
                     out["pdf_text_note"] = e.into();
                 }
@@ -269,6 +274,7 @@ impl Server {
                 }
                 text(out)
             }
+            "page_audio_timeline" => text(self.audio_timeline(args)?),
             "page_image" => {
                 let display = page_arg(args)?;
                 let width = args["width"].as_u64().unwrap_or(1100).clamp(200, 2400) as u32;
@@ -546,6 +552,131 @@ impl Server {
         std::fs::write(&target, bytes)?;
         Ok(json!({"written":target}))
     }
+
+    fn audio_timeline(&mut self, args: &Value) -> Res<Value> {
+        let gap_s = args["gap_seconds"].as_f64().unwrap_or(8.0).clamp(0.0, 300.0);
+        let single = match args["page"].as_u64() {
+            Some(p) if p >= 1 => Some(p as usize - 1),
+            Some(_) => return Err("page must be 1 or more".into()),
+            None => None,
+        };
+        let total = self.open(args)?.page_order().len();
+        let recordings = self.open(args)?.view(0)?["recordings"].clone();
+        let range: Vec<usize> = match single {
+            Some(d) => vec![d],
+            None => (0..total).collect(),
+        };
+        let mut pages = Vec::new();
+        for display in range {
+            let v = self.view(args, display)?;
+            let windows = page_audio_windows(&v, gap_s);
+            if single.is_none() && windows.is_empty() {
+                continue;
+            }
+            let (_, source) = handwriting_text(&v);
+            let timed_strokes = v["timings"].as_array().map_or(0, Vec::len);
+            pages.push(json!({
+                "page": display + 1,
+                "timed_strokes": timed_strokes,
+                "has_handwriting_text": source.is_some(),
+                "handwriting_source": source,
+                "needs_page_image": source.is_none(),
+                "audio_windows": windows,
+            }));
+        }
+        Ok(json!({
+            "recordings": recordings,
+            "gap_seconds": gap_s,
+            "pages": pages,
+        }))
+    }
+}
+
+fn format_mmss(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    let h = s / 3600;
+    let m = (s % 3600) / 60;
+    let rem = s % 60;
+    if h > 0 {
+        format!("{h}:{m:02}:{rem:02}")
+    } else {
+        format!("{m:02}:{rem:02}")
+    }
+}
+
+/// Groups stroke timings (`v["timings"]`) per recording into contiguous writing
+/// bursts (merging gaps <= `gap_s`).
+fn page_audio_windows(v: &Value, gap_s: f64) -> Vec<Value> {
+    let Some(timings) = v["timings"].as_array().filter(|t| !t.is_empty()) else {
+        return Vec::new();
+    };
+    let mut rec_meta: HashMap<&str, (&str, &str, f64)> = HashMap::new();
+    if let Some(recs) = v["recordings"].as_array() {
+        for r in recs {
+            if let Some(id) = r["id"].as_str() {
+                rec_meta.insert(
+                    id,
+                    (
+                        r["name"].as_str().unwrap_or(""),
+                        r["asset_id"].as_str().unwrap_or(""),
+                        r["duration"].as_f64().unwrap_or(0.0),
+                    ),
+                );
+            }
+        }
+    }
+    let mut by_rec: HashMap<String, Vec<(f64, f64)>> = HashMap::new();
+    for t in timings {
+        let Some(rec_id) = t["recording_id"].as_str() else {
+            continue;
+        };
+        let start = t["start"].as_f64().unwrap_or(0.0);
+        let end = t["end"].as_f64().unwrap_or(start).max(start);
+        by_rec.entry(rec_id.to_owned()).or_default().push((start, end));
+    }
+    let mut out = Vec::new();
+    let mut keys: Vec<String> = by_rec.keys().cloned().collect();
+    keys.sort();
+    for rec_id in keys {
+        let mut spans = by_rec.remove(&rec_id).unwrap_or_default();
+        spans.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let total_strokes = spans.len();
+        let mut bursts: Vec<(f64, f64, usize)> = Vec::new();
+        for (s, e) in spans {
+            match bursts.last_mut() {
+                Some(last) if s - last.1 <= gap_s => {
+                    last.1 = last.1.max(e);
+                    last.2 += 1;
+                }
+                _ => bursts.push((s, e, 1)),
+            }
+        }
+        let first_s = bursts.first().map_or(0.0, |b| b.0);
+        let last_s = bursts.last().map_or(0.0, |b| b.1);
+        let (name, asset_id, duration) = rec_meta
+            .get(rec_id.as_str())
+            .copied()
+            .unwrap_or(("", "", 0.0));
+        out.push(json!({
+            "recording_id": rec_id,
+            "recording_name": name,
+            "asset_id": asset_id,
+            "duration_s": (duration * 10.0).round() / 10.0,
+            "total_strokes": total_strokes,
+            "first_s": (first_s * 10.0).round() / 10.0,
+            "last_s": (last_s * 10.0).round() / 10.0,
+            "first_mmss": format_mmss(first_s),
+            "last_mmss": format_mmss(last_s),
+            "bursts": bursts.into_iter().map(|(s, e, n)| json!({
+                "start_s": (s * 10.0).round() / 10.0,
+                "end_s": (e * 10.0).round() / 10.0,
+                "start_mmss": format_mmss(s),
+                "end_mmss": format_mmss(e),
+                "strokes": n,
+            })).collect::<Vec<_>>(),
+        }));
+    }
+    out
 }
 
 fn note_path(args: &Value) -> Res<PathBuf> {
@@ -1064,7 +1195,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 20);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 21);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
@@ -1178,5 +1309,28 @@ mod tests {
         assert!(!prefer_markdown_setting());
         std::env::remove_var("NOTECOMPLETE_MCP_SETTINGS");
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn page_audio_windows_merges_writing_bursts_and_formats_timestamps() {
+        let view = json!({
+            "recordings": [{"id": "r1", "name": "Lecture 1", "asset_id": "a1", "duration": 3665.0}],
+            "timings": [
+                {"item_id": "s1", "recording_id": "r1", "start": 10.0, "end": 12.0},
+                {"item_id": "s2", "recording_id": "r1", "start": 15.0, "end": 18.0},
+                {"item_id": "s3", "recording_id": "r1", "start": 125.0, "end": 130.0},
+            ]
+        });
+        let w = page_audio_windows(&view, 8.0);
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0]["recording_name"], "Lecture 1");
+        assert_eq!(w[0]["total_strokes"], 3);
+        assert_eq!(w[0]["first_mmss"], "00:10");
+        assert_eq!(w[0]["last_mmss"], "02:10");
+        let bursts = w[0]["bursts"].as_array().unwrap();
+        assert_eq!(bursts.len(), 2);
+        assert_eq!(bursts[0]["strokes"], 2);
+        assert_eq!(bursts[1]["start_mmss"], "02:05");
+        assert_eq!(format_mmss(3665.0), "1:01:05");
     }
 }

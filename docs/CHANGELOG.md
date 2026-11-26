@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.9
+
+- **MCP prefabs for Markdown, HTML & Euro-Office.** `add_prefab` now inserts NoteComplete prefabs into Markdown (`.md`/`.markdown`/`.txt`), HTML (`.html`/`.htm`), notebook Markdown notes (`target: "notes"`), and Euro-Office documents (`.docx`, `.pptx`, `.odt`, `.odp`), with support for `position`, `after_heading`, and `replace_placeholder`. Markdown and HTML prefabs embed `data-nc-prefab-spec` so they remain double-click editable in NoteComplete.
+- **New `create_markdown` MCP tool.** AI agents can create standalone Markdown documents with inline editable prefabs in one step using `<!-- PREFAB:key -->` or `{{prefab:key}}` placeholders.
+- **Prefer Markdown (.md) for AI-generated documents setting.** Added a toggle in **Help → Connect AI tools…** and **Help → Setup wizard…** (AI & Modules steps) backed by `mcp-settings.json` so connected MCP agents default to Markdown documents with embedded prefabs instead of handwritten notebooks.
+
 ## 2.0.8
 
 - **Type math the way it looks.** The Math Mode bar now reads x³, x⁻¹, x₁, ×, ÷, −, √, ∛, π and ½ as typed or pasted, so *x³ + 6* works instead of failing with "Unsupported symbol ³". Graphs read them too, and log₂ 8 (or log_2(8)) now works without the backslash.

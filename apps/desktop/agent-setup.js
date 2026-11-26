@@ -6,7 +6,7 @@
 // without the user asking, and the exact commands are shown so they can be run
 // by hand instead.
 import { execFile } from 'node:child_process';
-import { chmod, copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, cp, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
@@ -18,6 +18,72 @@ export const TOOLS = {
   antigravity: { label: 'Antigravity' },
   opencode: { label: 'OpenCode' },
 };
+
+// Where each AI harness discovers user-level skills.
+export function skillTargets(tool, home = homedir()) {
+  if (tool === 'claude') return [path.join(home, '.claude', 'skills')];
+  if (tool === 'codex') return [path.join(home, '.codex', 'skills')];
+  if (tool === 'antigravity') return [path.join(home, '.agents', 'skills'), path.join(home, '.gemini', 'skills')];
+  if (tool === 'opencode') return [path.join(home, '.config', 'opencode', 'skills')];
+  return [];
+}
+
+export async function listBundledSkills(skillsDir) {
+  if (!skillsDir) return [];
+  try {
+    const entries = await readdir(skillsDir, { withFileTypes: true });
+    const names = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('notecomplete-')) continue;
+      const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
+      if (await stat(skillFile).then((s) => s.isFile()).catch(() => false)) {
+        names.push(entry.name);
+      }
+    }
+    return names.sort();
+  } catch {
+    return [];
+  }
+}
+
+export async function hasSkillsInstalled(tool, { skillsDir, home = homedir() } = {}) {
+  const names = await listBundledSkills(skillsDir);
+  if (!names.length) return false;
+  const targets = skillTargets(tool, home);
+  if (!targets.length) return false;
+  const primary = targets[0];
+  for (const name of names) {
+    const ok = await stat(path.join(primary, name, 'SKILL.md')).then((s) => s.isFile()).catch(() => false);
+    if (!ok) return false;
+  }
+  return true;
+}
+
+export async function installSkillsFor(tool, { skillsDir, home = homedir() } = {}) {
+  if (!TOOLS[tool]) throw Error('Unknown AI tool.');
+  const names = await listBundledSkills(skillsDir);
+  if (!names.length) return { tool, installed: [] };
+  const targets = skillTargets(tool, home);
+  const dirs = [];
+  for (const [i, dir] of targets.entries()) {
+    if (i === 0) {
+      dirs.push(dir);
+    } else {
+      // Secondary target (e.g. ~/.gemini/skills for Antigravity) is populated when its parent exists.
+      const parentExists = await stat(path.dirname(dir)).then((s) => s.isDirectory()).catch(() => false);
+      if (parentExists) dirs.push(dir);
+    }
+  }
+  for (const dir of dirs) {
+    await mkdir(dir, { recursive: true });
+    for (const name of names) {
+      const src = path.join(skillsDir, name);
+      const dst = path.join(dir, name);
+      await cp(src, dst, { recursive: true, force: true });
+    }
+  }
+  return { tool, installed: names, dirs };
+}
 
 // Shared MCP preferences stored in <userData>/mcp-settings.json so both the
 // desktop app UI and the `noteful mcp` Rust binary read the same settings.
@@ -120,7 +186,7 @@ const run = (binary, args, timeout = 30000) => new Promise((resolve) => {
     resolve({ ok: !error, out: `${stdout}${stderr}`.trim() }));
 });
 
-export function agentSetup({ tools, server, home = homedir() }) {
+export function agentSetup({ tools, server, skillsDir = null, home = homedir() }) {
   // Where a tool's registration points now: the path, '' when registered elsewhere or unknown, or null.
   async function registered(tool, binary) {
     if (tool === 'opencode') return openCodeServer(home);
@@ -133,29 +199,47 @@ export function agentSetup({ tools, server, home = homedir() }) {
     return ok && new RegExp(`\\b${SERVER}\\b`).test(out) ? (out.includes(server()) ? server() : '') : null;
   }
   return {
-    // Each tool: installed?, connected (to this app's server)?, and the manual step.
+    // Each tool: installed?, connected (to this app's server)?, skillsInstalled?, and the manual step.
     async status() {
       const found = await tools();
       const target = server();
+      const bundledSkills = await listBundledSkills(skillsDir);
       return Promise.all(Object.entries(TOOLS).map(async ([id, { label }]) => {
         const binary = found[id];
         const at = binary || id === 'opencode' ? await registered(id, binary) : null;
-        return { id, label, installed: !!binary, connected: !!target && at === target, elsewhere: at != null && at !== target, manual: target ? manualSteps(id, target) : '' };
+        const skillsInstalled = bundledSkills.length > 0 ? await hasSkillsInstalled(id, { skillsDir, home }) : false;
+        return {
+          id,
+          label,
+          installed: !!binary,
+          connected: !!target && at === target,
+          elsewhere: at != null && at !== target,
+          manual: target ? manualSteps(id, target) : '',
+          ...(bundledSkills.length ? { skillsInstalled, bundledSkills } : {}),
+        };
       }));
     },
-    // Register (or re-point) this app's server with one tool.
+    // Register (or re-point) this app's server with one tool and install bundled NoteComplete skills.
     async connect(id) {
       if (!TOOLS[id]) throw Error('Unknown AI tool.');
       const target = server();
       if (!target) throw Error('This build has no bundled note server.');
       const binary = (await tools())[id];
-      if (id === 'opencode') return { id, file: await connectOpenCode(target, home) };
+      if (id === 'opencode') {
+        const file = await connectOpenCode(target, home);
+        const skills = skillsDir ? await installSkillsFor(id, { skillsDir, home }).catch(() => ({ installed: [] })) : { installed: [] };
+        return { id, file, skills: skills.installed };
+      }
       if (!binary) throw Error(`${TOOLS[id].label} was not found. Install it and sign in, then try again.`);
       // A server registered at another path (an older install) is replaced.
       if ((await registered(id, binary)) != null) await run(binary, removeCommand(id));
       const { ok, out } = await run(binary, addCommand(id, target), 60000);
       if (!ok) throw Error(`${TOOLS[id].label} could not add the server: ${out.split('\n').slice(-3).join(' ').slice(0, 300) || 'no reason given'}`);
-      return { id };
+      const skills = skillsDir ? await installSkillsFor(id, { skillsDir, home }).catch(() => ({ installed: [] })) : { installed: [] };
+      return { id, skills: skills.installed };
+    },
+    async installSkills(id) {
+      return installSkillsFor(id, { skillsDir, home });
     },
   };
 }

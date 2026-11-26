@@ -59,6 +59,140 @@ function officeKeyHook(win = globalThis) {
     try { win.top.postMessage(data, '*'); } catch { /* No reader above. */ }
   }, true);
 }
+// Parses a NoteComplete prefab spec embedded in an Office image's alt/description text
+// ("notecomplete-prefab:<json>") or in an SVG data URI.
+function parseOfficePrefabMeta(descr = '', title = '') {
+  for (const candidate of [descr, title]) {
+    const raw = String(candidate || '').trim();
+    if (!raw) continue;
+    const idx = raw.indexOf('notecomplete-prefab:');
+    if (idx >= 0) {
+      const jsonText = raw.slice(idx + 'notecomplete-prefab:'.length).trim();
+      try {
+        const spec = JSON.parse(jsonText);
+        if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+          return { spec, descr: raw, title: String(title || spec.title || spec.type || 'Prefab') };
+        }
+      } catch { /* Try next candidate. */ }
+    }
+  }
+  return null;
+}
+// Patches Euro-Office's right-click context menu on NoteComplete prefab images to add
+// "Edit prefab…", which opens NoteComplete's native prefab editor and applies the updated
+// PNG + spec back onto the selected image in place via Asc.asc_CImgProperty / api.ImgApply.
+// Self-contained: injected into the DocumentServer frame's main world.
+function officePrefabHook() {
+  try {
+    if (window.__ncOfficePrefab) return;
+    window.__ncOfficePrefab = true;
+    const parseMeta = (descr, title) => {
+      for (const candidate of [descr, title]) {
+        const raw = String(candidate || '').trim();
+        if (!raw) continue;
+        const idx = raw.indexOf('notecomplete-prefab:');
+        if (idx >= 0) {
+          try {
+            const spec = JSON.parse(raw.slice(idx + 'notecomplete-prefab:'.length).trim());
+            if (spec && typeof spec === 'object' && !Array.isArray(spec)) {
+              return { spec, descr: raw, title: String(title || spec.title || spec.type || 'Prefab') };
+            }
+          } catch {}
+        }
+      }
+      return null;
+    };
+    const activeController = () => {
+      for (const ns of [window.DE, window.PE, window.SSE]) {
+        try {
+          const ctrl = ns?.getController?.('Main');
+          if (ctrl?.api) return ctrl;
+        } catch {}
+      }
+      return null;
+    };
+    const readSelectedPrefab = () => {
+      const ctrl = activeController();
+      const candidates = [];
+      try {
+        const rm = ctrl?.rightMenu || window.DE?.getController?.('RightMenu') || window.PE?.getController?.('RightMenu');
+        if (rm?.imageSettings?._originalProps) candidates.push(rm.imageSettings._originalProps);
+        if (rm?.shapeSettings?._originalProps) candidates.push(rm.shapeSettings._originalProps);
+      } catch {}
+      try {
+        const sel = ctrl?.api?.getSelectedElements?.();
+        if (Array.isArray(sel)) candidates.push(...sel);
+        else if (sel) candidates.push(sel);
+      } catch {}
+      for (const obj of candidates) {
+        if (!obj || typeof obj !== 'object') continue;
+        const descr = obj.get_Description?.() ?? obj.asc_getDescription?.() ?? obj.description ?? '';
+        const title = obj.get_Title?.() ?? obj.asc_getTitle?.() ?? obj.get_Name?.() ?? obj.title ?? obj.name ?? '';
+        const hit = parseMeta(descr, title);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const isImageContextMenu = (ul) => {
+      const text = (ul.textContent || '').toLowerCase();
+      return /replace image|image advanced|save as picture|reemplazar imagen|guardar como imagen|actual size|tama[ñn]o real/.test(text);
+    };
+    const injectIntoMenu = (ul) => {
+      if (!ul || ul.querySelector('.nc-edit-prefab-item')) return;
+      const meta = readSelectedPrefab();
+      if (!meta && !isImageContextMenu(ul)) return;
+      if (!meta) return;
+      const li = document.createElement('li');
+      li.className = 'nc-edit-prefab-item';
+      const a = document.createElement('a');
+      a.href = '#';
+      a.tabIndex = -1;
+      a.textContent = 'Edit prefab…';
+      a.style.fontWeight = '600';
+      a.addEventListener('mousedown', (ev) => ev.stopPropagation());
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        try { window.Common?.UI?.Menu?.Manager?.hideAll?.(); } catch {}
+        try { window.top.postMessage({ type: 'nc-office-edit-prefab', spec: meta.spec, descr: meta.descr, title: meta.title }, '*'); } catch {}
+      });
+      li.appendChild(a);
+      const sep = document.createElement('li');
+      sep.className = 'divider nc-edit-prefab-sep';
+      ul.insertBefore(sep, ul.firstChild);
+      ul.insertBefore(li, ul.firstChild);
+    };
+    const scanMenus = () => {
+      for (const ul of document.querySelectorAll('ul.dropdown-menu')) {
+        const style = getComputedStyle(ul);
+        if (style.display !== 'none' && style.visibility !== 'hidden') injectIntoMenu(ul);
+      }
+    };
+    const obs = new MutationObserver(() => scanMenus());
+    const startObserver = () => {
+      if (document.body) obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    };
+    if (document.body) startObserver();
+    else window.addEventListener('DOMContentLoaded', startObserver, { once: true });
+    window.addEventListener('contextmenu', () => setTimeout(scanMenus, 60), true);
+    window.addEventListener('message', (e) => {
+      const d = e.data;
+      if (d?.type !== 'nc-office-apply-prefab' || !d.dataUrl) return;
+      const ctrl = activeController();
+      const api = ctrl?.api;
+      if (!api || !window.Asc?.asc_CImgProperty) return;
+      try {
+        const props = new window.Asc.asc_CImgProperty();
+        props.put_ImageUrl(String(d.dataUrl));
+        if (d.descr && typeof props.put_Description === 'function') props.put_Description(String(d.descr));
+        if (d.title && typeof props.put_Title === 'function') props.put_Title(String(d.title));
+        api.ImgApply(props);
+      } catch (err) {
+        console.warn('NoteComplete prefab apply in Euro-Office:', err);
+      }
+    });
+  } catch { /* Euro-Office keeps its own context menu. */ }
+}
 // The DocumentServer runs on 127.0.0.1 at a random port (office-bridge.js).
 const isOfficeFrame = (origin) => /^http:\/\/127\.0\.0\.1:\d+$/.test(String(origin || ''));
 const isMainFrame = typeof process?.isMainFrame === 'boolean' ? process.isMainFrame : globalThis.top === globalThis;
@@ -68,12 +202,17 @@ if (!isMainFrame) {
   if (isOfficeFrame(globalThis.location?.origin)) {
     try { officeKeyHook(); } catch { /* Keys stay with the editor. */ }
     try {
-      if (typeof contextBridge.executeInMainWorld === 'function') contextBridge.executeInMainWorld({ func: officePaintHook });
-      else webFrame.executeJavaScript(`(${officePaintHook})()`);
+      if (typeof contextBridge.executeInMainWorld === 'function') {
+        contextBridge.executeInMainWorld({ func: officePaintHook });
+        contextBridge.executeInMainWorld({ func: officePrefabHook });
+      } else {
+        webFrame.executeJavaScript(`(${officePaintHook})()`);
+        webFrame.executeJavaScript(`(${officePrefabHook})()`);
+      }
     } catch { /* The editor keeps its own timing. */ }
   }
 } else exposeReaderBridges();
-if (typeof module === 'object' && module) module.exports = { officePaintHook, isOfficeFrame, officeKeyTarget };
+if (typeof module === 'object' && module) module.exports = { officePaintHook, officePrefabHook, parseOfficePrefabMeta, isOfficeFrame, officeKeyTarget };
 function exposeReaderBridges() {
 contextBridge.exposeInMainWorld('notecompleteFiles', {
   folder: () => ipcRenderer.invoke('files:folder'),
@@ -126,6 +265,7 @@ contextBridge.exposeInMainWorld('notecompleteClipboard', {
 contextBridge.exposeInMainWorld('notecompleteAgents', {
   status: () => ipcRenderer.invoke('agents:status'),
   connect: id => ipcRenderer.invoke('agents:connect', id),
+  installSkills: id => ipcRenderer.invoke('agents:install-skills', id),
   settings: () => ipcRenderer.invoke('agents:settings'),
   setSettings: patch => ipcRenderer.invoke('agents:set-settings', patch),
 });

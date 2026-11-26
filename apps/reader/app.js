@@ -4958,7 +4958,7 @@ async function openTextInOffice(anchor = $("textOpenOffice")) {
   if (/!\[[^\]]*\]\(/.test(md)) {
     status("Preparing the pictures for Euro-Office…");
     const { markdownForOffice, svgUriToPng } = await import("./markdown-prefab.js");
-    md = await markdownForOffice(md, (uri) => svgUriToPng(uri));
+    md = await markdownForOffice(md, (uri) => svgUriToPng(uri), { embedSpec: true });
     md = await inlineSiblingPictures(md);
   }
   // Unsaved edits go with it (Euro-Office saves the result as a new .docx), so opening it there
@@ -5034,6 +5034,19 @@ const officeView = officeViewer({
   getLang: () => "en",
   onOpenAsText: (file) => void openOfficeAsText(file),
   canOpenAsText: (file) => Boolean(markdownOrigin && file?.name === markdownOrigin.name),
+  onEditPrefab: async ({ spec }) => {
+    const updated = await editFigureSpec(spec);
+    if (!updated) return null;
+    const { markdownPrefabBlockForSpec } = await import("./chinese/zh-menu.js");
+    const { svgUriToPng, PREFAB_LINE } = await import("./markdown-prefab.js");
+    const block = await markdownPrefabBlockForSpec(updated);
+    const match = block?.match(PREFAB_LINE);
+    if (!match) return null;
+    const dataUrl = await svgUriToPng(match[2]);
+    const title = match[1] || updated.title || updated.type || "Prefab";
+    const descr = `notecomplete-prefab:${JSON.stringify(updated)}`;
+    return { dataUrl, descr, title };
+  },
   onDirtyChange: (isDirty, name) => {
     dirty = changed = isDirty;
     tabBar.update({ title: name || activeFileName || "Document", dirty: isDirty });

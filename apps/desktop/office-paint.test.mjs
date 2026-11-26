@@ -33,10 +33,14 @@ test('the main frame gets the bridges and no hook', () => {
   assert.equal(mainWorld.length, 0);
 });
 
-test('a DocumentServer frame gets the hook and no bridge', () => {
-  const { exposed, mainWorld } = load({ isMainFrame: false, origin: 'http://127.0.0.1:41234' });
+test('a DocumentServer frame gets the paint and prefab hooks and no bridge', () => {
+  const { exposed, mainWorld, exports } = load({ isMainFrame: false, origin: 'http://127.0.0.1:41234' });
   assert.deepEqual(exposed, []);
-  assert.equal(mainWorld.length, 1);
+  assert.equal(mainWorld.length, 2);
+  const meta = exports.parseOfficePrefabMeta('notecomplete-prefab:{"type":"bar","title":"Scores"}', 'Scores');
+  assert.equal(meta?.spec?.type, 'bar');
+  assert.equal(meta?.spec?.title, 'Scores');
+  assert.equal(exports.parseOfficePrefabMeta('plain image'), null);
 });
 
 test('other sub-frames get nothing', () => {

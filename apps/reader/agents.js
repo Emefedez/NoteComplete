@@ -37,7 +37,12 @@ export async function writePreferMarkdown(on, { api = globalThis.notecompleteAge
 
 // One line per tool: what it is now and what the button does.
 export function describe(tool) {
-  if (tool.connected) return { text: "Connected", action: "Reconnect" };
+  if (tool.connected) {
+    if (tool.bundledSkills?.length && tool.skillsInstalled === false) {
+      return { text: "Connected · skills not installed", action: "Reconnect", skillsAction: "Install skills" };
+    }
+    return { text: tool.skillsInstalled ? "Connected · skills installed" : "Connected", action: "Reconnect" };
+  }
   if (!tool.installed && tool.id !== "opencode") return { text: "Not installed", action: null };
   if (tool.elsewhere) return { text: "Set up for an older copy of NoteComplete", action: "Update" };
   return { text: tool.installed ? "Not connected" : "Not installed; can be set up now", action: "Connect" };
@@ -87,7 +92,7 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
     if (!result.server) { note.textContent = "This build has no note server. Build it with cargo build --release -p noteful-cli."; list.replaceChildren(); return; }
     note.textContent = "";
     list.replaceChildren(...result.tools.map((tool) => {
-      const { text, action } = describe(tool);
+      const { text, action, skillsAction } = describe(tool);
       const row = document.createElement("li");
       row.className = "agents-row";
       const name = document.createElement("strong");
@@ -96,6 +101,27 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
       state.className = tool.connected ? "agents-ok" : "muted";
       state.textContent = text;
       row.append(name, state);
+      if (skillsAction && typeof api.installSkills === "function") {
+        const skillsBtn = document.createElement("button");
+        skillsBtn.type = "button";
+        skillsBtn.className = "primary";
+        skillsBtn.textContent = skillsAction;
+        skillsBtn.onclick = async () => {
+          skillsBtn.disabled = true;
+          note.textContent = `Installing NoteComplete skills for ${tool.label}…`;
+          let message;
+          try {
+            const res = await api.installSkills(tool.id);
+            message = `Installed ${res?.installed?.length || 0} NoteComplete skills for ${tool.label}. Restart it to load them.`;
+            status(`NoteComplete skills installed for ${tool.label}.`);
+          } catch (e) {
+            message = e.message;
+          }
+          await render().catch((e) => console.warn("Agents status:", e));
+          note.textContent = message;
+        };
+        row.append(skillsBtn);
+      }
       if (action) {
         const button = document.createElement("button");
         button.type = "button";
@@ -105,8 +131,9 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
           note.textContent = `Connecting ${tool.label}…`;
           let message;
           try {
-            await api.connect(tool.id);
-            message = `${tool.label} is connected. Restart it (or start a new session) to see the NoteComplete tools.`;
+            const res = await api.connect(tool.id);
+            const skillsNote = res?.skills?.length ? ` (${res.skills.length} skills installed)` : "";
+            message = `${tool.label} is connected${skillsNote}. Restart it (or start a new session) to see the NoteComplete tools.`;
             status(`${tool.label} can now use your notes.`);
           } catch (e) {
             message = e.message;

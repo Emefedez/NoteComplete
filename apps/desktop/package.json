@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "2.0.9",
+  "version": "2.0.10",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -62,6 +62,15 @@
     ],
     "asarUnpack": [
       "office-runner/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../skills",
+        "to": "skills",
+        "filter": [
+          "notecomplete-*/**"
+        ]
+      }
     ],
     "fileAssociations": [
       {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { agentSetup, addCommand, connectOpenCode, manualSteps, readMcpSettings, stableBinary, writeMcpSettings } from './agent-setup.js';
+import { agentSetup, addCommand, connectOpenCode, hasSkillsInstalled, installSkillsFor, listBundledSkills, manualSteps, readMcpSettings, stableBinary, writeMcpSettings } from './agent-setup.js';
 
 test('the bundled server is copied once to a stable folder and refreshed when it changes', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'nc-agents-'));
@@ -81,4 +81,20 @@ test('MCP settings default to preferMarkdown=false and persist atomically', asyn
   assert.equal(JSON.parse(await readFile(file, 'utf8')).preferMarkdown, true);
   assert.deepEqual(await writeMcpSettings(file, { preferMarkdown: false }), { preferMarkdown: false });
   assert.deepEqual(await readMcpSettings(file), { preferMarkdown: false });
+});
+
+test('bundled NoteComplete skills are discovered and installed for each AI harness', async () => {
+  const skillsDir = path.resolve(import.meta.dirname, '../../skills');
+  const bundled = await listBundledSkills(skillsDir);
+  assert.deepEqual(bundled, ['notecomplete-audio-notes', 'notecomplete-handwriting-study', 'notecomplete-markdown-prefabs']);
+  const home = await mkdtemp(path.join(tmpdir(), 'nc-skills-home-'));
+  await mkdir(path.join(home, '.gemini'), { recursive: true });
+  assert.equal(await hasSkillsInstalled('claude', { skillsDir, home }), false);
+  const res = await installSkillsFor('antigravity', { skillsDir, home });
+  assert.equal(res.installed.length, 3);
+  assert.equal(await hasSkillsInstalled('antigravity', { skillsDir, home }), true);
+  assert.ok(await stat(path.join(home, '.agents', 'skills', 'notecomplete-audio-notes', 'SKILL.md')));
+  assert.ok(await stat(path.join(home, '.gemini', 'skills', 'notecomplete-audio-notes', 'SKILL.md')));
+  await installSkillsFor('claude', { skillsDir, home });
+  assert.equal(await hasSkillsInstalled('claude', { skillsDir, home }), true);
 });

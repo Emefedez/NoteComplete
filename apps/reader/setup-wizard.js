@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
-import { readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
+import { describe as describeAgentTool, readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
 import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
 import { PRESETS } from './themes.js';
 
@@ -269,8 +269,68 @@ export function buildSteps(env) {
           syncPreferMarkdown({ api: agentsApi, store: storage }).then((v) => { preferMdInput.checked = v; }, () => {});
         }
         body.append(label('Default assistant'), list,
-          label('AI-generated documents'), preferMd,
-          make('p', { className: 'wizard-hint', textContent: 'Each AI window can still pick another one. To let your AI tools read and write your notes, see Modules.' }));
+          label('AI-generated documents'), preferMd);
+
+        if (agentsApi?.status) {
+          if (!draft.agents) {
+            draft.agents = { state: 'loading', result: null, note: '' };
+            Promise.resolve(agentsApi.status()).then(
+              (result) => { draft.agents = { state: 'loaded', result, note: '' }; refresh('ai'); },
+              (err) => { draft.agents = { state: 'error', result: null, note: err?.message || 'Could not inspect AI tools.' }; refresh('ai'); },
+            );
+          }
+          body.append(label('Connect AI harnesses & install skills'));
+          if (draft.agents.state === 'loading') {
+            body.append(make('p', { className: 'wizard-hint', textContent: 'Checking connected AI harnesses and bundled skills…' }));
+          } else if (draft.agents.state === 'error' || !draft.agents.result?.server) {
+            body.append(make('p', { className: 'wizard-hint', textContent: draft.agents.note || 'This build has no bundled MCP note server.' }));
+          } else {
+            const connList = make('div', { className: 'wizard-provider-list' });
+            const reloadAgents = async (note) => {
+              const result = await agentsApi.status().catch(() => draft.agents.result);
+              draft.agents = { state: 'loaded', result, note };
+              refresh('ai');
+            };
+            for (const tool of draft.agents.result.tools || []) {
+              const info = describeAgentTool(tool);
+              const actions = [];
+              if (info.skillsAction && typeof agentsApi.installSkills === 'function') {
+                const sb = make('button', { type: 'button', className: 'primary', textContent: info.skillsAction });
+                sb.onclick = async () => {
+                  sb.disabled = true;
+                  try {
+                    const res = await agentsApi.installSkills(tool.id);
+                    await reloadAgents(`Installed ${res?.installed?.length || 0} NoteComplete skills for ${tool.label}.`);
+                  } catch (e) {
+                    await reloadAgents(e?.message || 'Could not install skills.');
+                  }
+                };
+                actions.push(sb);
+              }
+              if (info.action) {
+                const cb = make('button', { type: 'button', className: tool.connected ? '' : 'primary', textContent: info.action });
+                cb.onclick = async () => {
+                  cb.disabled = true;
+                  try {
+                    const res = await agentsApi.connect(tool.id);
+                    const sk = res?.skills?.length ? ` + ${res.skills.length} skills` : '';
+                    await reloadAgents(`Connected ${tool.label}${sk}. Restart it to load NoteComplete.`);
+                  } catch (e) {
+                    await reloadAgents(e?.message || 'Could not connect.');
+                  }
+                };
+                actions.push(cb);
+              }
+              connList.append(make('div', { className: `wizard-provider${tool.installed || tool.id === 'opencode' ? '' : ' unavailable'}` },
+                make('span', { className: 'wizard-provider-name', textContent: tool.label }),
+                make('span', { className: 'wizard-provider-tag', textContent: info.text }),
+                ...actions));
+            }
+            body.append(connList);
+            if (draft.agents.note) body.append(make('p', { className: 'wizard-hint', textContent: draft.agents.note }));
+          }
+        }
+        body.append(make('p', { className: 'wizard-hint', textContent: 'Connecting registers the NoteComplete MCP server and installs the bundled workflow skills (audio-synced notes, Markdown/Euro-Office prefabs, handwriting study).' }));
       },
     },
     {

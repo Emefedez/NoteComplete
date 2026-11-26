@@ -11,7 +11,7 @@ export const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
 // A prefab picture on a line of its own: ![alt](data:image/svg+xml…). The URI runs to the line's
 // last ")" (older notes have unescaped parentheses inside it), and the alt may hold "]" (older
 // glosses such as "[Taiwan pr.]").
-const PREFAB_ALT = '((?:[^\\]]|\\](?!\\(data:))*)';
+const PREFAB_ALT = '((?:[^\\]\\n]|\\](?!\\())*)';
 export const PREFAB_LINE = new RegExp(`^\\s*!\\[${PREFAB_ALT}\\]\\((data:image\\/svg\\+xml\\S*)\\)\\s*$`);
 // The same pictures anywhere in a text: the URI ends at a ")" followed by a space or the end.
 const prefabPattern = () => new RegExp(`!\\[${PREFAB_ALT}\\]\\((data:image\\/svg\\+xml\\S*?)\\)(?=\\s|$)`, 'g');
@@ -63,20 +63,25 @@ export async function insertPrefabInto(editor, choose, after = () => {}, place =
 }
 
 // Markdown for Euro-Office: each prefab picture (an SVG data URI, which its converter does not
-// draw) becomes a PNG data URI of the same figure, so the converted document shows it (as a
-// picture: it is edited again in NoteComplete). `rasterize(svgDataUri)` resolves to a PNG data
-// URI or null (that picture then stays as it was). The same figure is drawn once.
-export async function markdownForOffice(md, rasterize) {
+// draw) becomes a PNG data URI of the same figure, so the converted document shows it. The
+// prefab's spec is carried in the Markdown alt text as `notecomplete-prefab:<json>` so
+// Euro-Office keeps it in the image's description and right-click → Edit prefab… can reopen it.
+// `rasterize(svgDataUri)` resolves to a PNG data URI or null (that picture then stays as it was).
+// The same figure is drawn once.
+export async function markdownForOffice(md, rasterize, { embedSpec = false } = {}) {
   const text = String(md || '');
   const found = [...text.matchAll(prefabPattern())];
   if (!found.length) return text;
+  const { extractPrefabSpecFromDataUri } = embedSpec ? await import('./chinese/zh-menu.js') : {};
   const pngs = new Map();
   for (const m of found) if (!pngs.has(m[2])) pngs.set(m[2], await rasterize(m[2]).catch(() => null));
   let out = '', last = 0;
   for (const m of found) {
     const png = pngs.get(m[2]);
     if (!png) continue;
-    out += `${text.slice(last, m.index)}![${m[1]}](${png})`;
+    const spec = embedSpec ? extractPrefabSpecFromDataUri(m[2], m[1]) : null;
+    const alt = spec ? `notecomplete-prefab:${JSON.stringify(spec).replace(/[\[\]\n\r]/g, (c) => (c === '[' ? '\\u005b' : c === ']' ? '\\u005d' : ' '))}` : m[1];
+    out += `${text.slice(last, m.index)}![${alt}](${png})`;
     last = m.index + m[0].length;
   }
   return out + text.slice(last);

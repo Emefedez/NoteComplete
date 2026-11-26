@@ -28,7 +28,8 @@ Page images use librsvg (`rsvg-convert`), and imported PDFs need poppler (`pdfto
 |---|---|
 | `list_notes` | Notes in a folder with title, page count and size (read from the index, without loading the note). |
 | `note_outline` | Title, every page's size, PDF background, ink/object count and typed-text snippet, and the recordings. |
-| `page_text` | A page's typed text, PDF text and handwriting text (when written from Markdown or recognized in NoteComplete). |
+| `page_text` | A page's typed text, PDF text, handwriting text (when written from Markdown or recognized in NoteComplete), `audio_windows` (ink-to-audio timestamp bursts), and `needs_page_image`. |
+| `page_audio_timeline` | Correlates audio recordings with handwritten ink timestamps on a page (or across all timed pages), returning writing bursts (`start_s`, `end_s`, `MM:SS`) and whether `page_image` is needed for OCR-less handwriting. |
 | `page_image` | A PNG of the page as the reader draws it: PDF, handwriting, highlights, images and typed text. This is how the agent reads handwriting. |
 | `search_note` | Pages whose typed or PDF text contains every query word, ignoring case and accents. |
 | `extract_resource` | Lists or writes the note's embedded PDFs, recordings or cover image. |
