@@ -432,3 +432,38 @@ test('end texts: by each end, under the multiplicity, away from the middle label
   const d = makeConnector('dependency', a.id, b.id, { props: { toText: 'uses' } });
   assert.match(renderUml({ type: 'uml', version: 1, diagram: 'class', elements: [a, b], connectors: [d] }).svg, />uses</);
 });
+
+test('a line routed around boxes goes around the one in its way, with right angles, and is straight when clear', async () => {
+  const { routeAround } = await import('./uml.js');
+  const m = normalizeModel({ type: 'uml', version: 1, diagram: 'class', elements: [], connectors: [] });
+  const add = (b) => { const e = makeElement('class', [0, 0], {}, m); e.bounds = b; m.elements.push(e); return e; };
+  const a = add([0, 0, 100, 60]), b = add([400, 0, 100, 60]), wall = add([200, -20, 100, 100]);
+  const c = makeConnector('association', a.id, b.id, {}, m);
+  m.connectors.push(c);
+  const way = routeAround(m, c);
+  assert.ok(way.length >= 2);
+  // Every stretch level or upright, and none through the box in the way.
+  const pts = [[50, 30], ...way, [450, 30]];
+  const [wx, wy, ww, wh] = fitBounds(wall);
+  for (let i = 1; i < way.length; i++) {
+    const [p, q] = [way[i - 1], way[i]];
+    assert.ok(p[0] === q[0] || p[1] === q[1]);
+    const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    assert.ok(!(mid[0] > wx && mid[0] < wx + ww && mid[1] > wy && mid[1] < wy + wh));
+  }
+  assert.ok(pts.length > 2);
+  wall.bounds = [200, 300, 100, 100];
+  assert.deepEqual(routeAround(m, c), []);
+});
+
+test('a class tells its name from each attribute and operation line', async () => {
+  const { compartmentAt, compartmentRow } = await import('./uml.js');
+  const e = makeElement('class', [0, 0], { props: { attributes: [{ visibility: '-', name: 'a', type: 'int' }, { visibility: '-', name: 'b', type: 'int' }], operations: [{ visibility: '+', name: 'run', params: [], returns: 'void' }] } });
+  const [x, y, w] = fitBounds(e);
+  assert.equal(compartmentAt(e, [x + w / 2, y + 10]).part, 'name');
+  const second = compartmentRow(e, 'attributes', 1);
+  assert.deepEqual(compartmentAt(e, [x + w / 2, second[1] + second[3] / 2]), { part: 'attributes', list: 'attribute', index: 1 });
+  const op = compartmentRow(e, 'operations', 0);
+  assert.deepEqual(compartmentAt(e, [x + w / 2, op[1] + op[3] / 2]), { part: 'operations', list: 'operation', index: 0 });
+  assert.equal(compartmentAt(e, [x - 5, y + 10]), null);
+});

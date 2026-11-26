@@ -528,6 +528,45 @@ function compartmentLines(e, key) {
   return (e.props?.[key] || []).map((r) => ({ text: formatLine(list, r, { keywords: false }), underline: !!r.static, italic: !!r.abstract, style: cleanStyle(r.style) }));
 }
 
+// Where a class-like box (compartments) has its parts, as drawn, in its own unscaled frame:
+// { x, y, w, h, nameBottom, parts: [{ key, list, top, bottom, rows }] }; null for other shapes.
+function compartmentLayout(e) {
+  const def = ELEMENTS[e?.type];
+  if (def?.shape !== 'compartments') return null;
+  const b = fitBounds(e), k = textScale(e);
+  const [x, y] = b, w = b[2] / k, h = b[3] / k;
+  const heads = (def.keyword ? 1 : 0) + (e.props?.stereotypes?.length ? 1 : 0) + 1;
+  let cy = y + PAD + FONT - 2 + heads * LINE + PAD / 2 - LINE + 4;
+  const nameBottom = cy, parts = [];
+  for (const key of def.compartments || []) {
+    const rows = (e.props?.[key] || []).length, bottom = cy + Math.max(1, rows) * LINE + PAD;
+    parts.push({ key, list: { attributes: 'attribute', operations: 'operation', literals: 'literal' }[key], top: cy, bottom, rows });
+    cy = bottom;
+  }
+  return { x, y, w, h, k, nameBottom, parts };
+}
+// Line `index` of compartment `key` of `e` on the page: [x, y, w, h] (past the last line: where
+// a new one goes).
+export function compartmentRow(e, key, index) {
+  const L = compartmentLayout(e), part = L?.parts.find((p) => p.key === key);
+  if (!part) return null;
+  const { x, y, w, k } = L, i = Math.max(0, Math.min(part.rows, index));
+  return [x + 2 * k, y + (part.top + LINE * i + 2 - y) * k, (w - 4) * k, (LINE + 2) * k];
+}
+// The part of a class-like box at page point `pt`: { part: 'name' } on its name (and keyword,
+// stereotypes), or { part: 'attributes' | 'operations' | 'literals', list, index (the line;
+// past the last: under it) }. null when `e` has no compartments or `pt` is outside it.
+export function compartmentAt(e, pt) {
+  const L = compartmentLayout(e);
+  if (!L) return null;
+  const { x, y, w, h, k } = L;
+  const lx = x + (pt[0] - x) / k, ly = y + (pt[1] - y) / k;
+  if (lx < x || lx > x + w || ly < y || ly > y + h) return null;
+  if (ly < L.nameBottom || !L.parts.length) return { part: 'name' };
+  const part = L.parts.find((p, i) => ly < p.bottom || i === L.parts.length - 1);
+  return { part: part.key, list: part.list, index: Math.max(0, Math.min(part.rows, Math.floor((ly - part.top - 2) / LINE))) };
+}
+
 // The size an element needs for what it shows (it never draws smaller than its bounds).
 // An element's text size (props.textScale): what it shows is drawn that much larger (or
 // smaller) inside the same box on the page.
@@ -861,6 +900,107 @@ export function connectorPath(model, c, fitted = null) {
     return [[p[0] + ox, p[1] + oy], [q[0] + ox, q[1] + oy]];
   }
   return [clip(A, a, first), ...way, clip(B, b, last)];
+}
+
+// Right-angled bends for connector `c` that go around the other boxes (not the containers
+// that hold things) and cross as few other lines as they can: a shortest path with few turns
+// on the grid of the boxes' edges. Leaves each end straight out of the middle of a side.
+// Returns the waypoints ([] when a straight line is clear), or null when it cannot route.
+export function routeAround(model, c) {
+  if (CONNECTORS[c.type]?.toConnector || CONNECTORS[c.type]?.message) return null;
+  const A = model.elements.find((e) => e.id === c.from), B = model.elements.find((e) => e.id === c.to);
+  if (!A || !B || A === B) return null;
+  const fitted = new Map(model.elements.map((e) => [e.id, fitBounds(e)]));
+  const M = 16, a = fitted.get(A.id), b = fitted.get(B.id);
+  // A box sits in the way when it is not a container (lines cross those to reach what is in them).
+  const boxes = model.elements.filter((e) => !ELEMENTS[e.type]?.container).map((e) => { const [x, y, w, h] = fitted.get(e.id); return [x - M, y - M, x + w + M, y + h + M]; });
+  const ports = (r) => { const [x, y, w, h] = r, cx = x + w / 2, cy = y + h / 2; return [[x - M, cy, 1], [x + w + M, cy, 0], [cx, y - M, 3], [cx, y + h + M, 2]]; };
+  // Directions: 0 +x, 1 -x, 2 +y, 3 -y; each port with the way out of its side. A start port
+  // is left that way, an end port entered the opposite way.
+  const from = ports(a), to = ports(b).map(([x, y, out]) => [x, y, out ^ 1]);
+  const lines = [];
+  for (const q of model.connectors) {
+    if (q.id === c.id) continue;
+    const pts = connectorPath(model, q, fitted);
+    if (pts) for (let i = 1; i < pts.length; i++) lines.push([pts[i - 1], pts[i]]);
+  }
+  const uniq = (vals) => [...new Set(vals.map((v) => Math.round(v)))].sort((p, q) => p - q);
+  const withMids = (vals) => { const out = [...vals]; for (let i = 1; i < vals.length; i++) if (vals[i] - vals[i - 1] > 2 * M) out.push((vals[i] + vals[i - 1]) / 2); return uniq(out); };
+  let xs = uniq([...boxes.flatMap((r) => [r[0], r[2]]), ...from.map((p) => p[0]), ...to.map((p) => p[0])]);
+  let ys = uniq([...boxes.flatMap((r) => [r[1], r[3]]), ...from.map((p) => p[1]), ...to.map((p) => p[1])]);
+  if (xs.length * ys.length < 20000) { xs = withMids(xs); ys = withMids(ys); }
+  const W = xs.length, H = ys.length;
+  if (W * H > 90000) return null;
+  const inside = (x, y) => boxes.some((r) => x > r[0] && x < r[2] && y > r[1] && y < r[3]);
+  const blocked = new Uint8Array(W * H);
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) blocked[j * W + i] = inside(xs[i], ys[j]) ? 1 : 0;
+  const crossings = (p, q) => {
+    let n = 0;
+    const level = p[1] === q[1];
+    for (const [s, t] of lines) {
+      if (level) {
+        const lo = Math.min(p[0], q[0]), hi = Math.max(p[0], q[0]), y = p[1];
+        if ((s[1] - y) * (t[1] - y) >= 0 || s[1] === t[1]) continue;
+        const x = s[0] + ((y - s[1]) * (t[0] - s[0])) / (t[1] - s[1]);
+        if (x > lo && x < hi) n++;
+      } else {
+        const lo = Math.min(p[1], q[1]), hi = Math.max(p[1], q[1]), x = p[0];
+        if ((s[0] - x) * (t[0] - x) >= 0 || s[0] === t[0]) continue;
+        const y = s[1] + ((x - s[0]) * (t[1] - s[1])) / (t[0] - s[0]);
+        if (y > lo && y < hi) n++;
+      }
+    }
+    return n;
+  };
+  const idx = (x, y) => { const i = xs.indexOf(Math.round(x)), j = ys.indexOf(Math.round(y)); return i < 0 || j < 0 ? -1 : j * W + i; };
+  const goal = new Map(to.map(([x, y, d]) => [idx(x, y), d]));
+  const BEND = 40, CROSS = 160;
+  // A* over (node, direction), with a binary heap.
+  const cost = new Float64Array(W * H * 4).fill(Infinity), back = new Int32Array(W * H * 4).fill(-1);
+  const heap = [];
+  const push = (f, s) => { heap.push([f, s]); let i = heap.length - 1; while (i) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+  const tx = b[0] + b[2] / 2, ty = b[1] + b[3] / 2;
+  const h = (n) => Math.abs(xs[n % W] - tx) + Math.abs(ys[Math.floor(n / W)] - ty);
+  for (const [x, y, d] of from) { const n = idx(x, y); if (n < 0 || blocked[n]) continue; cost[n * 4 + d] = 0; push(h(n), n * 4 + d); }
+  const STEP = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let end = -1;
+  while (heap.length) {
+    const [f, s] = pop();
+    const n = s >> 2, d = s & 3, g = cost[s];
+    if (f - h(n) > g + 1e-6) continue;
+    if (goal.get(n) === d) { end = s; break; }
+    const i = n % W, j = Math.floor(n / W);
+    for (let nd = 0; nd < 4; nd++) {
+      if (nd === (d ^ 1)) continue;
+      const ni = i + STEP[nd][0], nj = j + STEP[nd][1];
+      if (ni < 0 || nj < 0 || ni >= W || nj >= H) continue;
+      const m = nj * W + ni;
+      if (blocked[m] || inside((xs[i] + xs[ni]) / 2, (ys[j] + ys[nj]) / 2)) continue;
+      const p = [xs[i], ys[j]], q = [xs[ni], ys[nj]];
+      const ng = g + Math.abs(q[0] - p[0]) + Math.abs(q[1] - p[1]) + (nd === d ? 0 : BEND) + CROSS * crossings(p, q);
+      const t = m * 4 + nd;
+      if (ng < cost[t]) { cost[t] = ng; back[t] = s; push(ng + h(m), t); }
+    }
+  }
+  if (end < 0) return null;
+  const path = [];
+  for (let s = end; s >= 0; s = back[s]) path.unshift([xs[(s >> 2) % W], ys[Math.floor((s >> 2) / W)]]);
+  // Only the corners (and the two ports, so each end leaves its side square).
+  const corners = (pts) => pts.filter((p, k) => k === 0 || k === pts.length - 1 || !((pts[k - 1][0] === p[0] && p[0] === pts[k + 1][0]) || (pts[k - 1][1] === p[1] && p[1] === pts[k + 1][1])));
+  let way = corners(path);
+  // A step of a few units (two boxes' edges nearly in line) is not worth a jog: the run after
+  // it moves over to the line before it.
+  for (let k = 0; k + 2 < way.length; k++) {
+    const [p, q, r] = way.slice(k, k + 3), ax = p[0] === q[0] ? 1 : 0;
+    if (Math.abs(q[ax] - p[ax]) >= 4 || k + 2 === way.length - 1) continue;
+    q[ax] = p[ax]; r[ax] = p[ax];
+    way = corners(way.filter((_, i) => i !== k + 1));
+  }
+  // A straight run from side to side needs no bends at all.
+  const ca = [Math.round(a[0] + a[2] / 2), Math.round(a[1] + a[3] / 2)];
+  if (way.length === 2 && ((way[0][1] === way[1][1] && way[0][1] === ca[1] && ca[1] === Math.round(ty)) || (way[0][0] === way[1][0] && way[0][0] === ca[0] && ca[0] === Math.round(tx)))) return [];
+  return way.map(([x, y]) => [Math.round(x), Math.round(y)]);
 }
 
 // The whole diagram as SVG text, with its size: { svg, width, height, box: [x, y, w, h] }.

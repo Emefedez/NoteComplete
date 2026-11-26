@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.2
+
+- **More themes.** Dracula, VS Code Dark+, One Dark Pro, Nord, Tokyo Night, VS Code Light+ and Solarized Light, the themes of R Commander Studio, join Light, Dark and Follow the system. Pick one in the Setup wizard's Look step or in **View ▸ More themes…**; each card shows the theme in its own colours, and the change shows at once, code blocks included.
+
 ## 2.0.1
 
 - **Open in Euro-Office from the Markdown editor works.** The button did nothing for Markdown files, because the file's name was read without its `.md`. It also works for a new Markdown note that was never saved (it goes as *Untitled.md*), and it no longer asks to discard unsaved edits, since they go along to Euro-Office. A message says it is opening, as Euro-Office can take a while to start.
