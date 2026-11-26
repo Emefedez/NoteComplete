@@ -214,14 +214,14 @@ export function createModelExplorer(panelEl, { onJump = null, onRename = null, o
     const count = element.occurrences.length;
     const toggleBtn = el('button', {
       type: 'button',
-      className: `me-el-row${isOpen ? ' open' : ''}`,
+      className: `me-el-row marquee-host${isOpen ? ' open' : ''}`,
       role: 'treeitem',
       ariaExpanded: String(isOpen),
       title: `${element.name} — appears in ${count} ${count === 1 ? 'place' : 'places'}. Click to expand, right-click for actions.`,
     },
       el('span', { className: 'me-caret', textContent: isOpen ? '▾' : '▸' }),
       kindGlyph(element.group),
-      el('span', { className: 'me-el-name', textContent: element.name }),
+      el('span', { className: 'me-el-name marquee', textContent: element.name }),
       el('span', { className: `me-badge${count > 1 ? ' shared' : ''}`, textContent: String(count) }),
     );
     toggleBtn.dataset.modelId = element.modelId;
@@ -251,11 +251,11 @@ export function createModelExplorer(panelEl, { onJump = null, onRename = null, o
         ...element.occurrences.map((occ) => {
           const btn = el('button', {
             type: 'button',
-            className: 'me-occ-item',
+            className: 'me-occ-item marquee-host',
             title: `Jump to ${formatOccurrenceLabel(occ)}`,
           },
             kindGlyph(occ.module === 'textual-analysis' ? 'textual-analysis' : occ.diagramKind === 'useCase' ? 'usecase' : occ.diagramKind),
-            el('span', { className: 'me-occ-label', textContent: formatOccurrenceLabel(occ) }),
+            el('span', { className: 'me-occ-label marquee', textContent: formatOccurrenceLabel(occ) }),
             occ.role === 'lifeline' ? el('small', { className: 'me-occ-tag', textContent: 'lifeline' }) : null,
             occ.role === 'member' ? el('small', { className: 'me-occ-tag', textContent: occ.list === 'operations' ? 'op' : 'attr' }) : null,
           );
@@ -323,11 +323,11 @@ export function createModelExplorer(panelEl, { onJump = null, onRename = null, o
         const label = d.module === 'textual-analysis' ? 'Textual Analysis' : (DIAGRAMS[d.kind]?.label || 'UML');
         const btn = el('button', {
           type: 'button',
-          className: 'me-diag-row',
+          className: 'me-diag-row marquee-host',
           title: `${d.name} (${label}, p. ${d.pageIndex + 1})`,
         },
           kindGlyph(d.module === 'textual-analysis' ? 'textual-analysis' : d.kind === 'useCase' ? 'usecase' : d.kind),
-          el('span', { className: 'me-el-name', textContent: d.name }),
+          el('span', { className: 'me-el-name marquee', textContent: d.name }),
           el('small', { className: 'me-diag-page', textContent: `p. ${d.pageIndex + 1}` }),
         );
         btn.onclick = () => onJump?.({
