@@ -20,6 +20,8 @@ const HTML_EXT = /\.html?$/i;
 const ARCHIVE_EXT = /\.(zip|tar|tgz|tar\.gz|gz|7z|rar)$/i;
 
 const GLYPHS = {
+  // Handwritten ink (Rnote notes): a pen line over ruled lines
+  ink: (accent) => `<g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M112 70h96M112 92h96M112 114h96M112 136h64" stroke="#e2e8f0" stroke-width="3"/><path d="M116 116c10-26 20-30 24-14s6 22 14 4 14-30 22-10 8 18 20 2" stroke="${accent}" stroke-width="5"/></g>`,
   // Headphones + sound waves
   audio: (accent) => `<g fill="none" stroke="${accent}" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M122 108v-12a38 38 0 0 1 76 0v12"/>
@@ -96,9 +98,17 @@ function describeCover(name) {
   return null;
 }
 
+// A generic cover for a handwritten notebook with no picture of its own yet (Rnote).
+export function inkNoteCoverSvg(pill = 'RNOTE', sub = 'Rnote note') {
+  return coverSvg({ glyph: 'ink', bg: '#fdf2f8', card: '#ffffff', stroke: '#fbcfe8', accent: '#db2777', pill, sub });
+}
+
 export function fileCoverSvg(name) {
   const spec = describeCover(name);
-  if (!spec) return null;
+  return spec ? coverSvg(spec) : null;
+}
+
+function coverSvg(spec) {
   const pillWidth = Math.max(66, spec.pill.length * 11 + 26);
   const pillX = (320 - pillWidth) / 2;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" ${ICON_COVER} viewBox="0 0 320 240" width="320" height="240">`

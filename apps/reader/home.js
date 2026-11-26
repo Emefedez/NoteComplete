@@ -8,7 +8,7 @@ import { noteFacts, matches, SIZES, PERIODS, SORTS, TYPES, compareNotes } from '
 import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
 import { isTextName, isOfficeName, isMediaName, isImageName } from './text-types.js';
-import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
+import { fileCoverSvg, hasStaticFileCover, inkNoteCoverSvg } from './file-covers.js';
 import { localMember, webMember, starButton, folderLevel, formatChip } from './groups.js';
 import { hideDuplicates, setHideDuplicates } from './duplicate-copies.js';
 import { duplicatesDialog } from './duplicates.js';
@@ -1455,6 +1455,13 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
         const url = fileCoverSvg(name) || fileCoverSvg('page.html');
         if (url) await library.saveCover(key, url);
         return;
+      }
+      // Rnote notes have no picture of their own: their ink drawn small (rnote-cover.js), or a
+      // generic cover; the first page replaces either once the note is open.
+      if (/\.rnote$/i.test(name)) {
+        const { rnoteCover } = await import('./rnote-cover.js');
+        const url = await rnoteCover(file).catch(() => null) || inkNoteCoverSvg();
+        return void await library.saveCover(key, markNotebookCover(url));
       }
       // Goodnotes and Notability notebooks (also zipped): their own picture, right away; the
       // first page replaces it once the notebook is open (app.js, ensureDocumentCover).
