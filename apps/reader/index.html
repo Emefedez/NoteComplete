@@ -199,7 +199,7 @@
           <div id="updateItems" class="menu-group" hidden>
             <hr />
             <button id="updateCheck" data-icon="restart">Check for updates…</button>
-            <button id="branchOpen" data-icon="restart" data-palette="Help: Update from a branch (beta)…" title="Build a branch of NoteComplete on this computer and install it, to try changes before they are released">Update from a branch (beta)…</button>
+            <button id="branchOpen" data-icon="restart" data-palette="Help: Check for updates (branch)…" title="Build a branch of NoteComplete on this computer and install it, to try changes before they are released">Check for updates (branch)…</button>
             <button id="updateOnOpen" data-icon="clock" role="menuitemcheckbox" aria-checked="true" title="Look for a new version when NoteComplete opens (at most every 6 hours); it always asks before installing">Check for updates on open</button>
             <p id="updateVersion" class="menu-note muted"></p>
           </div>
@@ -1265,7 +1265,7 @@
 </dialog>
 
 <dialog id="branchDialog" class="ocr-dialog lag-log-dialog branch-dialog" aria-labelledby="branchTitle">
-  <h2 id="branchTitle">Update from a branch (beta)</h2>
+  <h2 id="branchTitle">Check for updates (branch)</h2>
   <p class="muted">Builds NoteComplete from one branch of the GitHub repository on this computer and installs it instead of this copy, to try changes before they are released. This copy is kept beside it as <code>NoteComplete.AppImage.previous</code>, and nothing is replaced unless the whole build succeeds. A first build takes a while (Rust, WebAssembly and Electron); NoteComplete stays usable meanwhile.</p>
   <p id="branchRunning" class="muted"></p>
   <label class="ocr-languages">Branch<input id="branchName" type="text" list="branchList" spellcheck="false" autocomplete="off" placeholder="main" /></label>

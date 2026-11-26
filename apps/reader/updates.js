@@ -33,7 +33,7 @@ export function updateNotice({ bridge = globalThis.notecompleteUpdates, status }
     offer = { building: true };
     delete $('updateGo').dataset.restart;
     $('updateText').textContent = text;
-    $('updateChip').title = 'A branch build is running (Help → Update from a branch…)';
+    $('updateChip').title = 'A branch build is running (Help → Check for updates (branch)…)';
     buttons('Details', true, false);
     $('updateChip').hidden = false;
   }, hide });
