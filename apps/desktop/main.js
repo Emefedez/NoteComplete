@@ -28,6 +28,7 @@ import { appLog } from './app-log.js';
 import { diagramRenderer } from './diagrams.js';
 import { createRBridge } from './r-bridge.js';
 import { createOfficeBridge } from './office-bridge.js';
+import { systemOpenWith } from './system-open-with.js';
 import { pngClipboard, processRunner } from './png-clipboard.js';
 import { spawn } from 'node:child_process';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
@@ -598,10 +599,18 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('files:read-recent', guarded((_event, file) => files.readRecent(file)));
   ipcMain.handle('files:open-external-path', guarded(async (_event, file) => {
-    await files.assertOpened(file);
+    await files.assertOpened(file, { any: true });
     const err = await shell.openPath(file);
     if (err) throw Error(err);
     return true;
+  }));
+  // A file NoteComplete does not open: the system's "Open with" chooser, else its default app.
+  ipcMain.handle('files:open-with-system', guarded(async (_event, file) => {
+    await files.assertOpened(file, { any: true });
+    if (await systemOpenWith(file)) return 'chooser';
+    const err = await shell.openPath(file);
+    if (err) throw Error(err);
+    return 'default';
   }));
   ipcMain.handle('files:show-in-folder', guarded(async (_event, file) => {
     const resolved = await files.assertRevealable(file);
@@ -618,7 +627,7 @@ app.whenReady().then(async () => {
     await files.rememberFolder(folder);
     return { folder, name: path.basename(folder), files: await files.listFolder(folder) };
   }));
-  ipcMain.handle('files:list-folder', guarded((_event, folder) => files.listFolder(folder)));
+  ipcMain.handle('files:list-folder', guarded((_event, folder, options) => files.listFolder(folder, { all: options?.all === true })));
   ipcMain.handle('files:read-sibling', guarded((_event, file, relative) => files.readSibling(file, relative)));
   ipcMain.handle('files:save-copy', guarded((_event, file, options) => files.saveCopy(file, options)));
   ipcMain.handle('files:render-html-pdf', guarded((_event, html) => renderHtmlToPdfWithTapes({ BrowserWindow, html })));

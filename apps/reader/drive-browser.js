@@ -3,6 +3,7 @@ import { loadGoogleIdentity, requestDriveAccess } from './drive-auth.js';
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
 import { attachOpenWithMenu } from './open-with-ui.js';
+import { hideDuplicates, copyKey, copyGroups, copyCount, chooseCopy } from './duplicate-copies.js';
 import { onlyEuroOffice } from './open-with.js';
 import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
@@ -10,6 +11,7 @@ import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queu
 // hiding cancels listings, downloads, previews and a pending sign-in.
 export function driveBrowser({ open, client = new DriveClient(), identityLoader = loadGoogleIdentity, authorize = requestDriveAccess, thumbs = null, library = null, onCards = () => {}, queue = null, exportRequest = null }) {
   const $ = id => document.getElementById(id);
+  const copies = copyGroups();
   const previews = thumbs || driveThumbnails(client, { library });
   const configKey = 'notecomplete-drive-config-v1', folderKey = 'notecomplete-drive-folder-v1', sessionKey = 'notecomplete-drive-session-v1';
   const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
@@ -125,6 +127,7 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
   const selectedFiles = new Set();
   function resetList() {
     nextPage = '';
+    copies.clear();
     cards.clear();
     pending.clear();
     currentFiles = [];
@@ -236,11 +239,22 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
       settle();
     });
   }
+  // Same-named items share one card when "One of each" is on (duplicate-copies.js).
+  const copyWhere = '';
+  globalThis.addEventListener?.('notecomplete:duplicates', () => {
+    if (!currentFiles.length) return;
+    const files = [...currentFiles], more = nextPage;
+    resetList(); nextPage = more;
+    addFiles(files); controls();
+  });
   function addFiles(files) {
     currentFiles.push(...files);
     const fragment = document.createDocumentFragment();
+    const oneOfEach = hideDuplicates();
     for (const file of files) {
       const isFolder = file.mimeType === FOLDER_MIME;
+      const group = oneOfEach ? copies.add(copyKey(file.name, isFolder), file) : { copies: [file] };
+      if (!group) continue;
       const item = document.createElement('li'), button = document.createElement('button');
       button.type = 'button';
       button.className = isFolder ? 'folder-chip' : 'note-card';
@@ -286,8 +300,9 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
           updateQueueControls();
           return;
         }
-        return isFolder ? enter(file) : choose(file);
+        return chooseCopy(group, button, (picked) => (isFolder ? enter(picked) : choose(picked)), { name: file.name, where: copyWhere });
       };
+      if (oneOfEach) copyCount(group, entry);
       item.append(button);
       if (!isFolder && allowed) attachOpenWithMenu(button, file.name, () => choose(file));
       if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: (kind) => { Object.assign(exportRequest, { kind, key: `drive:${file.id}` }); choose(file); } });

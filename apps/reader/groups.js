@@ -22,9 +22,27 @@ export function webMember(url, name) {
 // Folder groups list the folder's files as they are now, then the documents added by hand.
 export function mergeMembers(listed = [], added = []) {
   const seen = new Set(), out = [];
-  for (const m of [...listed.map((f) => ({ ...localMember(f.path, f.name), inFolder: true })), ...added])
+  for (const m of [...listed.map((f) => ({ ...localMember(f.path, f.name), inFolder: true, ...(f.other ? { other: true } : {}), ...(f.modified ? { modified: f.modified } : {}), ...(f.size ? { size: f.size } : {}) })), ...added])
     if (m?.key && !seen.has(m.key)) { seen.add(m.key); out.push(m); }
   return out;
+}
+
+// One level of a folder's members: the files directly at `sub` ('' = the top; 'a/b') and the
+// subfolders below it with how many files each holds. Members added by hand sit at the top.
+export function folderLevel(members = [], sub = '') {
+  const prefix = sub ? sub + '/' : '';
+  const files = [], dirs = new Map();
+  for (const m of members) {
+    const rel = m.inFolder ? String(m.name || '') : '';
+    if (!m.inFolder) { if (!sub) files.push(m); continue; }
+    if (!rel.startsWith(prefix)) continue;
+    const rest = rel.slice(prefix.length), cut = rest.indexOf('/');
+    if (cut < 0) { files.push(m); continue; }
+    const name = rest.slice(0, cut), dir = dirs.get(name) || { name, path: prefix + name, count: 0 };
+    dir.count++;
+    dirs.set(name, dir);
+  }
+  return { files, dirs: [...dirs.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })) };
 }
 
 // The chip before a document's name: its real format, short.
@@ -64,8 +82,9 @@ export function groupStore({ store, bridge = globalThis.notecompleteFiles }) {
     all,
     save,
     // Starred documents (group.starred, keys) come first, each part in its own order.
-    async members(group) {
-      const listed = group.folder && bridge?.listFolder ? await bridge.listFolder(group.folder).catch(() => []) : [];
+    // `all`: also the files NoteComplete does not open (Home's folder view lists them too).
+    async members(group, { all = false } = {}) {
+      const listed = group.folder && bridge?.listFolder ? await bridge.listFolder(group.folder, all ? { all } : undefined).catch(() => []) : [];
       return starredFirst(mergeMembers(listed, group.members), group.starred);
     },
     async star(group, key, on) {

@@ -108,12 +108,13 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     await writeFile(settingsFile, JSON.stringify(settings), { mode: 0o600 });
   };
   // A file the user chose in the open dialog, or one inside an opened folder (including subfolders).
-  const opened = async (file) => {
+  // `any`: any file type inside an opened folder (handed to the system's app, never read here).
+  const opened = async (file, { any = false } = {}) => {
     const s = await load();
     if (typeof file === 'string' && s.recent.includes(file)) return;
     let inFolder = false;
     const base = typeof file === 'string' ? path.basename(file) : '';
-    if (typeof file === 'string' && path.resolve(file) === file && base && !base.startsWith('.') && (NOTE.test(base) || await isGoodnotesFolder(file))) {
+    if (typeof file === 'string' && path.resolve(file) === file && base && !base.startsWith('.') && (any || NOTE.test(base) || await isGoodnotesFolder(file))) {
       const parent = s.folders.find(f => inside(f, file));
       if (parent) {
         try {
@@ -125,7 +126,7 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
     if (!inFolder) throw Error('That file was not opened from this device.');
   };
   return {
-    async assertOpened(file) { await opened(file); },
+    async assertOpened(file, options) { await opened(file, { any: options?.any === true }); },
     // A file that may be revealed in the system file manager: either opened from disk/a folder,
     // or a downloaded/imported copy stored inside NoteComplete's own downloads folder.
     async assertRevealable(file) {
@@ -240,7 +241,9 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
       s.folders = [folder, ...s.folders.filter(p => p !== folder)].slice(0, FOLDERS);
       await save();
     },
-    async listFolder(folder) {
+    // `all`: every file, not only the formats NoteComplete opens; those others come back with
+    // `other: true` (Home lists them and hands them to the system's app).
+    async listFolder(folder, { all = false } = {}) {
       const s = await load();
       if (typeof folder !== 'string' || !s.folders.includes(folder)) throw Error('That folder was not opened from this device.');
       const realRoot = await realpath(folder).catch(() => folder);
@@ -250,11 +253,12 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
         files.push({ path: full, name: path.relative(folder, full).split(path.sep).join('/').replace(/[^/]*$/, () => notebookName(full)), size: info.size, modified: info.mtimeMs, notebook: true });
       };
       if (await isGoodnotesFolder(folder)) { await notebook(folder); return files; }
+      const cap = all ? 3000 : 500;
       const walk = async (dir, depth) => {
-        if (depth > 6 || files.length >= 500) return;
+        if (depth > 8 || files.length >= cap) return;
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
         for (const d of entries) {
-          if (files.length >= 500 || d.name.startsWith('.')) continue;
+          if (files.length >= cap || d.name.startsWith('.')) continue;
           const full = path.join(dir, d.name);
           if (d.isDirectory()) {
             if (d.name.endsWith('_files')) continue;
@@ -262,14 +266,18 @@ export function libraryFiles({ settingsFile, defaultFolder, trash = async () => 
             await walk(full, depth + 1);
             continue;
           }
-          if (!d.isFile() || !NOTE.test(d.name)) continue;
+          if (!d.isFile()) continue;
+          const note = NOTE.test(d.name);
+          // Editor backups and lock files are not documents.
+          if (!note && (!all || /~$|\.(lck|lock|swp|tmp|part|crdownload)$|\.bak(_\w+)?$/i.test(d.name))) continue;
           try {
             const realFile = await realpath(full);
             if (!inside(realRoot, realFile)) continue;
-            if (!d.name.includes('.') && !await textStart(full)) continue;
+            const text = !note || d.name.includes('.') || await textStart(full);
+            if (!text && !all) continue;
             const info = await stat(full);
             const rel = path.relative(folder, full).split(path.sep).join('/');
-            files.push({ path: full, name: rel, size: info.size, modified: info.mtimeMs });
+            files.push({ path: full, name: rel, size: info.size, modified: info.mtimeMs, ...(note && text ? {} : { other: true }) });
           } catch { /* Gone meanwhile. */ }
         }
       };

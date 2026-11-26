@@ -113,6 +113,22 @@ noteful convert lecture.md --export svg -o pages/lecture.svg
 
 `--export pdf` writes vector A4 pages (rsvg-convert); `png` and `svg` write one file per page (`name-1.png`, …).
 
+## Google Drive tools
+
+The server can work on your Google Drive directly: find the notes Noteful backs up, tidy folders, and merge the duplicate folders and same-name copies that backups leave behind. It signs in on its own, with the same Google client the desktop app uses (`google-desktop-client.json` in NoteComplete's settings folder, saved when you first connect Drive in the app; or set `NOTECOMPLETE_GOOGLE_CLIENT` to a Desktop-app OAuth JSON). Sign in once with the `drive_connect` tool, or run `noteful drive-login` in a terminal; only the refresh token is kept, in `mcp-drive-token.json` (readable only by you) in the same settings folder. Tokens and secrets go to `curl` on its standard input, never on its command line.
+
+Nothing is deleted: removing means Drive's trash, which you can undo for 30 days. Merging is a dry run unless the agent passes `apply: true`, so it can show you the plan first.
+
+| Tool | What it does |
+|---|---|
+| `drive_connect` / `drive_status` | Sign in (opens Google's page in the browser), or show the account and storage. |
+| `drive_search` | Files and folders by exact name, part of a name, folders only, inside a folder, or a raw Drive query, with paths. |
+| `drive_list` / `drive_info` | A folder's contents (optionally recursive, with paths), or one item's metadata and path. |
+| `drive_download` / `drive_upload` | A file to the NoteComplete folder (or a path), or a local file to a folder, or as new content of an existing file (`replace`, keeping its id and history). |
+| `drive_create_folder` / `drive_move` / `drive_trash` | Make a folder, move or rename an item, trash or restore items. |
+| `drive_duplicates` | Identical files (same MD5) anywhere under a folder, and paths holding different versions under the same name. |
+| `drive_merge_folders` | Moves everything in `sources` into `target`. Same-named subfolders merge recursively, identical files keep one copy (one already in the target, else the newest), same-name files with different content are all kept and reported, and emptied sources go to the trash. |
+
 ## Resources and prompts
 
 - `noteful://style`: the style guide and the Markdown dialect.

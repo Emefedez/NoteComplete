@@ -11,6 +11,9 @@
 mod design_tools;
 #[path = "doc_prefabs.rs"]
 mod doc_prefabs;
+#[path = "drive_tools.rs"]
+mod drive_tools;
+pub(crate) use drive_tools::sign_in as drive_sign_in;
 #[path = "ink_tools.rs"]
 mod ink_tools;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -59,6 +62,7 @@ struct Server {
     // The last few opened notes, keyed by path and checked against size and mtime.
     notes: Vec<(PathBuf, u64, Option<SystemTime>, Editor)>,
     pdf_text: HashMap<(PathBuf, String), Vec<String>>,
+    drive: drive_tools::Drive,
 }
 
 fn library() -> PathBuf {
@@ -150,6 +154,7 @@ fn tools() -> Value {
     if let Value::Array(list) = &mut tools {
         list.extend(ink_tools::tools());
         list.extend(design_tools::tools());
+        list.extend(drive_tools::tools());
     }
     tools
 }
@@ -216,6 +221,7 @@ impl Server {
         if let Some(result) = self
             .call_ink(name, args)
             .or_else(|| self.call_design(name, args))
+            .or_else(|| self.call_drive(name, args))
         {
             return result;
         }

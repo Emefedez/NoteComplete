@@ -9,7 +9,8 @@ import { migrator } from './migrate.js';
 import { entryTitle, entrySourceLabel, plainTitle } from './library.js';
 import { isTextName, isOfficeName, isMediaName, isImageName } from './text-types.js';
 import { fileCoverSvg, hasStaticFileCover } from './file-covers.js';
-import { localMember, webMember, starButton } from './groups.js';
+import { localMember, webMember, starButton, folderLevel, formatChip } from './groups.js';
+import { hideDuplicates, setHideDuplicates } from './duplicate-copies.js';
 import { duplicatesDialog } from './duplicates.js';
 import { icon } from './icons.js';
 import { CLOUD_PROVIDERS, CLOUD_CONFIG_KEYS } from './cloud-collab.js';
@@ -102,17 +103,39 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
   // Identical copies kept before checksums existed are merged once per session.
   let merging = null;
   // Folders (groups.js): the folder open on Home shows its documents in place of Recent.
-  let shownFolder = null, lastFolder = null;
+  // A folder on disk is shown one level at a time: `subPath` ('' or 'ACI2/Examen1') is the
+  // level open, its subfolders are cards above its files.
+  let shownFolder = null, lastFolder = null, subPath = '', subDirs = [];
   async function folderEntries(group) {
-    const members = await groups.members(group);
-    return Promise.all(members.map(async m => ({ ...((await library.store.get('entries', m.key).catch(() => null)) || { ...m, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred })));
+    const members = await groups.members(group, { all: true });
+    const { files, dirs } = folderLevel(members, subPath);
+    subDirs = dirs;
+    return Promise.all(files.map(async m => ({ ...((!m.other && await library.store.get('entries', m.key).catch(() => null)) || { ...m, openedAt: 0, listed: true }), inFolder: m.inFolder, starred: !!m.starred, ...(m.other ? { other: true } : {}) })));
   }
   async function renderFolders() {
     if (!groups) return;
-    const list = shownFolder ? [] : await groups.folders().catch(() => []);
-    $('foldersSection').hidden = Boolean(shownFolder);
-    $('foldersEmpty').hidden = list.length > 0;
-    $('folderList').replaceChildren(...list.map(folderCard));
+    const inside = Boolean(shownFolder);
+    const list = inside ? [] : await groups.folders().catch(() => []);
+    $('foldersTitle').textContent = inside ? 'Folders' : 'Folders';
+    $('folderNew').hidden = inside;
+    $('foldersSection').hidden = inside && !subDirs.length;
+    $('foldersEmpty').hidden = inside || list.length > 0;
+    $('folderList').replaceChildren(...(inside ? subDirs.map(subFolderCard) : list.map(folderCard)));
+  }
+  // A subfolder of the folder on disk shown on Home.
+  function subFolderCard(dir) {
+    const li = document.createElement('li'), button = document.createElement('button'), meta = document.createElement('span'), name = document.createElement('strong'), detail = document.createElement('span');
+    button.type = 'button';
+    button.className = 'folder-card';
+    name.textContent = dir.name;
+    name.title = dir.path;
+    detail.textContent = `${dir.count} file${dir.count === 1 ? '' : 's'}`;
+    meta.className = 'folder-meta';
+    meta.append(name, detail);
+    button.append(icon('folder'), meta);
+    button.onclick = () => { subPath = dir.path; renderRecent(); };
+    li.append(button);
+    return li;
   }
   function folderCard(group) {
     const li = document.createElement('li'), button = document.createElement('button'), meta = document.createElement('span'), name = document.createElement('strong'), detail = document.createElement('span');
@@ -149,12 +172,16 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
   function showFolder(group) {
     shownFolder = group;
     lastFolder = null;
+    subPath = ''; subDirs = [];
     groups.touch(group).catch(() => { /* Optional. */ });
     renderRecent();
   }
   function leaveFolder() {
     if (!shownFolder) return false;
+    // Inside a subfolder, Back goes up one level.
+    if (subPath) { subPath = subPath.includes('/') ? subPath.replace(/\/[^/]*$/, '') : ''; renderRecent(); return true; }
     lastFolder = shownFolder;
+    subDirs = [];
     shownFolder = null;
     renderRecent();
     return true;
@@ -252,6 +279,13 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
   async function openEntry(entry) {
     try {
       const now = current();
+      // A file NoteComplete does not open (Rnote, Xournal++, Krita…): the system's Open with chooser.
+      if (entry.other) {
+        const bridge = window.notecompleteFiles, base = entry.name.split('/').pop();
+        if (!bridge?.openWithSystem) throw Error(`NoteComplete cannot open ${base}.`);
+        const how = await bridge.openWithSystem(entry.path);
+        return status(how === 'chooser' ? `NoteComplete cannot open ${base}: choose an app for it.` : `${base} opened in its default app.`);
+      }
       if (entry.source === 'web') {
         await library.touch(entry.key);
         if (((now.entryKey && now.entryKey === entry.key) || (now.webUrl && now.webUrl === entry.url)) && now.show) return now.show();
@@ -287,7 +321,6 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
   }
   async function renderRecent() {
     merging ||= library.mergeDuplicates?.().then(n => { if (n) renderRecent(); }).catch((e) => console.warn('Merge duplicates:', e));
-    renderFolders();
     let entries = [];
     try {
       const read = shownFolder ? folderEntries(shownFolder) : library.recent();
@@ -298,9 +331,11 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
       console.warn('Recent could not be read', error);
       status(`Recent notes could not be read: ${error?.message || error}. Reopen the window to retry.`, true);
     }
-    $('recentTitle').textContent = shownFolder ? shownFolder.name : 'Recent';
+    renderFolders();
+    $('recentTitle').textContent = shownFolder ? [shownFolder.name, ...(subPath ? subPath.split('/') : [])].join(' / ') : 'Recent';
     $('folderBack').hidden = !shownFolder;
-    $('folderEmpty').hidden = !shownFolder || entries.length > 0;
+    $('folderBack').title = subPath ? 'Up one folder' : 'Back to all notes';
+    $('folderEmpty').hidden = !shownFolder || entries.length > 0 || subDirs.length > 0;
     $('recentSection').hidden = !shownFolder && !entries.length;
     const fragment = document.createDocumentFragment();
     for (const entry of entries) fragment.append(...recentCard(entry));
@@ -322,11 +357,12 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
       cover.alt = '';
       const meta = document.createElement('div'), name = document.createElement('strong'), detail = document.createElement('span');
       meta.className = 'note-meta';
-      name.textContent = entryTitle(entry);
+      // In a folder level the path is the heading already: the card shows the file's own name.
+      name.textContent = shownFolder && !entry.title ? entryTitle(entry).split('/').pop() : entryTitle(entry);
       name.title = entry.title ? `${entry.title}\nFile: ${entry.name}` : entry.name;
-      detail.textContent = `${entrySourceLabel(entry)} · ${entry.openedAt ? `opened ${ago(entry.openedAt)}` : 'not opened yet'}`;
+      detail.textContent = entry.other ? 'Can’t open here · choose an app' : `${entrySourceLabel(entry)} · ${entry.openedAt ? `opened ${ago(entry.openedAt)}` : 'not opened yet'}`;
       meta.append(name, detail);
-      const hit = entry.source === 'web' ? 'Web' : Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''))?.[1][0];
+      const hit = entry.source === 'web' ? 'Web' : entry.other ? formatChip(entry) : Object.entries(TYPES).find(([, [, re]]) => re.test(entry.name || ''))?.[1][0];
       if (hit) {
         const badge = document.createElement('span');
         badge.className = 'note-badge';
@@ -357,10 +393,12 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
           cover.removeAttribute?.('src');
           cover.classList.add('missing');
         };
-        const staticCover = hasStaticFileCover(entry.name || '') ? fileCoverSvg(entry.name || '') : null;
+        const staticCover = (entry.other || hasStaticFileCover(entry.name || '')) ? fileCoverSvg(entry.name || '') : null;
         if (staticCover) {
           cover.classList.remove('missing');
           cover.src = staticCover;
+        } else if (entry.other) {
+          cover.classList.add('missing');
         } else {
           library.cover(coverKey(entry)).then(async url => {
             // An old text cover (lines running off the card) is drawn again, wrapped.
@@ -677,6 +715,11 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
     });
     for (const t of TOGGLES) { const b = chip(t.label, !!filters[t.id], () => { filters[t.id] = !filters[t.id]; changed(); }); b.prepend(icon(t.icon)); nodes.push(b); }
     $('filterBar').replaceChildren(...nodes);
+    // One setting for every web provider (duplicate-copies.js): same-named Drive/Dropbox items share a card.
+    const oneOfEach = chip('One of each', hideDuplicates(), () => { setHideDuplicates(!hideDuplicates()); renderFilters(); });
+    oneOfEach.prepend(icon('copy'));
+    oneOfEach.title = 'Drive and Dropbox: show items with the same name once (×N); choosing one lists every copy';
+    $('filterBar').append(oneOfEach);
     for (const [i, t] of TOGGLES.entries()) nodes[nodes.length - TOGGLES.length + i].title = t.title;
     $('filtersClear').hidden = !isActive();
     syncSortButton();

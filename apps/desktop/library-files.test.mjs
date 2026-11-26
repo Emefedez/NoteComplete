@@ -66,6 +66,18 @@ test('a chosen folder lists its notes and opens them; other folders stay closed'
   assert.ok((await files.listFolder(folder)).some(f => f.name === 'Examenes_Anteriores/parcial.pdf'));
   assert.ok(!(await files.listFolder(folder)).some(f => f.name.includes('Tema 1_files')));
   assert.equal(new TextDecoder().decode(await files.readRecent(path.join(nestedDir, 'parcial.pdf'))), 'pdf');
+
+  // `all` lists every file: formats NoteComplete does not open come back as `other`, never readable,
+  // but they may go to the system's app; editor backups and locks stay out.
+  await put(path.join(nestedDir, 'Exams.rnote'), 'r');
+  for (const junk of ['Exams.rnote~', 'a.lck', 'b.bak_000f']) await put(path.join(nestedDir, junk), 'j');
+  const all = await files.listFolder(folder, { all: true });
+  assert.deepEqual(all.filter(f => f.other).map(f => f.name).sort(), ['Examenes_Anteriores/Exams.rnote', 'programa', 'tool.exe']);
+  assert.ok(!all.some(f => /~$|\.lck$|bak_/.test(f.name)));
+  assert.ok(!(await files.listFolder(folder)).some(f => f.name.endsWith('.rnote')));
+  await assert.rejects(files.readRecent(path.join(nestedDir, 'Exams.rnote')), /not opened/);
+  await files.assertOpened(path.join(nestedDir, 'Exams.rnote'), { any: true });
+  await assert.rejects(files.assertOpened(path.join(root, 'outside.md'), { any: true }), /not opened/);
 });
 
 test('an edited text file is saved only over a file that was opened, keeping its mode', async () => {

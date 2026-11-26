@@ -31,6 +31,7 @@
       "archive-download.js",
       "html-pdf.js",
       "library-files.js",
+      "system-open-with.js",
       "diagrams.js",
       "r-bridge.js",
       "office-bridge.js",

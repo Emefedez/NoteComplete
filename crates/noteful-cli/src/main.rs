@@ -9,9 +9,15 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args_os().skip(1);
     let cmd = args
         .next()
-        .ok_or("Usage: noteful inspect|verify|render|export|repair <file|->, noteful convert <notes.md> -o <out.noteful>, or noteful mcp")?;
+        .ok_or("Usage: noteful inspect|verify|render|export|repair <file|->, noteful convert <notes.md> -o <out.noteful>, noteful mcp, or noteful drive-login")?;
     if cmd == "mcp" {
         return mcp::serve();
+    }
+    if cmd == "drive-login" {
+        // Connects the MCP server's Drive tools (same as its drive_connect tool).
+        let done = mcp::drive_sign_in(true, &|line| println!("{line}"))?;
+        println!("{}", serde_json::to_string_pretty(&done)?);
+        return Ok(());
     }
     if cmd == "convert" {
         let rest: Vec<String> = args.map(|a| a.to_string_lossy().into_owned()).collect();

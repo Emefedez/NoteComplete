@@ -4,6 +4,7 @@ import { dropboxIdentity, redirectUri, validAppKey, webSignIn, refreshAccess } f
 import { driveThumbnails } from './drive-thumbs.js';
 import { addExportMenu, exportable } from './download-queue.js';
 import { attachOpenWithMenu } from './open-with-ui.js';
+import { hideDuplicates, copyKey, copyGroups, copyCount, chooseCopy } from './duplicate-copies.js';
 import { onlyEuroOffice } from './open-with.js';
 import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queueControls } from './queue-controls.js';
 
@@ -12,6 +13,7 @@ import { queueButton, markQueueDone, selectionCheck, updateQueueControls as queu
 // show()/hide() follow the home screen: hiding cancels listings, downloads, covers and sign-in.
 export function dropboxBrowser({ open, client = new DropboxClient(), identity = dropboxIdentity(), signIn = webSignIn, refresh = refreshAccess, thumbs = null, library = null, onCards = () => {}, queue = null, exportRequest = null }) {
   const $ = id => document.getElementById(id);
+  const copies = copyGroups();
   const previews = thumbs || driveThumbnails(client, { library });
   const configKey = 'notecomplete-dropbox-config-v1', folderKey = 'notecomplete-dropbox-folder-v1', sessionKey = 'notecomplete-dropbox-session-v1';
   const stored = key => { try { return JSON.parse(localStorage.getItem(key)) || null; } catch { return null; } };
@@ -112,7 +114,7 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
   const downloadable = () => currentFiles.filter(f => supportedDropboxFile(f) && f.capabilities?.canDownload !== false);
   const queueItem = f => ({ source: 'dropbox', id: `dropbox:${f.id}`, name: f.name, size: Number(f.size) || 0, doc: f, client });
   function resetList() {
-    nextPage = ''; cards.clear(); pending.clear(); currentFiles = []; selectedFiles.clear(); selectingQueue = false;
+    nextPage = ''; copies.clear(); cards.clear(); pending.clear(); currentFiles = []; selectedFiles.clear(); selectingQueue = false;
     updateQueueControls();
     $('dropboxList').replaceChildren();
   }
@@ -168,11 +170,22 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
       settle();
     });
   }
+  // Same-named items share one card when "One of each" is on (duplicate-copies.js).
+  const copyWhere = (f) => (f.pathDisplay || '').replace(/\/[^/]*$/, '') || '/';
+  globalThis.addEventListener?.('notecomplete:duplicates', () => {
+    if (!currentFiles.length) return;
+    const files = [...currentFiles], more = nextPage;
+    resetList(); nextPage = more;
+    addFiles(files); controls();
+  });
   function addFiles(files) {
     currentFiles.push(...files);
     const fragment = document.createDocumentFragment();
+    const oneOfEach = hideDuplicates();
     for (const file of files) {
       const isFolder = file.mimeType === FOLDER_MIME;
+      const group = oneOfEach ? copies.add(copyKey(file.name, isFolder), file) : { copies: [file] };
+      if (!group) continue;
       const item = document.createElement('li'), button = document.createElement('button');
       button.type = 'button';
       button.className = isFolder ? 'folder-chip' : 'note-card';
@@ -206,8 +219,9 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
           else { selectedFiles.add(file.id); button.classList?.add?.('is-selected'); }
           return updateQueueControls();
         }
-        return isFolder ? enter(file) : choose(file);
+        return chooseCopy(group, button, (picked) => (isFolder ? enter(picked) : choose(picked)), { name: file.name, where: copyWhere });
       };
+      if (oneOfEach) copyCount(group, entry);
       item.append(button);
       if (!isFolder && allowed) attachOpenWithMenu(button, file.name, () => choose(file));
       if (!isFolder && allowed && exportRequest && exportable(file.name)) addExportMenu(item, { label: file.name, pick: kind => { Object.assign(exportRequest, { kind, key: `dropbox:${file.id}` }); choose(file); } });

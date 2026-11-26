@@ -100,3 +100,22 @@ test('a document\'s chip says its real format, short', async () => {
   assert.equal(chip('data.parquet'), 'PARQU');
   assert.equal(formatChip({ source: 'web', name: 'x' }), 'Web');
 });
+
+test('a folder on disk is shown one level at a time, subfolders with their file counts', async () => {
+  const { folderLevel, mergeMembers } = await import('./groups.js');
+  const members = mergeMembers([
+    { path: '/u/s/Test.rnote', name: 'Test.rnote', other: true },
+    { path: '/u/s/ACI2/Tema 1.pdf', name: 'ACI2/Tema 1.pdf' },
+    { path: '/u/s/ACI2/Examen1/GG 01.pdf', name: 'ACI2/Examen1/GG 01.pdf' },
+    { path: '/u/s/ACI2/Examen2/SSD.pdf', name: 'ACI2/Examen2/SSD.pdf' },
+    { path: '/u/s/EST/Exams.rnote', name: 'EST/Exams.rnote', other: true },
+  ], [{ key: 'local:/x/hand.md', name: 'hand.md', source: 'local', path: '/x/hand.md' }]);
+  const top = folderLevel(members);
+  assert.deepEqual(top.files.map(f => f.name), ['Test.rnote', 'hand.md']);
+  assert.equal(top.files[0].other, true);
+  assert.deepEqual(top.dirs, [{ name: 'ACI2', path: 'ACI2', count: 3 }, { name: 'EST', path: 'EST', count: 1 }]);
+  const aci = folderLevel(members, 'ACI2');
+  assert.deepEqual(aci.files.map(f => f.name), ['ACI2/Tema 1.pdf']);
+  assert.deepEqual(aci.dirs.map(d => d.path), ['ACI2/Examen1', 'ACI2/Examen2']);
+  assert.deepEqual(folderLevel(members, 'ACI2/Examen1').files.map(f => f.name), ['ACI2/Examen1/GG 01.pdf']);
+});
