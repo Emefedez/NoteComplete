@@ -4853,7 +4853,35 @@ if ($("newNoteOpen")) {
     closeMenus();
     closeHomeFileMenu();
     $("newNoteMenuDialog")?.showModal();
+    numberChoices($("newNoteMenuDialog"));
   };
+}
+// A menu dialog of .export-item choices (New note…): the first nine shown carry keys 1–9 on
+// them, as in Import, export and share; the key chooses, the arrows move between them.
+function numberChoices(dialog) {
+  const items = () => [...dialog.querySelectorAll(".export-item")].filter((b) => !b.closest("[hidden]") && !b.hidden);
+  for (const b of dialog.querySelectorAll(".export-item[data-num]")) { delete b.dataset.num; b.removeAttribute("aria-keyshortcuts"); }
+  items().slice(0, 9).forEach((b, i) => { b.dataset.num = String(i + 1); b.setAttribute("aria-keyshortcuts", String(i + 1)); });
+  if (dialog.dataset.numbered) return;
+  dialog.dataset.numbered = "1";
+  dialog.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.("input, textarea, select")) return;
+    if (/^[1-9]$/.test(e.key)) {
+      const item = items()[Number(e.key) - 1];
+      if (!item || item.disabled) return;
+      e.preventDefault();
+      item.focus();
+      item.click();
+      return;
+    }
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    const list = items().filter((b) => !b.disabled);
+    if (!list.length) return;
+    e.preventDefault();
+    const i = list.indexOf(e.target);
+    list[i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + step + list.length) % list.length].focus();
+  });
 }
 if ($("newNoteMenuClose")) $("newNoteMenuClose").onclick = () => $("newNoteMenuDialog")?.close();
 if ($("newNoteMenuDialog")) {
@@ -4894,13 +4922,12 @@ function officeButton() {
   const b = $("textOpenOffice");
   if (!b) return;
   const isOffice = Boolean(officeFile && euroOfficeMode(officeFile.name));
-  const mdName = textView.name || activeFileName || "";
-  const isMd = !isOffice && isMarkdownName(mdName);
+  const isMd = !isOffice && Boolean(markdownOfficeName());
   b.hidden = !(textView.hasDocument && (isOffice || isMd));
   if (b.hidden) return;
-  const shown = isOffice ? officeFile : mdName;
+  const shown = isOffice ? officeFile : markdownOfficeName();
   void moduleState().then(({ installed }) => {
-    if ((isOffice ? officeFile : (textView.name || activeFileName || "")) !== shown) return;
+    if ((isOffice ? officeFile : markdownOfficeName()) !== shown) return;
     b.setAttribute("aria-disabled", String(!installed));
     b.title = installed
       ? (isMd ? "Turn this Markdown file into a Euro-Office document (.docx)" : "Open this file in Euro-Office, the office suite")
@@ -4912,15 +4939,17 @@ if ($("textOpenOffice")) $("textOpenOffice").onclick = () => {
   if (b.getAttribute("aria-disabled") === "true") return notInstalledMenu(b);
   void openTextInOffice();
 };
-// The text view's document in Euro-Office (the bar button, and the Markdown editor's toolbar and
-// right-click menu): an office file shown as text as itself; Markdown as it is now, its prefab
+// The text view's document in Euro-Office (the bar button, and the Markdown editor's right-click
+// menu): an office file shown as text as itself; Markdown as it is now, its prefab
 // pictures (SVG, which Euro-Office's converter does not draw) and the pictures beside it put in
 // as PNG/JPEG data, so the Word document it becomes shows them.
-async function openTextInOffice(anchor = document.querySelector("#textEditor .TMCommandButton[title^='Open in Euro-Office']") || $("textOpenOffice")) {
+async function openTextInOffice(anchor = $("textOpenOffice")) {
   if (!(await moduleState()).installed) return anchor && notInstalledMenu(anchor);
   if (officeFile && euroOfficeMode(officeFile.name)) return reopenWith(officeFile, "euro-office");
-  const mdName = textView.name || activeFileName || "";
-  if (!textView.hasDocument || !isMarkdownName(mdName)) return;
+  const mdName = markdownOfficeName();
+  if (!mdName) return status("Only Markdown documents can be opened in Euro-Office from here.", true);
+  // Euro-Office can take a while to start: say so at once.
+  status("Opening in Euro-Office…");
   let md = textView.text || "";
   if (/!\[[^\]]*\]\(/.test(md)) {
     status("Preparing the pictures for Euro-Office…");
@@ -4928,7 +4957,22 @@ async function openTextInOffice(anchor = document.querySelector("#textEditor .TM
     md = await markdownForOffice(md, (uri) => svgUriToPng(uri));
     md = await inlineSiblingPictures(md);
   }
-  return reopenWith(new File([md], mdName, { type: "text/markdown" }), "euro-office");
+  // Unsaved edits go with it (Euro-Office saves the result as a new .docx), so opening it there
+  // does not ask to discard them; they are kept if it does not open.
+  const before = { dirty, changed };
+  dirty = changed = false;
+  const opened = await reopenWith(new File([md], mdName, { type: "text/markdown" }), "euro-office");
+  if (!opened && activeDocKind === "text") ({ dirty, changed } = before);
+  return opened;
+}
+// The .md name the text view's document goes to Euro-Office under, or "" when it is not Markdown.
+// A new Markdown note not saved yet is "Untitled" (no extension): it is Markdown all the same.
+function markdownOfficeName() {
+  if (!textView.hasDocument || textView.diagram) return "";
+  const name = textView.name || activeFileName || "";
+  if (isMarkdownName(name)) return name;
+  if (isMarkdownName(activeFileName || "")) return activeFileName;
+  return textView.markdown && !/\.[a-z0-9]{1,6}$/i.test(name) ? `${name || "Untitled"}.md` : "";
 }
 // Pictures a Markdown file links to beside it (![a](img/x.png)) as data URIs: the copy Euro-Office
 // converts has no folder around it.

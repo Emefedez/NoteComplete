@@ -5,6 +5,7 @@
 // (UML, charts, algorithms, stroke order…) goes in from the editor's toolbar (prefabCommand) or
 // its right-click menu, and markdownForOffice turns them into PNG pictures for Euro-Office.
 import { paintEditorHighlights } from './md-highlight.js';
+import { paths as iconPaths } from './icons.js';
 
 export const MARKER = /^\s*<!--\s*page\s+(\d+)\s*-->\s*$/;
 // A prefab picture on a line of its own: ![alt](data:image/svg+xml…). The URI runs to the line's
@@ -22,8 +23,8 @@ export const toolbarCommand = (name, title, path, run) => ({
   innerHTML: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${path}" style="fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round"/></svg>`,
   action: (editor) => { Promise.resolve(run(editor)).catch((e) => console.warn(`${name}:`, e)); },
 });
-// "Insert prefab" in the Markdown toolbar: `insert(editor)` opens the picker and pastes.
-export const prefabCommand = (insert) => toolbarCommand('prefab', 'Insert prefab: UML diagram, chart, algorithm, stroke order… (also on right-click)', 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7', insert);
+// "Insert prefab" in the Markdown toolbar (the graph icon, as Insert prefab everywhere else): `insert(editor)` opens the picker and pastes.
+export const prefabCommand = (insert) => toolbarCommand('prefab', 'Insert prefab: UML diagram, chart, algorithm, stroke order… (also on right-click)', iconPaths.graph, insert);
 
 // A Markdown table to start from (the picker's Table card: Markdown has its own tables).
 export const MARKDOWN_TABLE = '| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |';
@@ -215,7 +216,7 @@ export function attachMarkdownPrefabContextMenu({
       const place = editor.getSelection(false);
       const { clientX: x, clientY: y } = event;
       import('./context-menu.js').then(({ openContextMenu }) => openContextMenu(x, y, [
-        { label: 'Insert prefab…', icon: 'shape', run: () => insertPrefabInto(editor, choosePrefab, afterInsert, place) },
+        { label: 'Insert prefab…', icon: 'graph', run: () => insertPrefabInto(editor, choosePrefab, afterInsert, place) },
         ...extraEntries(),
         '-',
         navigator.clipboard?.readText && { label: 'Paste', key: 'Ctrl V', run: async () => { const t = await navigator.clipboard.readText().catch(() => ''); if (t) { if (place) editor.paste(t, place, place); else editor.paste(t); } } },

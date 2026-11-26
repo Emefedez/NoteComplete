@@ -8,8 +8,7 @@ import { highlight, langFromName, codeEditor } from './code-highlight.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { rubyOn, setRuby, rubyElement } from './chinese/ruby.js';
-import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu, prefabCommand, toolbarCommand, insertPrefabInto } from './markdown-prefab.js';
-import { paths as iconPaths } from './icons.js';
+import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu, prefabCommand, insertPrefabInto } from './markdown-prefab.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -215,9 +214,9 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
               { keys: '- item  1. item', does: 'Bullet and numbered lists' },
               { keys: '`code`  ```lang', does: 'Inline code and fenced code blocks' },
             ] },
-            { title: 'Prefabs & Euro-Office', icon: 'shape', rows: [
+            { title: 'Prefabs & Euro-Office', icon: 'graph', rows: [
               { keys: 'Insert prefab button / right-click', does: 'Put a UML diagram, chart, algorithm, stroke order… in the text; double-click it to edit it again' },
-              { keys: 'Euro-Office button', does: 'Open this Markdown in Euro-Office as a Word document, prefabs as pictures' },
+              { keys: 'Open in Euro-Office (bar)', does: 'Open this Markdown in Euro-Office as a Word document, prefabs as pictures' },
             ] },
             { title: 'Chinese input, pinyin & stroke order', icon: 'draw', rows: [
               { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show Pinyin & Trace tools' },
@@ -477,11 +476,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       const { MARKDOWN_COMMANDS, MARKDOWN_GRAMMAR } = await import('./notes.js');
       const editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, ==highlight==, $math$, - list)…' });
       const markEditorLines = () => decorateTinyMdeLines(area.querySelector('.TinyMDE'));
-      // Beside the formatting: Insert prefab (any figure, as a picture that edits again) and the
-      // document in Euro-Office.
+      // Beside the formatting: Insert prefab (any figure, as a picture that edits again). Open in
+      // Euro-Office is the document bar's button, as for an office file.
       const extra = [
         choosePrefab && prefabCommand((ed) => insertPrefabInto(ed, choosePrefab, () => requestAnimationFrame(markEditorLines))),
-        openInOffice && toolbarCommand('office', 'Open in Euro-Office: this Markdown as a Word document (.docx), prefabs as pictures', iconPaths.office, () => openInOffice()),
       ].filter(Boolean);
       const bar = new TinyMDE.CommandBar({ element: commands, editor, commands: extra.length ? [...MARKDOWN_COMMANDS, '|', ...extra] : MARKDOWN_COMMANDS });
       editor.addEventListener('change', (event) => {
