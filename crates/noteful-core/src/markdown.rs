@@ -441,7 +441,7 @@ pub fn pack_notecomplete_text(
     if ocr.is_some() {
         manifest["ocr_text"] = OCR_TEXT.into();
     }
-    // An infinite canvas (canvas.rs): one page that grows; NoteComplete reopens it as one.
+    // Infinite canvases (canvas.rs): pages that grow; NoteComplete reopens them as such.
     if canvas {
         manifest["canvas"] = true.into();
     }
@@ -661,7 +661,7 @@ impl Editor {
         if let Some(chinese) = notecomplete_chinese(data) {
             editor.set_chinese(chinese).ok();
         }
-        if notecomplete_is_canvas(data) && editor.scene.pages.len() == 1 {
+        if notecomplete_is_canvas(data) && !editor.scene.pages.is_empty() {
             editor.canvas = true;
         }
         // The note inside is flattened: its pages are in display order.

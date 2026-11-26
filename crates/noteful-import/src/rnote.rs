@@ -131,7 +131,9 @@ enum Thing {
     },
     Vector {
         rect: [f64; 4],
-        pdf: Vec<u8>,
+        /// Its SVG, and the size its own coordinates span.
+        svg: String,
+        size: [f64; 2],
     },
 }
 
@@ -437,11 +439,18 @@ fn things(es: &Value, warn: &mut dyn FnMut(&'static str)) -> Vec<Thing> {
                 _ => warn("Rnote pictures that could not be read left out"),
             }
         } else if let Some(vi) = v.get("vectorimage") {
-            match (
-                rect_of(&vi["rectangle"]),
-                vi["svg_data"].as_str().and_then(svg_pdf),
-            ) {
-                (Some(rect), Some(pdf)) => out.push(Thing::Vector { rect, pdf }),
+            match (rect_of(&vi["rectangle"]), vi["svg_data"].as_str()) {
+                (Some(rect), Some(svg)) if !svg.is_empty() => {
+                    let size = [
+                        vi["intrinsic_size"][0].as_f64().unwrap_or(rect[2]),
+                        vi["intrinsic_size"][1].as_f64().unwrap_or(rect[3]),
+                    ];
+                    out.push(Thing::Vector {
+                        rect,
+                        svg: svg.to_string(),
+                        size,
+                    })
+                }
                 _ => warn("Rnote vector pictures that could not be read left out"),
             }
         }
@@ -487,89 +496,83 @@ fn frames(doc: &Value, things: &[Thing]) -> Vec<[f64; 4]> {
         }
         out
     };
-    if layout != "infinite" {
+    if layout != "infinite" && layout != "semi_infinite" {
         return grid(
             area,
             layout == "fixed_size" || layout == "continuous_vertical",
             &[],
         );
     }
-    // Infinite canvas: page-sized pictures are pages; the rest goes on format-sized tiles.
-    let mut pages: Vec<[f64; 4]> = things
-        .iter()
-        .filter_map(|t| match t {
-            Thing::Picture { rect, .. } | Thing::Vector { rect, .. }
-                if rect[2] * rect[3] >= 0.25 * fw * fh =>
-            {
-                Some(*rect)
-            }
-            _ => None,
-        })
-        .collect();
-    pages.sort_by(|a, b| a[1].total_cmp(&b[1]).then(a[0].total_cmp(&b[0])));
-    // Notes written beside a page (same rows, within a page width of it) widen that page, so
-    // the answers stay next to the exercise they answer.
-    let pictures = pages.clone();
-    for page in pages.iter_mut() {
-        let p = *page;
-        for b in things.iter().map(|t| t.bounds()) {
-            let c = centre(b);
-            if pictures.iter().any(|f| inside(f, c))
-                || c[1] < p[1]
-                || c[1] >= p[1] + p[3]
-                || c[0] < p[0] - fw
-                || c[0] > p[0] + p[2] + fw
-            {
-                continue;
-            }
-            let (x0, y0) = (page[0].min(b[0] - 16.), page[1].min(b[1] - 16.));
-            let (x1, y1) = (
-                (page[0] + page[2]).max(b[0] + b[2] + 16.),
-                (page[1] + page[3]).max(b[1] + b[3] + 16.),
-            );
-            *page = [x0, y0, x1 - x0, y1 - y0];
-        }
+    // An infinite canvas has no pages: it becomes one canvas page holding everything where
+    // it was drawn, as Rnote shows it (and it keeps growing in NoteComplete).
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for b in things.iter().map(|t| t.bounds()) {
+        x0 = x0.min(b[0]);
+        y0 = y0.min(b[1]);
+        x1 = x1.max(b[0] + b[2]);
+        y1 = y1.max(b[1] + b[3]);
     }
-    let rest: Vec<[f64; 4]> = things
-        .iter()
-        .map(|t| t.bounds())
-        .filter(|b| !pages.iter().any(|f| inside(f, centre(*b))))
-        .collect();
-    if !rest.is_empty() {
-        // Tiles stay on the format grid from the document's origin, so margins are kept.
-        let snap = |v: f64, o: f64, size: f64| o + ((v - o) / size).floor() * size;
-        let x0 = snap(
-            rest.iter().map(|b| b[0]).fold(f64::MAX, f64::min),
-            area[0],
-            fw,
-        );
-        let y0 = snap(
-            rest.iter().map(|b| b[1]).fold(f64::MAX, f64::min),
-            area[1],
-            fh,
-        );
-        let x1 = rest.iter().map(|b| b[0] + b[2]).fold(f64::MIN, f64::max);
-        let y1 = rest.iter().map(|b| b[1] + b[3]).fold(f64::MIN, f64::max);
-        let taken = pages.clone();
-        pages.extend(grid(
-            [x0, y0, (x1 - x0).max(1.), (y1 - y0).max(1.)],
-            false,
-            &taken,
+    if x0 > x1 {
+        return vec![[area[0], area[1], fw, fh]];
+    }
+    let margin = 48.;
+    vec![[
+        x0 - margin,
+        y0 - margin,
+        (x1 - x0 + 2. * margin).max(fw),
+        (y1 - y0 + 2. * margin).max(fh),
+    ]]
+}
+
+/// A vector picture: where it was drawn, its SVG, and the size its own coordinates span.
+type VectorPicture = ([f64; 4], String, [f64; 2]);
+
+/// Whether the note is an infinite canvas (one growing page in NoteComplete).
+fn is_canvas(doc: &Value) -> bool {
+    matches!(
+        doc["config"]["layout"].as_str().unwrap_or("infinite"),
+        "infinite" | "semi_infinite"
+    )
+}
+
+/// The vector pictures of one page as one SVG in page pixels (a page has one PDF
+/// background), on the canvas colour.
+fn vectors_svg(frame: [f64; 4], background: [f32; 4], pictures: &[VectorPicture]) -> String {
+    let c = |v: f32| (v.clamp(0., 1.) * 255.).round() as u8;
+    let mut svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="{w}" height="{h}" viewBox="0 0 {w} {h}"><rect width="{w}" height="{h}" fill="rgb({r},{g},{b})"/>"#,
+        w = frame[2],
+        h = frame[3],
+        r = c(background[0]),
+        g = c(background[1]),
+        b = c(background[2]),
+    );
+    for (rect, inner, size) in pictures {
+        // The picture's own <svg> (its XML declaration dropped), fitted to where it was drawn.
+        let inner = match inner.find("<svg") {
+            Some(at) => &inner[at..],
+            None => continue,
+        };
+        svg.push_str(&format!(
+            r#"<svg x="{}" y="{}" width="{}" height="{}" viewBox="0 0 {} {}" preserveAspectRatio="none">{inner}</svg>"#,
+            rect[0] - frame[0],
+            rect[1] - frame[1],
+            rect[2],
+            rect[3],
+            size[0].max(1.),
+            size[1].max(1.),
         ));
     }
-    if pages.is_empty() {
-        pages.push([area[0], area[1], fw, fh]);
-    }
-    // Reading order on the canvas: top to bottom, then left to right.
-    pages.sort_by(|a, b| a[1].total_cmp(&b[1]).then(a[0].total_cmp(&b[0])));
-    pages
+    svg.push_str("</svg>");
+    svg
 }
 
 /// The pages of an Rnote note, in PDF points, for `build_bytes` (scale: Noteful units per point).
+/// The pages, and whether they are infinite canvases.
 pub fn pages(
     bytes: &[u8],
     warn: &mut dyn FnMut(&'static str),
-) -> Result<(Document, Vec<Page>), String> {
+) -> Result<(Document, Vec<Page>, bool), String> {
     let mut json = Vec::new();
     GzDecoder::new(bytes)
         .read_to_end(&mut json)
@@ -588,8 +591,9 @@ pub fn pages(
     let pt = 72. / dpi;
     let things = things(es, warn);
     let frames = frames(doc_v, &things);
-    let background = color(&doc_v["config"]["background"]["color"])
-        .filter(|c| c[0] < 0.98 || c[1] < 0.98 || c[2] < 0.98);
+    let canvas_colour = color(&doc_v["config"]["background"]["color"]).unwrap_or([1., 1., 1., 1.]);
+    let background = Some(canvas_colour).filter(|c| c[0] < 0.98 || c[1] < 0.98 || c[2] < 0.98);
+    let mut vectors: Vec<Vec<VectorPicture>> = vec![Vec::new(); frames.len()];
     let mut doc = Document::empty();
     let mut pages: Vec<Page> = frames
         .iter()
@@ -695,38 +699,37 @@ pub fn pages(
                     bytes: None,
                 }));
             }
-            Thing::Vector { rect, pdf } => {
-                let key = format!("rnote-vector-{n}.pdf");
-                doc.insert_attachment(key.clone(), pdf);
-                let [x, y] = at([rect[0], rect[1]]);
-                let (w, h) = ((rect[2] * pt) as f32, (rect[3] * pt) as f32);
-                // One PDF background per page; a second vector picture on a page is kept only
-                // if it is the first one there.
-                if page
-                    .items
-                    .iter()
-                    .any(|it| matches!(it, Item::PdfBackground(_)))
-                {
-                    warn("Second Rnote vector picture on a page left out");
-                    continue;
-                }
-                page.items.insert(
-                    0,
-                    Item::PdfBackground(PdfBgEl {
-                        attachment: key,
-                        pdf_page: 1,
-                        x,
-                        y,
-                        w,
-                        h,
-                        src_w: w,
-                        src_h: h,
-                    }),
-                );
-            }
+            Thing::Vector { rect, svg, size } => vectors[i].push((rect, svg, size)),
         }
     }
-    Ok((doc, pages))
+    // Each page's vector pictures (PDF pages Rnote imported) become its PDF background.
+    for (i, pictures) in vectors.into_iter().enumerate() {
+        if pictures.is_empty() {
+            continue;
+        }
+        let Some(pdf) = svg_pdf(&vectors_svg(frames[i], canvas_colour, &pictures)) else {
+            warn("Rnote vector pictures that could not be read left out");
+            continue;
+        };
+        let key = format!("rnote-vectors-{i}.pdf");
+        doc.insert_attachment(key.clone(), pdf);
+        let page = &mut pages[i];
+        let (w, h) = (page.width, page.height);
+        page.items.insert(
+            0,
+            Item::PdfBackground(PdfBgEl {
+                attachment: key,
+                pdf_page: 1,
+                x: 0.,
+                y: 0.,
+                w,
+                h,
+                src_w: w,
+                src_h: h,
+            }),
+        );
+    }
+    Ok((doc, pages, is_canvas(doc_v)))
 }
 
 #[cfg(test)]
@@ -755,16 +758,19 @@ mod tests {
     }
 
     #[test]
-    fn rnote_is_recognized_and_cut_into_pages() {
+    fn an_infinite_canvas_is_one_canvas_page_with_everything_in_place() {
         let bytes = sample();
         assert!(is_rnote(&bytes));
         assert!(!is_rnote(b"\x1f\x8b not gzip"));
         let mut warnings = Vec::new();
-        let (_, pages) = pages(&bytes, &mut |w| warnings.push(w)).unwrap();
-        // The first three things share a tile; the far stroke gets its own page.
-        assert_eq!(pages.len(), 2, "{warnings:?}");
+        let (_, pages, canvas) = pages(&bytes, &mut |w| warnings.push(w)).unwrap();
+        // Nothing is cut: the far stroke stays on the same canvas, below the rest.
+        assert!(canvas);
+        assert_eq!(pages.len(), 1, "{warnings:?}");
         let first = &pages[0];
+        // Content from x 100 to 400+50, y 100 to 2650, plus a 48 px margin, at least the format.
         assert_eq!(first.width, 600.);
+        assert_eq!(first.height, ((2650. - 100. + 96.) * 0.75) as f32);
         assert!(
             matches!(first.items[0], Item::Background(_)),
             "black canvas becomes the page colour"
@@ -780,8 +786,9 @@ mod tests {
                 }
             })
             .collect();
-        assert_eq!(strokes.len(), 2, "pen stroke and rectangle outline");
-        assert_eq!(strokes[0].points[0], [75., 75.]);
+        assert_eq!(strokes.len(), 3, "pen strokes and rectangle outline");
+        // (100, 100) drawn, 48 px (the margin) from the canvas page's corner: 36 pt.
+        assert_eq!(strokes[0].points[0], [36., 36.]);
         assert!(first
             .items
             .iter()

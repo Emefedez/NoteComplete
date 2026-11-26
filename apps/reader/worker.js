@@ -11,7 +11,7 @@ async function convertNotebook(name, bytes) {
   const format = m.notebook_format(bytes);
   if (!format) throw Error("This is not a Goodnotes, Notability or Rnote notebook.");
   const noteful = m.convert_notebook(name, bytes);
-  return { noteful, format, warnings: JSON.parse(m.notebook_warnings()) };
+  return { noteful, format, warnings: JSON.parse(m.notebook_warnings()), canvas: m.notebook_is_canvas() };
 }
 let session;
 // Another note, or none: the PDF kept for Edit PDF belonged to the last one (ids repeat across
@@ -83,7 +83,8 @@ const standalone = {
         : args.project
           ? EditorSession.load_project_bytes(bytes)
           : new EditorSession(bytes);
-      if (args.canvas) candidate.set_canvas(true);
+      // A new canvas, or an Rnote infinite canvas: its pages grow as you write.
+      if (args.canvas || args.notebook?.canvas) candidate.set_canvas(true);
       if (args.image) candidate.add_image(0, JSON.stringify(args.image));
       const result = Object.assign(JSON.parse(candidate.view(0)), { engine_state: state });
       // A Goodnotes or Notability notebook: what could not be brought over, and where it came from.

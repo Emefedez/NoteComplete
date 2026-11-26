@@ -4,6 +4,7 @@ use wasm_bindgen::prelude::*;
 
 thread_local! {
     static WARNINGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    static CANVAS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// `"goodnotes"` or `"notability"` when bytes are a notebook `convert_notebook` reads.
@@ -17,7 +18,14 @@ pub fn notebook_format(data: &[u8]) -> Option<String> {
 pub fn convert_notebook(name: &str, data: &[u8]) -> Result<Vec<u8>, String> {
     let converted = noteful_import::convert(name, data)?;
     WARNINGS.with(|w| *w.borrow_mut() = converted.warnings);
+    CANVAS.with(|c| c.set(converted.canvas));
     Ok(converted.noteful)
+}
+
+/// Whether the last `convert_notebook` made infinite canvases (an Rnote infinite canvas).
+#[wasm_bindgen]
+pub fn notebook_is_canvas() -> bool {
+    CANVAS.with(|c| c.get())
 }
 
 /// What the last `convert_notebook` could not bring over, as a JSON list of strings.

@@ -1094,12 +1094,12 @@ async function importImages(files, { at = null, any = false } = {}) {
     editing = false;
   }
 }
-// A blank page after page `after`, the size of that page (one undoable edit). Not on an
-// infinite canvas, which grows instead. Used by the button below the last page and by a
-// drawing tablet's dock (collab.js).
+// A blank page after page `after`, the size of that page (one undoable edit). In a note of
+// infinite canvases it is a new canvas, at a canvas's starting size (it grows as you write).
+// Used by the button below the last page and by a drawing tablet's dock (collab.js).
 async function addBlankPage(after, before = false) {
-  if (!doc || busy() || doc.canvas) return;
-  const size = panels[after]?.size;
+  if (!doc || busy()) return;
+  const size = doc.canvas ? CANVAS_START : panels[after]?.size;
   if (!size) return;
   const at = before ? after : after + 1;
   await action("insertPages", { at, pages: [{ size: [...size] }], focus: at });
@@ -1110,9 +1110,10 @@ function blankPageEntries(index, { scroll = false } = {}) {
   // size (not a canvas, which grows by itself; not a view-only note or a read-only guest).
   const resizable = !doc?.canvas && !$("resizePage").disabled;
   const onThisPage = (run) => () => { if (scroll) jump(index); else setPage(index); run(); };
+  const what = doc?.canvas ? "canvas" : "blank page";
   return [
-    { label: "Insert blank page before", icon: "plus", run: () => addBlankPage(index, true) },
-    { label: "Insert blank page after", icon: "plus", run: () => addBlankPage(index) },
+    { label: `Insert ${what} before`, icon: "plus", run: () => addBlankPage(index, true) },
+    { label: `Insert ${what} after`, icon: "plus", run: () => addBlankPage(index) },
     resizable && "-",
     resizable && { label: "Page size…", icon: "fit", run: onThisPage(() => $("resizePage").click()) },
     resizable && { label: "Resize by dragging the borders", icon: "maximize", run: onThisPage(startResizeDrag) },
@@ -1123,13 +1124,13 @@ function addPageButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "add-page-end";
-  button.hidden = !!doc?.canvas;
-  button.title = "Add a blank page at the end, the size of the last one";
-  button.append(icon("plus"), Object.assign(document.createElement("span"), { textContent: "New page" }));
+  const canvas = !!doc?.canvas;
+  button.title = canvas ? "Add another infinite canvas at the end, as a new page" : "Add a blank page at the end, the size of the last one";
+  button.append(icon("plus"), Object.assign(document.createElement("span"), { textContent: canvas ? "New canvas" : "New page" }));
   button.onclick = async () => {
-    if (!doc || busy() || doc.canvas) return;
+    if (!doc || busy()) return;
     await addBlankPage(panels.length - 1);
-    status("Page added. You can undo this change.");
+    status(`${doc.canvas ? "Canvas" : "Page"} added. You can undo this change.`);
   };
   return button;
 }
@@ -1271,18 +1272,18 @@ function buildPages(sizes) {
   attachPageObserver();
 }
 async function movePage(from, to) {
-  if (!doc || doc.canvas || editing || busy()) return;
+  if (!doc || editing || busy()) return;
   if (from < 0 || to < 0 || from >= doc.pages || to >= doc.pages || from === to) return;
   selection.clear();
   await action("movePage", { from, to, focus: to });
 }
 function syncPageMoveMenus() {
-  const ok = !!doc && !doc.canvas && panels.length > 1;
+  const ok = !!doc && panels.length > 1;
   if ($("movePageUp")) $("movePageUp").disabled = !ok || page <= 0;
   if ($("movePageDown")) $("movePageDown").disabled = !ok || page >= panels.length - 1;
 }
 function buildPageList() {
-  const canReorder = !doc?.canvas && panels.length > 1;
+  const canReorder = panels.length > 1;
   const fragment = document.createDocumentFragment();
   for (const panel of panels) {
     const item = document.createElement("div");
@@ -1360,7 +1361,7 @@ function buildPageList() {
       meta.append(actions);
     }
     item.append(button, meta);
-    if (!doc?.canvas) item.addEventListener("contextmenu", (e) => {
+    item.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       openContextMenu(e.clientX, e.clientY, blankPageEntries(panel.index, { scroll: true }), { title: `Page ${panel.index + 1}` });
     });
@@ -1386,7 +1387,7 @@ function buildPageList() {
 }
 // Drag a page card vertically in #pageList (by its grip on touch/pen, or anywhere on mouse) to reorder pages.
 $("pageList").addEventListener("pointerdown", (down) => {
-  if (!doc || doc.canvas || panels.length < 2 || editing || busy()) return;
+  if (!doc || panels.length < 2 || editing || busy()) return;
   const item = down.target.closest(".page-item");
   if (!item || down.button !== 0 || down.target.closest(".page-move")) return;
   const touch = down.pointerType === "touch" || down.pointerType === "pen";
@@ -2418,13 +2419,17 @@ function edited(op, args, result) {
     recordingState();
   }
   // An infinite canvas that grew (or shrank on undo) keeps its place on screen: the
-  // page is resized where it is and redrawn, not rebuilt.
-  const size = result.page_sizes[0];
-  if (result.canvas && result.pages === 1 && panels.length === 1 && (size[0] !== panels[0].size[0] || size[1] !== panels[0].size[1])) {
-    panels[0].size = size;
-    panels[0].el.style.aspectRatio = size.join("/");
-    resize();
-    return false;
+  // page is resized where it is and redrawn, not rebuilt (any of a note's canvases).
+  const sameOrder = !Array.isArray(result.page_order) || result.page_order.every((slot, i) => slot === panels[i]?.slot);
+  if (result.canvas && result.pages === panels.length && sameOrder) {
+    let grew = false;
+    result.page_sizes.forEach((size, i) => {
+      if (size[0] === panels[i].size[0] && size[1] === panels[i].size[1]) return;
+      panels[i].size = size;
+      panels[i].el.style.aspectRatio = size.join("/");
+      grew = true;
+    });
+    if (grew) { resize(); return false; }
   }
   const orderChanged = Array.isArray(result.page_order) && (result.page_order.length !== panels.length || result.page_order.some((slot, i) => slot !== panels[i].slot));
   if (orderChanged || result.pages !== panels.length || result.page_sizes.some((s, i) => s[0] !== panels[i].size[0] || s[1] !== panels[i].size[1])) {
@@ -7147,7 +7152,10 @@ function documentControls() {
     $(id).title = doc?.canvas ? "An infinite canvas cannot be a .noteful file; export it as NoteComplete (.nfedit)" : $(id).dataset.title;
   }
   // A canvas is one page that grows: no inserted pages.
-  for (const id of ["insertBlank", "insertPdf", "insertHandwritten", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  for (const id of ["insertPdf", "insertHandwritten", "studyExpandAi", "changePageBg", "pagesChangeBg"]) if ($(id)) $(id).disabled ||= !!doc?.canvas;
+  // Insert blank page… is Insert canvas in a note of infinite canvases.
+  const insertLabel = [...$("insertBlank").childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
+  if (insertLabel) insertLabel.textContent = doc?.canvas ? "Insert canvas" : "Insert blank page…";
   // Study works on notes and on text documents.
   for (const id of ["studyCards", "studyQuiz", "studyCheck", "studyResume", "studyRetake", "studyExportQuiz", "exportStudy", "chatOpen", "chatToggle"])
     if ($(id)) $(id).disabled = !open && !studyText();
@@ -7598,6 +7606,15 @@ const { openPageBackground } = pageDialogs({
     get panels() { return panels; },
   },
 });
+// In a note of infinite canvases, Pages → Insert adds another canvas after this one.
+{
+  const insertBlankPages = $("insertBlank").onclick;
+  $("insertBlank").onclick = async () => {
+    if (!doc?.canvas) return insertBlankPages?.();
+    await addBlankPage(page);
+    status("Canvas added after this one. You can undo this change.");
+  };
+}
 // Model Explorer & cross-diagram project model (project-model.js, model-explorer.js).
 let projectModelPrefabs = [];
 let projectModelCache = buildProjectModel([]);

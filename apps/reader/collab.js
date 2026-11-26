@@ -1650,7 +1650,7 @@ class Session {
       el('hr'),
       action('Undo', 'undo', () => $('undo').click()), action('Redo', 'redo', () => $('redo').click()),
       action('Fit the page width', 'fit', () => this.host.setZoom('fit')),
-      action('New page after this one', 'plus', () => this.host.doc?.canvas ? this.host.status('An infinite canvas grows as you draw; it has no pages to add.') : this.host.addPage()),
+      action(this.host.doc?.canvas ? 'New canvas after this one' : 'New page after this one', 'plus', () => this.host.addPage()),
       el('span', { className: 'dock-spacer' }),
       action('Move this bar to the other side', 'swap', () => this.flipDock()),
       action('Disconnect', 'close', () => this.leave()),

@@ -165,12 +165,6 @@ impl Editor {
     }
     /// Move the page at display position `from` to display position `to`, as one undoable edit.
     pub fn move_page(&mut self, from: usize, to: usize) -> Result<()> {
-        if self.canvas {
-            return Err(Error::new(
-                0,
-                "An infinite canvas is one page; it cannot reorder pages",
-            ));
-        }
         let count = self.page_order().len();
         if from >= count || to >= count {
             return Err(Error::new(0, "Page outside document"));
@@ -239,12 +233,6 @@ impl Editor {
         pages: Vec<NewPage>,
         pdf: Option<NewPdf>,
     ) -> Result<()> {
-        if self.canvas {
-            return Err(Error::new(
-                0,
-                "An infinite canvas is one page; it grows instead of taking new pages",
-            ));
-        }
         if pages.is_empty()
             || pages.len() > 2000
             || at > self.page_order().len()

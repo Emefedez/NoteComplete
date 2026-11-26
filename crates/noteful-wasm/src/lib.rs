@@ -168,7 +168,7 @@ impl EditorSession {
         let page = self.slot(page)?;
         let image: noteful_core::Image = serde_json::from_str(image)?;
         // An infinite canvas grows first, so the undo of the picture leaves the size.
-        self.inner.grow_canvas_for(image.bounds)?;
+        self.inner.grow_canvas_for(page, image.bounds)?;
         Ok(self.inner.add_image(page, image)?)
     }
     pub fn view(&self, page: usize) -> Result<String, Failure> {
@@ -192,12 +192,10 @@ impl EditorSession {
             }
             if lo[0] <= hi[0] {
                 let pad = line.width / 2.;
-                grew = self.inner.grow_canvas_for([
-                    lo[0],
-                    lo[1],
-                    hi[0] - lo[0] + pad,
-                    hi[1] - lo[1] + pad,
-                ])?;
+                grew = self.inner.grow_canvas_for(
+                    slot,
+                    [lo[0], lo[1], hi[0] - lo[0] + pad, hi[1] - lo[1] + pad],
+                )?;
             }
         }
         self.inner.add_line(slot, line)?;
@@ -208,7 +206,7 @@ impl EditorSession {
             drawn.to_string()
         })
     }
-    /// Make this one-page note an infinite canvas (it grows as you write).
+    /// Make this note infinite canvases (each page grows as you write on it).
     pub fn set_canvas(&mut self, on: bool) -> Result<(), Failure> {
         Ok(self.inner.set_canvas(on)?)
     }

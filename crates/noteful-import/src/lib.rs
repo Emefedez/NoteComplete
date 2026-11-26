@@ -61,6 +61,8 @@ pub struct Converted {
     pub noteful: Vec<u8>,
     pub format: &'static str,
     pub warnings: Vec<String>,
+    /// Infinite canvases (an Rnote infinite canvas): each page grows as you write.
+    pub canvas: bool,
 }
 
 /// Import a Goodnotes or Notability notebook named `name` (its file name) as an editor whose
@@ -73,6 +75,9 @@ pub fn import(name: &str, bytes: &[u8]) -> Result<Imported, String> {
         Editor::open(&converted.noteful)
     }
     .map_err(|e| e.message)?;
+    if converted.canvas {
+        editor.set_canvas(true).map_err(|e| e.message)?;
+    }
     editor.set_origin(Some(Origin {
         format: converted.format.into(),
         name: name.into(),
@@ -89,10 +94,12 @@ pub fn import(name: &str, bytes: &[u8]) -> Result<Imported, String> {
 pub fn convert(name: &str, bytes: &[u8]) -> Result<Converted, String> {
     let format = format_of(bytes).ok_or("Not a Goodnotes, Notability or Rnote notebook")?;
     let mut warnings = Warnings::default();
+    let mut canvas = false;
     let (doc, pages, scale) = match format {
         "goodnotes" => goodnotes(bytes)?,
         "rnote" => {
-            let (doc, pages) = rnote::pages(bytes, &mut |w| warnings.add(w))?;
+            let (doc, pages, is_canvas) = rnote::pages(bytes, &mut |w| warnings.add(w))?;
+            canvas = is_canvas;
             (doc, pages, UNITS_PER_POINT)
         }
         _ => notability(bytes)?,
@@ -117,6 +124,7 @@ pub fn convert(name: &str, bytes: &[u8]) -> Result<Converted, String> {
         noteful,
         format,
         warnings: warnings.finish(),
+        canvas,
     })
 }
 
