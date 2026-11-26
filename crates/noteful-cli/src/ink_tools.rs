@@ -311,7 +311,17 @@ pub(super) fn tools() -> Vec<Value> {
         tool("example_pages", "Example pages and drawings to imitate before create_notebook, add_pages, clean_copy or a drawing. Without name: the list and the style guide. With name: its source (study Markdown or SVG) and how it looks.",
             json!({"name":{"type":"string","enum":EXAMPLES.iter().map(|e| e.name).collect::<Vec<_>>()}}), &[]),
         tool("add_prefab", &add_prefab_description(),
-            merge(json!({"path":path,"page":page,"spec":{"type":"object","description":"Prefab spec object"},"box":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Optional [x, y, w, h] in page units"}}), &[&write_props]), &["path","page","spec"]),
+            merge(json!({
+                "path":{"type":"string","description":"Path to a notebook (.noteful, .notecomp, .nfedit, .goodnotes, .ntb), Markdown (.md, .markdown, .txt), HTML (.html, .htm), or Euro-Office (.docx, .pptx, .odt, .odp) document"},
+                "page":{"type":"integer","minimum":1,"description":"Page or slide number starting at 1 (required for notebook canvas pages; optional slide number for .pptx/.odp or page marker for target='notes')"},
+                "spec":{"type":"object","description":"Prefab spec object"},
+                "box":{"type":"array","items":{"type":"number"},"minItems":4,"maxItems":4,"description":"Optional [x, y, w, h] in page units (notebook canvas pages only)"},
+                "target":{"type":"string","enum":["page","notes"],"description":"For .notecomp/.nfedit: 'page' (default) places the prefab on the canvas; 'notes' embeds an editable Markdown prefab into the note's Markdown notes"},
+                "position":{"type":"string","enum":["end","start","after_heading"],"description":"Where to insert in Markdown, HTML, or .docx/.odt (default: 'end')"},
+                "after_heading":{"type":"string","description":"Insert under this Markdown heading (case/accent-insensitive)"},
+                "replace_placeholder":{"type":"string","description":"Replace this exact placeholder text (e.g. '<!-- PREFAB:chart -->') in Markdown, HTML, .docx or .odt"},
+                "alt":{"type":"string","description":"Optional alt/caption label for Markdown or HTML"}
+            }), &[&write_props]), &["path","spec"]),
     ]
 }
 
@@ -319,7 +329,7 @@ pub(super) fn tools() -> Vec<Value> {
 /// (apps/reader/prefabs/<module>/ai.md, in their module.json "order"), so a new module is
 /// usable by AI without changing this crate. Without the reader's files, the shipped ones.
 fn add_prefab_description() -> String {
-    const HEAD: &str = "Insert an editable NoteComplete prefab onto a page, written to a copy unless in_place. Users can edit it in its editor (chart, diagram or the module's own) and resize it cleanly.\nSpec shapes:\n";
+    const HEAD: &str = "Insert a NoteComplete prefab into a notebook page (.noteful/.notecomp/.nfedit), a notebook's Markdown notes (target='notes'), a Markdown file (.md/.markdown/.txt), an HTML page (.html/.htm), or a Euro-Office document (.docx, .pptx, .odt, .odp), written to a copy unless in_place. In notebooks and Markdown/HTML, users can double-click to edit the prefab in NoteComplete.\nSpec shapes:\n";
     let notes = find_prefabs_js()
         .and_then(|js| js.parent().map(|d| d.join("prefabs")))
         .map(|dir| module_ai_notes(&dir))
@@ -367,7 +377,7 @@ fn module_ai_notes(dir: &Path) -> String {
         .collect()
 }
 
-fn find_prefabs_js() -> Option<std::path::PathBuf> {
+pub(super) fn find_prefabs_js() -> Option<std::path::PathBuf> {
     if let Some(dir) = std::env::var_os("NOTEFUL_READER_DIR") {
         let p = Path::new(&dir).join("prefabs.js");
         if p.is_file() {
@@ -436,8 +446,11 @@ impl Server {
         let editor = new_notebook(title, &pages)?;
         let (out, _) = destination(args, None, title)?;
         save(&editor, &out, None, None)?;
-        let report = json!({"written":out,"pages":pages.len(),"warnings":warnings,"note":spill(pages.len()),"handwriting_text":kept_text(&out),
+        let mut report = json!({"written":out,"pages":pages.len(),"warnings":warnings,"note":spill(pages.len()),"handwriting_text":kept_text(&out),
             "open":"Open it in NoteComplete, or import it on the iPad (Files → share to Noteful)."});
+        if prefer_markdown_setting() {
+            report["preference_note"] = json!("Note: the user has 'Prefer Markdown for AI-generated documents' enabled in NoteComplete settings; use create_markdown unless handwritten ink was explicitly requested.");
+        }
         self.preview(&out, 0, report)
     }
 
@@ -560,6 +573,14 @@ impl Server {
 
     fn add_prefab(&mut self, args: &Value) -> Res<Value> {
         let source = note_path(args)?;
+        let e = ext(&source);
+        if args["target"].as_str() == Some("notes")
+            || doc_prefabs::is_markdown_ext(&e)
+            || doc_prefabs::is_html_ext(&e)
+            || doc_prefabs::is_office_ext(&e)
+        {
+            return doc_prefabs::add_prefab_to_document(args, &source, &e);
+        }
         let display = page_arg(args)?;
         let spec = &args["spec"];
         if !spec.is_object() {
@@ -580,57 +601,10 @@ impl Server {
             size[1].as_f64().unwrap_or(A4[1]),
         );
 
-        let prefabs_js = find_prefabs_js()
-            .ok_or("Could not locate apps/reader/prefabs.js (set NOTEFUL_READER_DIR)")?;
-        let spec_json = serde_json::to_string(spec)?;
-        // Desktop CLI runs outside the browser's localStorage, so all shipped packs present in
-        // apps/reader/prefabs/ are allowed here; if a pack or module is genuinely missing on disk
-        // (or unknown), prefabMissingReason reports the missing pack clearly instead of a generic error.
-        let script = r#"
-import { pathToFileURL } from 'node:url';
-import fs from 'node:fs';
-const { prefabSvg, prefabPrepare, prefabMissingReason } = await import(pathToFileURL(process.argv[1]).href);
-const given = JSON.parse(fs.readFileSync(0, 'utf8'));
-const missing = prefabMissingReason?.(given);
-if (missing) throw new Error(missing);
-const spec = prefabPrepare ? await prefabPrepare(given) : given;
-const out = prefabSvg(spec);
-if (!out?.svg) throw new Error(prefabMissingReason?.(spec) || 'Spec produced no prefab SVG');
-process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.height || 300, svg: out.svg, spec: spec === given ? undefined : spec }));
-"#;
-        let mut node = Command::new("node")
-            .args([
-                "--input-type=module",
-                "-e",
-                script,
-                &prefabs_js.to_string_lossy(),
-            ])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Could not start node to render prefab: {e}"))?;
-        if let Some(mut stdin) = node.stdin.take() {
-            stdin.write_all(spec_json.as_bytes())?;
-        }
-        let node_out = node.wait_with_output()?;
-        if !node_out.status.success() {
-            return Err(format!(
-                "Prefab render failed: {}",
-                String::from_utf8_lossy(&node_out.stderr).trim()
-            )
-            .into());
-        }
-        let rendered: Value = serde_json::from_slice(&node_out.stdout)?;
-        let svg = rendered["svg"].as_str().ok_or("Missing prefab SVG")?;
-        let svg_w = rendered["width"].as_f64().unwrap_or(540.0).max(1.0);
-        let svg_h = rendered["height"].as_f64().unwrap_or(300.0).max(1.0);
-        // A module that fetches before drawing (the hanzi module's stroke data) gives back its
-        // whole spec, so the figure redraws and edits without fetching again.
-        let spec_json = match rendered.get("spec").filter(|s| s.is_object()) {
-            Some(prepared) => serde_json::to_string(prepared)?,
-            None => spec_json,
-        };
+        let rendered = doc_prefabs::render_prefab(spec)?;
+        let svg_w = rendered.width;
+        let svg_h = rendered.height;
+        let spec_json = rendered.spec_json.clone();
 
         let [x, y, w, h] = if let Some(arr) = args["box"].as_array() {
             if arr.len() != 4 {
@@ -654,24 +628,7 @@ process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.heigh
         };
 
         let px_w = (w * 2.5).round().clamp(600.0, 2200.0) as u32;
-        let mut rsvg = Command::new("rsvg-convert")
-            .args(["-w", &px_w.to_string(), "-f", "png"])
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| format!("Could not start rsvg-convert: {e}"))?;
-        if let Some(mut stdin) = rsvg.stdin.take() {
-            stdin.write_all(svg.as_bytes())?;
-        }
-        let png_out = rsvg.wait_with_output()?;
-        if !png_out.status.success() || png_out.stdout.is_empty() {
-            return Err(format!(
-                "rsvg-convert failed: {}",
-                String::from_utf8_lossy(&png_out.stderr).trim()
-            )
-            .into());
-        }
+        let png_bytes = rendered.to_png(px_w)?;
 
         let id = format!(
             "p{:x}",
@@ -708,7 +665,7 @@ process.stdout.write(JSON.stringify({ width: out.width || 540, height: out.heigh
         editor.add_image(
             slot,
             noteful_core::Image {
-                base64: STANDARD.encode(&png_out.stdout),
+                base64: STANDARD.encode(&png_bytes),
                 mime: "image/png".into(),
                 bounds: [x, y, w, h],
                 layer,

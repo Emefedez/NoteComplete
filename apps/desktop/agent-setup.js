@@ -11,12 +11,37 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 export const SERVER = 'notecomplete';
+export const DEFAULT_MCP_SETTINGS = Object.freeze({ preferMarkdown: false });
 export const TOOLS = {
   claude: { label: 'Claude Code' },
   codex: { label: 'Codex' },
   antigravity: { label: 'Antigravity' },
   opencode: { label: 'OpenCode' },
 };
+
+// Shared MCP preferences stored in <userData>/mcp-settings.json so both the
+// desktop app UI and the `noteful mcp` Rust binary read the same settings.
+export async function readMcpSettings(file) {
+  try {
+    const raw = await readFile(file, 'utf8');
+    const parsed = JSON.parse(raw);
+    return { preferMarkdown: parsed?.preferMarkdown === true };
+  } catch {
+    return { ...DEFAULT_MCP_SETTINGS };
+  }
+}
+
+export async function writeMcpSettings(file, patch = {}) {
+  const current = await readMcpSettings(file);
+  const next = {
+    preferMarkdown: typeof patch?.preferMarkdown === 'boolean' ? patch.preferMarkdown : current.preferMarkdown,
+  };
+  await mkdir(path.dirname(file), { recursive: true });
+  const temp = `${file}.tmp`;
+  await writeFile(temp, JSON.stringify(next, null, 2) + '\n');
+  await rename(temp, file);
+  return next;
+}
 
 // The bundled server, copied where its path does not change between launches.
 export async function stableBinary({ bundled, folder }) {

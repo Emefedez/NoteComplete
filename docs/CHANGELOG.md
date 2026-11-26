@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.8
+
+- **Type math the way it looks.** The Math Mode bar now reads x³, x⁻¹, x₁, ×, ÷, −, √, ∛, π and ½ as typed or pasted, so *x³ + 6* works instead of failing with "Unsupported symbol ³". Graphs read them too, and log₂ 8 (or log_2(8)) now works without the backslash.
+- **The Math badge lines up.** The "∑ Math" label at the left of the Math Mode bar is now as tall as the formula box and buttons next to it, instead of a short strip.
+
 ## 2.0.7
 
 - **Theme editor.** **View ▸ More themes…** now has **Edit colours**, as in R Commander Studio: each colour of the interface (panels, bars, menus, behind the pages, buttons, text, accent, lines…) with a colour picker and its hex code. Changes show at once and are kept with the chosen theme; **Reset colours** goes back to the theme's own. **Copy JSON** and **Paste JSON…** keep or share a theme, and a theme copied from R Commander Studio pastes in too.

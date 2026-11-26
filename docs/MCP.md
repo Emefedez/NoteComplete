@@ -34,6 +34,8 @@ Page images use librsvg (`rsvg-convert`), and imported PDFs need poppler (`pdfto
 | `extract_resource` | Lists or writes the note's embedded PDFs, recordings or cover image. |
 | `read_notes` | The Markdown notes kept with a `.notecomp`, `.notepart` or `.nfedit` note, and which pages they are tied to. |
 | `write_notes` | Appends to (or replaces) those Markdown notes. With `page`, the text goes under a `<!-- page N -->` marker so it follows that page. Pages, ink and recordings are untouched, the file is replaced atomically and the previous version is kept as `<name>.bak`. A plain `.noteful` file has no notes; save it as `.notecomp` first. |
+| `create_markdown` | Creates a new standalone Markdown (`.md`) document in the NoteComplete folder (or `out`), optionally rendering and embedding editable NoteComplete prefabs for any `<!-- PREFAB:key -->` or `{{prefab:key}}` placeholders supplied in `prefabs`. Enable **Prefer Markdown (.md) for AI-generated documents** in **Help → Connect AI tools…** or **Setup wizard → AI / Modules** to tell connected agents to default to Markdown documents. |
+| `add_prefab` | Inserts a NoteComplete prefab (charts, timelines, process states, UML, math, truth tables, algorithms, hanzi, sticky notes, …) into a notebook page (`.noteful`/`.notecomp`/`.nfedit`), a notebook's Markdown notes (`target: "notes"`), a Markdown file (`.md`/`.markdown`/`.txt`), an HTML page (`.html`/`.htm`), or a Euro-Office document (`.docx`, `.pptx`, `.odt`, `.odp`). Supports `position`, `after_heading`, and `replace_placeholder`. |
 | `write_anki_deck` | Saves flashcards as an Anki text file with `#separator`, `#deck` and `#tags` headers (Anki → File → Import). It does not overwrite a file unless asked to. |
 
 ## Handwriting tools

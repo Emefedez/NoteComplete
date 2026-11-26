@@ -126,6 +126,8 @@ contextBridge.exposeInMainWorld('notecompleteClipboard', {
 contextBridge.exposeInMainWorld('notecompleteAgents', {
   status: () => ipcRenderer.invoke('agents:status'),
   connect: id => ipcRenderer.invoke('agents:connect', id),
+  settings: () => ipcRenderer.invoke('agents:settings'),
+  setSettings: patch => ipcRenderer.invoke('agents:set-settings', patch),
 });
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),

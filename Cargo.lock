@@ -834,6 +834,7 @@ dependencies = [
  "noteful-core",
  "noteful-import",
  "serde_json",
+ "zip",
 ]
 
 [[package]]

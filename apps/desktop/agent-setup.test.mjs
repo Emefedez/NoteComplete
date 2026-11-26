@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { agentSetup, addCommand, connectOpenCode, manualSteps, stableBinary } from './agent-setup.js';
+import { agentSetup, addCommand, connectOpenCode, manualSteps, readMcpSettings, stableBinary, writeMcpSettings } from './agent-setup.js';
 
 test('the bundled server is copied once to a stable folder and refreshed when it changes', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'nc-agents-'));
@@ -70,4 +70,15 @@ test('status and connect drive the tools own commands, replacing an old registra
   // OpenCode needs no binary to be configured.
   await agents.connect('opencode');
   assert.equal((await agents.status()).find((t) => t.id === 'opencode').connected, true);
+});
+
+test('MCP settings default to preferMarkdown=false and persist atomically', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-mcp-settings-'));
+  const file = path.join(dir, 'nested', 'mcp-settings.json');
+  assert.deepEqual(await readMcpSettings(file), { preferMarkdown: false });
+  assert.deepEqual(await writeMcpSettings(file, { preferMarkdown: true }), { preferMarkdown: true });
+  assert.deepEqual(await readMcpSettings(file), { preferMarkdown: true });
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).preferMarkdown, true);
+  assert.deepEqual(await writeMcpSettings(file, { preferMarkdown: false }), { preferMarkdown: false });
+  assert.deepEqual(await readMcpSettings(file), { preferMarkdown: false });
 });

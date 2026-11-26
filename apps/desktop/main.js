@@ -10,7 +10,7 @@ import { libraryFiles, withExtension } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
 import { integrateLinux, setEuroOfficeMenuEntry } from './linux-integration.js';
 import { aiRunner } from './ai-runner.js';
-import { agentSetup, stableBinary } from './agent-setup.js';
+import { agentSetup, readMcpSettings, stableBinary, writeMcpSettings } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
@@ -749,8 +749,11 @@ app.whenReady().then(async () => {
     ? stableBinary({ bundled, folder: path.join(app.getPath('userData'), 'mcp') }).then(p => { stableServer = p; }, () => { stableServer = bundled; })
     : Promise.resolve();
   const agents = agentSetup({ tools: () => ai.tools(), server: () => stableServer });
+  const mcpSettingsFile = path.join(app.getPath('userData'), 'mcp-settings.json');
   ipcMain.handle('agents:status', guarded(async () => { await serverReady; return { server: stableServer, tools: await agents.status() }; }));
   ipcMain.handle('agents:connect', guarded(async (_event, id) => { await serverReady; return agents.connect(String(id)); }));
+  ipcMain.handle('agents:settings', guarded(() => readMcpSettings(mcpSettingsFile)));
+  ipcMain.handle('agents:set-settings', guarded((_event, patch) => writeMcpSettings(mcpSettingsFile, patch && typeof patch === 'object' ? patch : {})));
   // Help → Keep a diagnostic log / Open the log (app-log.js).
   ipcMain.handle('log:get', guarded(() => ({ on: log.on, file: log.file })));
   ipcMain.handle('log:set', guarded((_event, on) => ({ on: log.setOn(on === true), file: log.file })));

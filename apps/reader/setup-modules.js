@@ -19,6 +19,7 @@
 import { mathSettings } from './math/settings.js';
 import { zhSettings, zhEverUsed, setZhEverUsed } from './chinese/settings.js';
 import { OFFICE_KINDS, openWithPrefs, setOpenWith } from './open-with-pref.js';
+import { readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
 
 const registry = new Map();
 
@@ -271,6 +272,20 @@ export function agentsModule(api = globalThis.notecompleteAgents) {
     icon: 'spark',
     name: 'AI tools connection',
     summary: 'Let Claude Code, Codex and others read and write your notes',
+    settingsAlways: true,
+    settings(el, ui) {
+      const box = ui.toggle(
+        {
+          get: () => readPreferMarkdown(),
+          set: (on) => { void writePreferMarkdown(on, { api }); },
+        },
+        'Prefer Markdown (.md) for AI-generated documents',
+        'Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.',
+      );
+      el.append(box);
+      const input = box.querySelector?.('input[type="checkbox"]');
+      if (input) syncPreferMarkdown({ api }).then((v) => { input.checked = v; }, () => {});
+    },
     async status() {
       if (!api) return agentsState(null, { bridge: false });
       try { return agentsState(await api.status()); } catch (e) { return { state: 'error', detail: e.message }; }

@@ -9,6 +9,7 @@ import { icon } from './icons.js';
 import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
+import { readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
 import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
 import { PRESETS } from './themes.js';
 
@@ -254,7 +255,21 @@ export function buildSteps(env) {
             make('span', { className: 'wizard-provider-name', textContent: p.label }),
             p.tag ? make('span', { className: 'wizard-provider-tag', textContent: p.tag }) : null));
         }
+        const agentsApi = env.agents ?? globalThis.notecompleteAgents;
+        const preferMd = toggle(
+          {
+            get: () => readPreferMarkdown(storage),
+            set: (on) => { void writePreferMarkdown(on, { api: agentsApi, store: storage }); },
+          },
+          'Prefer Markdown (.md) for AI-generated documents',
+          'Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.',
+        );
+        const preferMdInput = preferMd.querySelector('input[type="checkbox"]');
+        if (preferMdInput && agentsApi?.settings) {
+          syncPreferMarkdown({ api: agentsApi, store: storage }).then((v) => { preferMdInput.checked = v; }, () => {});
+        }
         body.append(label('Default assistant'), list,
+          label('AI-generated documents'), preferMd,
           make('p', { className: 'wizard-hint', textContent: 'Each AI window can still pick another one. To let your AI tools read and write your notes, see Modules.' }));
       },
     },

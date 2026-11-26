@@ -9,6 +9,8 @@
 //! generated paper is drawn without poppler.
 #[path = "design_tools.rs"]
 mod design_tools;
+#[path = "doc_prefabs.rs"]
+mod doc_prefabs;
 #[path = "ink_tools.rs"]
 mod ink_tools;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -77,6 +79,56 @@ fn library() -> PathBuf {
     documents.join("NoteComplete")
 }
 
+/// Reads the desktop app's `mcp-settings.json` (`preferMarkdown`) or the
+/// `NOTECOMPLETE_PREFER_MARKDOWN` env var override.
+pub(super) fn prefer_markdown_setting() -> bool {
+    if let Ok(val) = std::env::var("NOTECOMPLETE_PREFER_MARKDOWN") {
+        let v = val.trim().to_ascii_lowercase();
+        if matches!(v.as_str(), "1" | "true" | "yes" | "on") {
+            return true;
+        }
+        if matches!(v.as_str(), "0" | "false" | "no" | "off") {
+            return false;
+        }
+    }
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(explicit) = std::env::var_os("NOTECOMPLETE_MCP_SETTINGS") {
+        candidates.push(PathBuf::from(explicit));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(parent) = exe.parent() {
+            if parent.file_name().is_some_and(|n| n == "mcp") {
+                if let Some(user_data) = parent.parent() {
+                    candidates.push(user_data.join("mcp-settings.json"));
+                }
+            }
+        }
+    }
+    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
+        candidates.push(PathBuf::from(xdg).join("notecomplete-desktop/mcp-settings.json"));
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = PathBuf::from(home);
+        candidates.push(home.join(".config/notecomplete-desktop/mcp-settings.json"));
+        candidates.push(
+            home.join("Library/Application Support/notecomplete-desktop/mcp-settings.json"),
+        );
+    }
+    if let Some(appdata) = std::env::var_os("APPDATA") {
+        candidates.push(PathBuf::from(appdata).join("notecomplete-desktop/mcp-settings.json"));
+    }
+    for path in candidates {
+        if let Ok(raw) = std::fs::read_to_string(&path) {
+            if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+                if let Some(pref) = v.get("preferMarkdown").and_then(Value::as_bool) {
+                    return pref;
+                }
+            }
+        }
+    }
+    false
+}
+
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
     json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required}})
 }
@@ -92,6 +144,7 @@ fn tools() -> Value {
         tool("extract_resource", "Write a note's embedded PDFs, recordings or cover image to a folder. Without `index` it lists them.", json!({"path":path,"kind":{"type":"string","enum":["pdf","audio","cover"]},"index":{"type":"integer","minimum":0},"out_dir":{"type":"string"}}), &["path","kind"]),
         tool("read_notes", "The Markdown notes kept with a note (.notecomp, .notepart or .nfedit), with the pages their <!-- page N --> markers tie sections to.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"}}), &["path"]),
         tool("write_notes", "Add to or replace the Markdown notes kept with a note (.notecomp, .notepart or .nfedit). Pages, ink and recordings are untouched; the previous file is kept as <name>.bak. With `page`, appended text goes under a <!-- page N --> marker so it follows that page in NoteComplete.", json!({"path":{"type":"string","description":"Path to a .notecomp, .notepart or .nfedit file"},"text":{"type":"string","description":"Markdown to write"},"mode":{"type":"string","enum":["append","replace"],"description":"append (default) adds after the existing notes; replace overwrites them"},"page":page}), &["path","text"]),
+        tool("create_markdown", "Create a new Markdown (.md) document in the NoteComplete folder (or `out`), optionally embedding editable NoteComplete prefabs. Pass a `prefabs` map of `{ \"key\": <spec> }` and reference them in `markdown` with `<!-- PREFAB:key -->` or `{{prefab:key}}` (unreferenced prefabs are appended at the end). Embedded prefabs stay double-click editable in NoteComplete.", json!({"title":{"type":"string","description":"Document title (used for the default filename)"},"markdown":{"type":"string","description":"Markdown content (may contain <!-- PREFAB:key --> or {{prefab:key}} placeholders)"},"prefabs":{"type":"object","description":"Optional map of placeholder key -> NoteComplete prefab spec object (same spec shapes as add_prefab)"},"out":{"type":"string","description":"Optional output .md or .markdown path (default: a new file in the NoteComplete folder)"},"overwrite":{"type":"boolean","description":"Replace an existing out file"}}), &["title","markdown"]),
         tool("write_anki_deck", "Write flashcards as an Anki-importable text file (File → Import in Anki). Refuses to overwrite unless overwrite is true.", json!({"path":{"type":"string","description":"Output .txt or .tsv path"},"deck":{"type":"string"},"cards":{"type":"array","items":{"type":"object","properties":{"front":{"type":"string"},"back":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}}},"required":["front","back"]}},"overwrite":{"type":"boolean"}}), &["path","deck","cards"]),
     ]);
     if let Value::Array(list) = &mut tools {
@@ -112,10 +165,15 @@ impl Server {
                     .iter()
                     .find(|v| **v == asked)
                     .unwrap_or(&VERSIONS[0]);
+                let pref_notice = if prefer_markdown_setting() {
+                    "USER PREFERENCE: Prefer Markdown (.md) documents for AI-generated documents (use create_markdown with optional inline prefabs, or add_prefab on .md files) instead of handwritten notebooks, unless the user explicitly asks for handwriting. "
+                } else {
+                    ""
+                };
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
                     "serverInfo":{"name":"notecomplete","version":env!("CARGO_PKG_VERSION")},
-                    "instructions":format!("Reads and writes Noteful notes (.noteful, .notecomp, .nfedit) and reads Goodnotes (.goodnotes) and Notability (.ntb) notebooks as Noteful notes; writing to one makes a .nfedit that keeps the notebook. .nfedit files are written as version 13 (a tar archive); older JSON projects still open. Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards and write_notes to add Markdown notes. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots or UML prefabs, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies in its ink/ folder unless you pass out or in_place; every write returns a picture to check.", library().display())}),
+                    "instructions":format!("{pref_notice}Reads and writes Noteful notes (.noteful, .notecomp, .nfedit), reads Goodnotes (.goodnotes) and Notability (.ntb) notebooks as Noteful notes (writing makes a .nfedit that keeps the notebook), creates Markdown (.md) documents with editable prefabs (create_markdown), and inserts prefabs into notebooks, notebook notes, Markdown (.md), HTML (.html), and Euro-Office (.docx, .pptx, .odt, .odp) documents (add_prefab). .nfedit files are written as version 13 (a tar archive); older JSON projects still open. Notes kept by NoteComplete are in {}. Use note_outline first, page_image to read handwriting, write_anki_deck to save flashcards, write_notes to add Markdown notes, and create_markdown to create standalone Markdown documents with embedded editable prefabs. To write real handwriting ink: read example_pages first, then create_notebook, add_pages or clean_copy with Markdown; to mark a page (ticks, circles, highlights, notes, typed text boxes) aim with page_layout, then write_on_page; to insert editable charts, process-state diagrams, timelines, plots, UML, math, or other prefabs into any supported document, use add_prefab. To copy a page design from a picture: design_mockup (or any picture), mockup_grid, then design_page. Written notes go to copies unless you pass out or in_place; every write returns a picture to check.", library().display())}),
                 )
             }
             "ping" => Ok(json!({})),
@@ -225,6 +283,7 @@ impl Server {
             "extract_resource" => text(self.extract(args)?),
             "read_notes" => text(read_notes(args)?),
             "write_notes" => text(write_notes(args)?),
+            "create_markdown" => doc_prefabs::create_markdown(args),
             "write_anki_deck" => text(write_deck(args)?),
             other => Err(format!("Unknown tool {other}").into()),
         }
@@ -627,7 +686,20 @@ fn list_notes(folder: PathBuf) -> Res<Value> {
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase())
             .unwrap_or_default();
-        if !matches!(ext.as_str(), "noteful" | "nfedit" | "goodnotes" | "ntb") {
+        if !matches!(
+            ext.as_str(),
+            "noteful"
+                | "notecomp"
+                | "nfedit"
+                | "goodnotes"
+                | "ntb"
+                | "md"
+                | "markdown"
+                | "docx"
+                | "pptx"
+                | "odt"
+                | "odp"
+        ) {
             continue;
         }
         let meta = std::fs::metadata(&path)?;
@@ -992,7 +1064,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 19);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 20);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
@@ -1083,5 +1155,28 @@ mod tests {
         assert!(!title.is_empty());
         assert_eq!(fold("Memória CACHÉ ñ"), "memoria cache n");
         assert_eq!(fold("Ä").chars().count(), 1);
+    }
+
+    #[test]
+    fn prefer_markdown_setting_reads_mcp_settings_file() {
+        let dir = std::env::temp_dir().join(format!("nc-mcp-pref-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("mcp-settings.json");
+        std::fs::write(&file, r#"{"preferMarkdown": true}"#).unwrap();
+        std::env::set_var("NOTECOMPLETE_MCP_SETTINGS", &file);
+        std::env::remove_var("NOTECOMPLETE_PREFER_MARKDOWN");
+        assert!(prefer_markdown_setting());
+        let mut server = Server::default();
+        let init = server
+            .handle(&json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}))
+            .unwrap();
+        assert!(init["result"]["instructions"]
+            .as_str()
+            .unwrap()
+            .contains("USER PREFERENCE: Prefer Markdown (.md)"));
+        std::fs::write(&file, r#"{"preferMarkdown": false}"#).unwrap();
+        assert!(!prefer_markdown_setting());
+        std::env::remove_var("NOTECOMPLETE_MCP_SETTINGS");
+        std::fs::remove_dir_all(dir).ok();
     }
 }

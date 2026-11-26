@@ -4,6 +4,36 @@
 // once by itself when a tool is installed but not connected.
 
 const ASKED = "notecomplete-agents-asked";
+export const PREFER_MD_KEY = "notecomplete-ai-prefer-markdown";
+
+export function readPreferMarkdown(store = globalThis.localStorage) {
+  try { return store?.getItem(PREFER_MD_KEY) === "true"; } catch { return false; }
+}
+
+export async function syncPreferMarkdown({ api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
+  if (typeof api?.settings === "function") {
+    try {
+      const s = await api.settings();
+      if (typeof s?.preferMarkdown === "boolean") {
+        try { store?.setItem(PREFER_MD_KEY, String(s.preferMarkdown)); } catch { /* Optional. */ }
+        return s.preferMarkdown;
+      }
+    } catch { /* Fall back to local storage. */ }
+  }
+  return readPreferMarkdown(store);
+}
+
+export async function writePreferMarkdown(on, { api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
+  const value = on === true;
+  try { store?.setItem(PREFER_MD_KEY, String(value)); } catch { /* Optional. */ }
+  if (typeof api?.setSettings === "function") {
+    try {
+      const saved = await api.setSettings({ preferMarkdown: value });
+      if (typeof saved?.preferMarkdown === "boolean") return saved.preferMarkdown;
+    } catch { /* Kept in local storage. */ }
+  }
+  return value;
+}
 
 // One line per tool: what it is now and what the button does.
 export function describe(tool) {
@@ -26,15 +56,31 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
     dialog.setAttribute("aria-labelledby", "agentsTitle");
     dialog.innerHTML = `
       <h2 id="agentsTitle">Connect your AI tools to your notes</h2>
-      <p class="muted">NoteComplete comes with a note server. Connected tools can read your notes, make flashcards and write real handwriting into copies of your notes, using your own subscription. Notes are changed only when you ask for it, and the previous file is kept.</p>
+      <p class="muted">NoteComplete comes with a note server. Connected tools can read your notes, make flashcards and write real handwriting or Markdown documents with embedded prefabs, using your own subscription. Notes are changed only when you ask for it, and the previous file is kept.</p>
+      <label class="wizard-check" style="margin: 0 0 12px;">
+        <input id="agentsPreferMarkdown" type="checkbox" />
+        <span><strong>Prefer Markdown (.md) for AI-generated documents</strong><span class="wizard-check-hint">Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.</span></span>
+      </label>
       <ul id="agentsList" class="agents-list"></ul>
       <p id="agentsStatus" class="muted" role="status" aria-live="polite"></p>
       <div class="ocr-actions"><button id="agentsClose" type="button" class="primary">Done</button></div>`;
     document.body.append(dialog);
     dialog.querySelector("#agentsClose").onclick = () => dialog.close();
+    const prefBox = dialog.querySelector("#agentsPreferMarkdown");
+    prefBox.checked = readPreferMarkdown(store);
+    prefBox.onchange = async () => {
+      const saved = await writePreferMarkdown(prefBox.checked, { api, store });
+      prefBox.checked = saved;
+      const note = dialog.querySelector("#agentsStatus");
+      if (note) note.textContent = saved
+        ? "AI tools will prefer Markdown (.md) documents (takes effect on the next MCP session)."
+        : "AI tools will use the default notebook/document format (takes effect on the next MCP session).";
+    };
   }
   async function render() {
     const list = dialog.querySelector("#agentsList"), note = dialog.querySelector("#agentsStatus");
+    const prefBox = dialog.querySelector("#agentsPreferMarkdown");
+    if (prefBox) syncPreferMarkdown({ api, store }).then((v) => { prefBox.checked = v; }, () => {});
     note.textContent = "Looking for your AI tools…";
     let result;
     try { result = await api.status(); } catch (e) { note.textContent = e.message; return; }
