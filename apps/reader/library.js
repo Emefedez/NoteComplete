@@ -432,9 +432,12 @@ export class Library {
   // Where a kept or local note lives on disk (desktop only), for AI tools that read files.
   async pathOf(entry) {
     if (!entry) return '';
-    if (entry.source === 'local') return entry.path;
+    if (entry.source === 'local') return entry.path || '';
+    if (!entry.filename) return '';
     const folder = await this.location();
-    return folder.kind === 'folder' ? `${folder.label.replace(/\/$/, '')}/${entry.filename}` : '';
+    if (folder.kind !== 'folder') return '';
+    const sep = folder.label.includes('\\') && !folder.label.includes('/') ? '\\' : '/';
+    return `${folder.label.replace(/[\\/]+$/, '')}${sep}${entry.filename}`;
   }
   async open(entry) {
     if (entry.source === 'web' || entry.source === 'archive') return null;

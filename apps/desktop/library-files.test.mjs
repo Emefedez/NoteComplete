@@ -237,3 +237,35 @@ test('a Goodnotes notebook kept as a folder is listed and read as one zipped not
   await files.rememberFolder(book);
   assert.deepEqual((await files.listFolder(book)).map(f => f.name), ['AMtest.goodnotes']);
 });
+
+test('assertRevealable allows opened files, folder files, and library downloads, and blocks outside or missing files', async () => {
+  const { mkdir } = await import('node:fs/promises');
+  const root = await mkdtemp(path.join(tmpdir(), 'nc-reveal-'));
+  const downloads = path.join(root, 'NoteComplete');
+  const folder = path.join(root, 'Course');
+  const picked = path.join(root, 'picked.pdf');
+  const outside = path.join(root, 'secret.txt');
+  await mkdir(downloads, { recursive: true });
+  await mkdir(folder, { recursive: true });
+  await writeFile(picked, '%PDF');
+  await writeFile(outside, 'secret');
+  await writeFile(path.join(folder, 'slides.pdf'), '%PDF');
+  const files = libraryFiles({ settingsFile: path.join(root, 'config/library.json'), defaultFolder: downloads });
+
+  await assert.rejects(files.assertRevealable(picked), /not opened/);
+  await assert.rejects(files.assertRevealable(outside), /not opened/);
+  await assert.rejects(files.assertRevealable('relative/file.pdf'), /not opened/);
+
+  await files.remember(picked);
+  assert.equal(await files.assertRevealable(picked), picked);
+
+  await files.rememberFolder(folder);
+  assert.equal(await files.assertRevealable(path.join(folder, 'slides.pdf')), path.join(folder, 'slides.pdf'));
+
+  await files.write('Cloud Note.noteful', new Uint8Array([1, 2, 3]));
+  const kept = path.join(downloads, 'Cloud Note.noteful');
+  assert.equal(await files.assertRevealable(kept), kept);
+
+  await assert.rejects(files.assertRevealable(path.join(downloads, 'missing.noteful')), /no longer in its folder/);
+  await assert.rejects(files.assertRevealable(path.join(downloads, '..', 'secret.txt')), /not opened/);
+});

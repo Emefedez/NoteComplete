@@ -329,6 +329,7 @@ export function createOfficeBridge({
       platform,
       runner: meta?.runner || runnerInfo.runner,
       running: Boolean(running),
+      fontsGenerated: Boolean(meta?.fontsGenerated),
       port: running?.port || 0,
       downloadBytes: pin.bytes,
       diskBytes: image.diskBytes,

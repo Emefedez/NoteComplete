@@ -15,6 +15,7 @@ import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
 import { tabStore } from './tabs.js';
 import { updater } from './updater.js';
+import { branchBuilder } from './branch-build.js';
 import { saveSession, takeSession } from './session.js';
 import { prefabFolder, userPrefabPath } from './prefab-folder.js';
 import { menuTemplate, uiZoomStep, ownPage } from './app-menu.js';
@@ -219,7 +220,9 @@ let started = false;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
 const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico', 'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'aac', 'weba', 'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'docx', 'docm', 'dotx', 'doc', 'rtf', 'odt', 'fodt', 'xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'pptx', 'pptm', 'ppt', 'odp', 'epub', 'ipynb', 'rdata', 'rda', 'rds', 'txt', 'md', 'markdown', 'rst', 'adoc', 'asciidoc', 'org', 'rmd', 'qmd', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
-const webPreferences = { nodeIntegration: false, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
+// nodeIntegrationInSubFrames only runs the preload in the reader's frames too: in sub-frames it
+// exposes nothing and only lifts Euro-Office's 25 FPS paint cap (preload.cjs officePaintHook).
+const webPreferences = { nodeIntegration: false, nodeIntegrationInSubFrames: true, contextIsolation: true, sandbox: true, spellcheck: false, webviewTag: true, preload: fileURLToPath(new URL('./preload.cjs', import.meta.url)) };
 // Web links (reader web-view.js) open in <webview>s: web pages only, sandboxed, no preload,
 // in their own session so sign-ins stay apart from the reader's storage.
 const WEB_SESSION = 'persist:notecomplete-web';
@@ -598,6 +601,11 @@ app.whenReady().then(async () => {
     if (err) throw Error(err);
     return true;
   }));
+  ipcMain.handle('files:show-in-folder', guarded(async (_event, file) => {
+    const resolved = await files.assertRevealable(file);
+    shell.showItemInFolder(resolved);
+    return true;
+  }));
   ipcMain.handle('files:read-local-note', guarded((_event, file) => files.readLocalNote(file)));
   ipcMain.handle('files:stat-local-note', guarded((_event, file) => files.statLocalNote(file)));
   // Groups: a whole folder, or several files added to the open document.
@@ -793,6 +801,33 @@ app.whenReady().then(async () => {
     return opening;
   }));
   ipcMain.handle('update:install', guarded(event => updates.install(p => { if (!event.sender.isDestroyed()) event.sender.send('update:progress', p); })));
+  // Beta updates from a branch (branch-build.js): fetched and built on this machine, swapped in
+  // only when the build succeeds. One build at a time, for the whole app; every tab sees it.
+  const branches = branchBuilder({ app, stateFile: path.join(app.getPath('userData'), 'branch-build.json') });
+  const toReaders = (channel, value) => { for (const view of views.values()) if (!view.webContents.isDestroyed()) view.webContents.send(channel, value); };
+  ipcMain.handle('update:stable', guarded(() => updates.stable()));
+  ipcMain.handle('branch:info', guarded(() => branches.info()));
+  ipcMain.handle('branch:list', guarded(() => branches.branches()));
+  ipcMain.handle('branch:status', guarded((_event, name) => branches.status(String(name ?? ''))));
+  ipcMain.handle('branch:missing', guarded(() => branches.missing()));
+  ipcMain.handle('branch:build', guarded(async (_event, name) => {
+    const lines = [];
+    let flush = null;
+    const onLine = (line) => {
+      lines.push(String(line).slice(0, 400));
+      // At most ten messages a second: cargo and npm print fast.
+      flush ??= setTimeout(() => { flush = null; toReaders('branch:line', lines.splice(0)); }, 100);
+    };
+    try {
+      return await branches.build(String(name ?? ''), { onLine, onStep: (step) => toReaders('branch:step', String(step)) });
+    } finally {
+      clearTimeout(flush);
+      if (lines.length) toReaders('branch:line', lines.splice(0));
+    }
+  }));
+  ipcMain.handle('branch:cancel', guarded(() => branches.cancel()));
+  ipcMain.handle('branch:log', guarded(async () => { const err = await shell.openPath(branches.logFile); return !err; }));
+  app.on('will-quit', () => { branches.cancel(); });
   ipcMain.handle('update:skip', guarded((_event, version) => updates.skip(String(version))));
   ipcMain.handle('update:settings', guarded(() => updates.settings()));
   ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));

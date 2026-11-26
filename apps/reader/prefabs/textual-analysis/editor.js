@@ -8,7 +8,8 @@
 // candidate's folder, owner, merge. A click on a row flashes its words in the text.
 import { editorShell, field, textInput, selectInput, checkInput, make, button, orderedIds, saveOrder, keyFor, indexOfKey, sortable } from '../kit/index.js';
 import { render, kindIcon } from './render.js';
-import { KINDS, SHOWS, normalize, classify, candidateAt, findOccurrences, occurrences, update, setText, merge, move, removeCandidate, suggestName } from './model.js';
+import { KINDS, SHOWS, PALETTE, normalize, classify, candidateAt, findOccurrences, occurrences, update, setText, merge, move, removeCandidate, suggestName } from './model.js';
+import { download } from '../../download.js';
 import { tinyMdeHighlightGrammar, paintEditorHighlights } from '../../md-highlight.js';
 import { textFind } from '../../text-find.js';
 import { umlFromAnalysis, withLinks } from './uml-from.js';
@@ -387,8 +388,58 @@ export function open(root, { spec, editing, host }) {
     }
   }
 
+  // ----- Colour preset popover (12 curated highlight pastels + custom colour).
+  let colorPop = null;
+  function closeColorPop() {
+    if (!colorPop) return;
+    document.removeEventListener('pointerdown', colorPop.outside, true);
+    colorPop.el.remove();
+    colorPop = null;
+  }
+  function openColorPop(anchor, i, current) {
+    if (colorPop?.anchor === anchor) { closeColorPop(); return; }
+    closeColorPop();
+    const hostEl = root.closest('dialog') || document.body;
+    const grid = make('div', { className: 'ta-color-grid' }, ...PALETTE.map((hex) => {
+      const sw = make('button', { type: 'button', className: `ta-color-swatch${hex.toLowerCase() === String(current).toLowerCase() ? ' active' : ''}`, title: hex });
+      sw.style.background = hex;
+      sw.setAttribute('aria-label', `Highlight colour ${hex}`);
+      sw.onclick = () => {
+        closeColorPop();
+        change(update(model, i, { colour: hex }), { rebuild: false });
+        anchor.style.background = hex;
+        paint();
+        drawPage();
+      };
+      return sw;
+    }));
+    const customInput = make('input', { type: 'color', value: current, ariaLabel: 'Custom highlight colour' });
+    customInput.oninput = () => { model.candidates[i].colour = customInput.value; anchor.style.background = customInput.value; paint(); drawPage(); };
+    customInput.onchange = () => { const v = customInput.value; model.candidates[i].colour = current; change(update(model, i, { colour: v }), { rebuild: false }); closeColorPop(); };
+    const customRow = make('label', { className: 'ta-color-custom' }, make('span', { textContent: 'Custom…' }), customInput);
+    const pop = make('div', { className: 'ta-color-pop', role: 'dialog', ariaLabel: 'Highlight colour presets' }, grid, customRow);
+    hostEl.append(pop);
+    const r = anchor.getBoundingClientRect();
+    const pr = pop.getBoundingClientRect();
+    const left = Math.max(8, Math.min(window.innerWidth - pr.width - 8, r.right - pr.width));
+    const top = r.bottom + pr.height + 8 <= window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - pr.height - 6);
+    pop.style.left = `${Math.round(left)}px`;
+    pop.style.top = `${Math.round(top)}px`;
+    const outside = (ev) => { if (!pop.contains(ev.target) && ev.target !== anchor) closeColorPop(); };
+    setTimeout(() => document.addEventListener('pointerdown', outside, true));
+    colorPop = { el: pop, anchor, outside };
+  }
+
+  // Auto-sizing table cell textarea: expands vertically on click/focus to show all text cleanly.
+  function autoSizeCell(el, focused = false) {
+    el.style.height = 'auto';
+    const natural = el.scrollHeight;
+    el.style.height = `${focused ? Math.max(54, natural + 2) : Math.max(26, Math.min(natural, 64))}px`;
+  }
+
   // ----- The candidate table.
   function drawTable() {
+    closeColorPop();
     const counts = occurrences(model);
     const head = make('tr', {}, ...['No.', 'Candidate Class', 'Extracted Text', 'Type', 'Description', 'Occurrence', 'Highlight', ''].map((t) => make('th', { textContent: t })));
     const rows = model.candidates.map((c, i) => {
@@ -412,16 +463,25 @@ export function open(root, { spec, editing, host }) {
         }
       };
       name.onkeydown = (e) => { if (e.key === 'Enter') name.blur(); };
-      const text = make('input', { type: 'text', value: [c.text, ...(c.aliases || [])].join(', '), spellcheck: false, ariaLabel: 'Extracted text', title: 'The words it stands for in the text (another candidate’s words merge the two)' });
-      text.onchange = () => { const [first] = text.value.split(','); change(setText(model, i, first)); };
-      text.onkeydown = (e) => { if (e.key === 'Enter') text.blur(); };
+      const text = make('textarea', { rows: 1, className: 'ta-cell-area', value: [c.text, ...(c.aliases || [])].join(', '), spellcheck: false, ariaLabel: 'Extracted text', title: 'Click to expand and edit extracted text (comma-separated aliases; matching another candidate merges them)' });
+      text.onfocus = () => autoSizeCell(text, true);
+      text.oninput = () => autoSizeCell(text, true);
+      text.onblur = () => {
+        autoSizeCell(text, false);
+        const [first] = text.value.split(',');
+        if (first.trim() && first.trim() !== c.text) change(setText(model, i, first));
+      };
+      text.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } };
       const type = selectInput(KINDS.map((k) => [k.id, k.label]), c.kind, (kind) => change(update(model, i, { kind })));
       type.ariaLabel = 'Type';
-      const desc = make('textarea', { rows: 1, value: c.description, ariaLabel: 'Description' });
-      desc.oninput = () => typing(() => { model.candidates[i].description = desc.value; });
-      const colour = make('input', { type: 'color', value: c.colour, title: 'Highlight colour' });
-      colour.oninput = () => { model.candidates[i].colour = colour.value; paint(); drawPage(); };
-      colour.onchange = () => { const v = colour.value; model.candidates[i].colour = c.colour; change(update(model, i, { colour: v }), { rebuild: false }); };
+      const desc = make('textarea', { rows: 1, className: 'ta-cell-area ta-desc', value: c.description, ariaLabel: 'Description', placeholder: 'Notes…' });
+      desc.onfocus = () => autoSizeCell(desc, true);
+      desc.oninput = () => { autoSizeCell(desc, true); typing(() => { model.candidates[i].description = desc.value; }); };
+      desc.onblur = () => autoSizeCell(desc, false);
+      const colour = make('button', { type: 'button', className: 'ta-hl-pill', title: 'Choose highlight colour' });
+      colour.style.background = c.colour;
+      colour.setAttribute('aria-label', `Highlight colour ${c.colour}`);
+      colour.onclick = (ev) => { ev.stopPropagation(); openColorPop(colour, i, model.candidates[i]?.colour || c.colour); };
       const up = button('collapse', 'Move up', { iconOnly: true });
       up.disabled = i === 0;
       up.onclick = () => { selected = i - 1; change(move(model, i, i - 1)); };
@@ -447,6 +507,7 @@ export function open(root, { spec, editing, host }) {
     });
     const empty = !rows.length && make('p', { className: 'ta-empty', textContent: 'No candidates yet. Select words in the text and press a type above it (or Alt and its number).' });
     table.replaceChildren(make('table', {}, make('thead', {}, head), make('tbody', {}, ...rows)), empty || '');
+    requestAnimationFrame(() => table.querySelectorAll('textarea.ta-cell-area').forEach((ta) => autoSizeCell(ta, false)));
   }
   function drawTableCounts() {
     const counts = occurrences(model);
@@ -514,10 +575,38 @@ export function open(root, { spec, editing, host }) {
     const makeUml = button('uml', 'Create UML diagrams', { title: 'Classes with their attributes and operations become a class diagram; actors and use cases a use case diagram. Each opens in the diagram editor, then goes on the page.' });
     makeUml.disabled = !host.insert || !['class', 'actor', 'usecase'].some((k) => kinds.has(k));
     makeUml.onclick = () => createUml();
+    const exportJsonBtn = button('export', 'Export JSON', { title: 'Save this Textual Analysis as a .json file so you can relate/load it from any UML diagram' });
+    exportJsonBtn.onclick = () => {
+      settleTyping();
+      const base = (model.title || 'textual-analysis').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'textual-analysis';
+      download(new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' }), `${base}.textual-analysis.json`);
+      shell.say(`Exported ${base}.textual-analysis.json.`);
+    };
+    const noteUmls = host.project?.getUmlDiagrams?.() || [];
+    const linkedUmls = noteUmls.filter((u) => u.spec?.origin?.module === 'textual-analysis' && u.spec?.origin?.id === model.id);
+    const relateSelect = noteUmls.length ? selectInput(
+      [['', 'Relate to UML diagram…'], ...noteUmls.map((u) => [u.key, `${u.label} (${u.where})${u.spec?.origin?.id === model.id ? ' ✓' : ''}`])],
+      '',
+      (key) => {
+        if (!key) return;
+        const target = noteUmls.find((u) => u.key === key);
+        if (!target) return;
+        settleTyping();
+        host.project?.linkUmlDiagram?.(target, model);
+        shell.say(`Linked to ${target.label}. Apply to save, then open it to grab candidates.`);
+      },
+    ) : null;
+    const linkedUmlList = linkedUmls.length ? make('div', { className: 'ta-links' }, ...linkedUmls.map((u) => {
+      const b = make('button', { type: 'button', className: 'ta-link-btn', textContent: `${u.label} (${u.where})`, title: `Open ${u.label}` });
+      b.onclick = () => jumpToDiagram({ module: 'uml', pageIndex: u.pageIndex, partId: u.partId });
+      return b;
+    })) : null;
     const linked = model.candidates.filter((x) => x.uml?.length).length;
     shell.panel.replaceChildren(
       make('h4', { textContent: 'UML' }),
-      makeUml,
+      make('div', { className: 'pk-row' }, makeUml, exportJsonBtn),
+      linkedUmlList && field('Linked UML diagrams', linkedUmlList),
+      relateSelect && field('Relate to UML', relateSelect, 'Syncs this analysis with an existing UML diagram in this note'),
       make('small', { className: 'ta-note', textContent: !host.insert ? 'Open this analysis from a note to make diagrams from it.' : linked ? `${linked} candidate${linked === 1 ? '' : 's'} already in a diagram; making them again adds new diagrams.` : `${host.applyLabel}s this analysis, then opens each diagram.` }),
       field('Title', textInput(model.title, (title) => typing(() => { model.title = title; }))),
       field('On the page', selectInput(SHOWS.map((s) => [s, SHOW_LABELS[s]]), model.show, (show) => change({ ...model, show }, { rebuild: false }))),
@@ -559,6 +648,7 @@ export function open(root, { spec, editing, host }) {
   return {
     destroy() {
       destroyed = true;
+      closeColorPop();
       clearTimeout(typingTimer);
       clearTimeout(flashTimer);
       cancelAnimationFrame(paintFrame);

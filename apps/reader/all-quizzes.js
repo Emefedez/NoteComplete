@@ -430,7 +430,7 @@ export function allQuizzes({
           ? 'None for this note — switch to All or create one from Study.'
           : kind === 'decks'
             ? 'None yet: Study → Generate flashcards….'
-            : 'None yet: Study → Quiz me….';
+            : 'None yet: Study → Generate quiz (AI)….';
       }
     }
 

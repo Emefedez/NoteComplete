@@ -58,17 +58,22 @@ function build({ status, onInsertRPrefab }) {
   const d = document.createElement('dialog');
   d.className = 'ocr-dialog zh-settings math-settings';
   d.setAttribute('aria-labelledby', 'mathSettingsTitle');
-  d.innerHTML = `<div class="zh-settings-head">
-    <h2 id="mathSettingsTitle">Math Mode &amp; R Bridge</h2>
-    <div class="expand-mode-pills" role="tablist" aria-label="Math settings sections">
+  d.innerHTML = `<div class="math-rc-head">
+    <div class="math-rc-title-row">
+      <h2 id="mathSettingsTitle">Math Mode &amp; R Bridge</h2>
+      <button type="button" class="math-rc-close" data-close-x aria-label="Close" title="Close"></button>
+    </div>
+    <div class="math-rc-tabs" role="tablist" aria-label="Math settings sections">
       <button type="button" role="tab" data-math-tab="math" aria-selected="true">Math &amp; CAS</button>
       <button type="button" role="tab" data-math-tab="rbridge" aria-selected="false">R &amp; Studio Bridge</button>
     </div>
   </div>
   <div class="zh-settings-panel" data-math-panel="math">
     <label class="zh-set-row zh-set-check"><input type="checkbox" data-ms="enabled"> <span>Show Math Mode bar (quick formula composer, CAS evaluate/d/dx/solve &amp; R figures · Ctrl+Shift+M)</span></label>
-    <label class="zh-set-row"><span>Angle unit</span><select data-ms="angleUnit"><option value="rad">Radians (rad)</option><option value="deg">Degrees (deg)</option></select></label>
-    <label class="zh-set-row"><span>Numeric precision</span><select data-ms="precision"><option value="4">4 digits</option><option value="6">6 digits</option><option value="8">8 digits</option><option value="10">10 digits</option></select></label>
+    <div class="math-rc-grid">
+      <label class="zh-set-row"><span>Angle unit</span><select data-ms="angleUnit"><option value="rad">Radians (rad)</option><option value="deg">Degrees (deg)</option></select></label>
+      <label class="zh-set-row"><span>Numeric precision</span><select data-ms="precision"><option value="4">4 digits</option><option value="6">6 digits</option><option value="8">8 digits</option><option value="10">10 digits</option></select></label>
+    </div>
     <label class="zh-set-row zh-set-check"><input type="checkbox" data-ms="autoEval"> <span>Auto-evaluate numeric expressions live in the Math Mode bar</span></label>
   </div>
   <div class="zh-settings-panel" data-math-panel="rbridge" hidden>
@@ -76,28 +81,31 @@ function build({ status, onInsertRPrefab }) {
       <div class="math-bridge-status-row">
         <span class="math-bridge-dot" data-rb-dot></span>
         <strong data-rb-label>Checking R environment…</strong>
-        <button type="button" class="math-mini-btn" data-rb-refresh>Refresh</button>
+        <span class="spacer"></span>
+        <button type="button" class="math-rc-btn" data-rb-refresh>Refresh</button>
       </div>
-      <p class="muted" data-rb-detail style="margin:6px 0 10px;"></p>
+      <p class="muted math-bridge-detail" data-rb-detail></p>
       <div class="math-bridge-pkgs" data-rb-pkgs></div>
       <div class="math-bridge-actions">
-        <button type="button" class="primary" data-rb-test>Test SVG Render</button>
-        <button type="button" data-rb-studio>Launch R Commander Studio</button>
-        <button type="button" class="primary" data-rb-install hidden>Install R Commander Studio</button>
-        <button type="button" data-rb-insert>Insert R Figure…</button>
-        <button type="button" data-rb-copy-install>Copy R Install Cmd</button>
+        <button type="button" class="math-rc-btn primary" data-rb-test>Test SVG Render</button>
+        <button type="button" class="math-rc-btn" data-rb-studio>Launch R Commander Studio</button>
+        <button type="button" class="math-rc-btn primary" data-rb-install hidden>Install R Commander Studio</button>
+        <button type="button" class="math-rc-btn" data-rb-insert>Insert R Figure…</button>
+        <button type="button" class="math-rc-btn" data-rb-copy-install>Copy R Install Cmd</button>
       </div>
       <progress data-rb-install-prog max="1" value="0" hidden style="width:100%;margin-top:8px;"></progress>
       <div class="math-bridge-preview" data-rb-preview hidden></div>
     </div>
     <label class="zh-set-row" style="margin-top:10px;"><span>Open R files &amp; workspaces in</span><select data-ms="studioOpenMode"><option value="window">R Commander Studio (own window)</option><option value="embedded">Inside NoteComplete (zero-bloat embedded)</option></select></label>
-    <label class="zh-set-row zh-set-check" style="margin-top:6px;"><input type="checkbox" data-ms="rAutoFallback"> <span>Use local Rscript fallback when R Commander Studio is not running</span></label>
-    <p class="muted" style="margin:6px 0 0;font-size:12px;">Security: NoteComplete never executes R code automatically when opening a note. Cached vector SVGs render offline on every device; R runs only when you explicitly click Run / Update.</p>
+    <label class="zh-set-row zh-set-check" style="margin-top:8px;"><input type="checkbox" data-ms="rAutoFallback"> <span>Use local Rscript fallback when R Commander Studio is not running</span></label>
+    <p class="muted math-rc-footnote">Security: NoteComplete never executes R code automatically when opening a note. Cached vector SVGs render offline on every device; R runs only when you explicitly click Run / Update.</p>
   </div>
-  <div class="ocr-actions"><button type="button" class="primary" data-close>Done</button></div>`;
+  <div class="ocr-actions math-rc-foot"><button type="button" class="math-rc-btn primary" data-close>Done</button></div>`;
 
   const closeBtn = d.querySelector('[data-close]');
   closeBtn.onclick = () => d.close();
+  const closeX = d.querySelector('[data-close-x]');
+  if (closeX) { closeX.append(icon('close')); closeX.onclick = () => d.close(); }
   d.addEventListener('keydown', (e) => e.stopPropagation());
 
   for (const btn of d.querySelectorAll('[data-math-tab]')) {
@@ -197,8 +205,12 @@ function build({ status, onInsertRPrefab }) {
     }
   };
 
-  const head = d.querySelector('.zh-settings-head');
-  if (head) head.querySelector('h2').prepend(icon('graph'), ' ');
+  const head = d.querySelector('.math-rc-head');
+  if (head) head.querySelector('h2').prepend(icon('rstudio'));
+  d.querySelector('[data-rb-refresh]')?.prepend(icon('restart'));
+  d.querySelector('[data-rb-studio]')?.prepend(icon('rstudio'));
+  d.querySelector('[data-rb-insert]')?.prepend(icon('rplot'));
+  d.querySelector('[data-rb-copy-install]')?.prepend(icon('copy'));
   document.body.append(d);
   return d;
 }

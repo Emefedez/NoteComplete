@@ -22,7 +22,7 @@ export function createMathBar({
     <div class="math-bar-row">
       <span class="math-bar-badge" title="Math Mode active (Ctrl+Shift+M)">∑ Math</span>
       <input type="text" class="math-bar-input" placeholder="Formula or LaTeX: x^3 - 3x, \\sin(\\pi/6), 2x^2 - 8 = 0…" spellcheck="false" autocomplete="off" aria-label="Math expression" />
-      <div class="math-bar-preview" aria-live="polite"></div>
+      <div class="math-bar-preview" aria-live="polite" role="button" tabindex="0" title="Click to copy formula to clipboard"></div>
       <div class="math-bar-actions" role="group" aria-label="Math actions">
         <button type="button" data-ma="eval" title="Evaluate numeric expression"><b>=</b></button>
         <button type="button" data-ma="diff" title="Symbolic derivative d/dx">d/dx</button>
@@ -60,10 +60,29 @@ export function createMathBar({
   container.querySelector('[data-ma="close"]').append(icon('close'));
 
   let lastResultLatex = '';
+  let lastPreviewLatex = '';
   let katexMod = null;
+
+  async function copyPreview() {
+    const tex = (lastPreviewLatex || lastResultLatex || input.value.trim()).trim();
+    if (!tex || preview.classList.contains('is-error')) return;
+    try {
+      await navigator.clipboard.writeText(tex);
+      preview.classList.add('copied');
+      setTimeout(() => preview.classList.remove('copied'), 900);
+      status(`Copied to clipboard: ${tex}`);
+    } catch {
+      status('Could not copy to clipboard.', true);
+    }
+  }
+  preview.addEventListener('click', copyPreview);
+  preview.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); copyPreview(); }
+  });
 
   async function renderPreview(latex, note = '', isError = false) {
     preview.classList.toggle('is-error', isError);
+    lastPreviewLatex = isError ? '' : String(latex || '').trim();
     if (!latex && !note) {
       preview.textContent = '';
       return;

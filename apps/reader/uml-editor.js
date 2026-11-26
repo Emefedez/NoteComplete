@@ -21,6 +21,8 @@ import { resizablePanels } from './panel-resize.js';
 import { editorTouch } from './editor-touch.js';
 import { loadKitStyles } from './prefabs/kit/shell.js';
 import { colorTextarea } from './code-highlight.js';
+import { normalize as normalizeAnalysis } from './prefabs/textual-analysis/model.js';
+import { groupAnalysisCandidates, makeClassFromCandidate, makeClassFromAttribute, makeAttributeLine, makeOperationLine, memberName, syncDiagramWithAnalysis } from './prefabs/textual-analysis/uml-from.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
 // Whether a connector's two ends differ (an arrowhead, a diamond, roles at each end).
@@ -34,6 +36,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const iconButton = (name, title) => { const b = make('button', { type: 'button', className: 'uml-icon', title }); b.setAttribute('aria-label', title.replace(/ \(.*\)$/, '')); b.append(icon(name)); return b; };
 const PANEL_KEY = 'notecomplete.uml.panel';
 const NOTES_KEY = 'notecomplete.uml.notes';
+const PALETTE_COLLAPSED_KEY = 'notecomplete.uml.paletteCollapsed';
+const TA_KEY = 'notecomplete.uml.ta';
 // Which way diagrams are edited (uml.js): drawn, as PlantUML, or both.
 const VIEWS = UML_VIEWS, VIEW_KEY = UML_VIEW_KEY, CODE_KINDS = CODE_DIAGRAMS, savedView = savedUmlView;
 const fileName = (model, ext) => `${(model.name || umlName(model)).replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'diagram'}.${ext}`;
@@ -87,6 +91,7 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     syncCode();
     syncRender();
     if (panel && panelOpen) buildPanel();
+    if (taOpen) buildTaPane();
     updateButtons();
     onChange?.(model);
   }
@@ -117,15 +122,19 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   }
   const viewGroup = make('div', { className: 'uml-views', role: 'group', ariaLabel: 'View' }, ...viewBtns);
   const notesBtn = iconButton('note', 'Notes on this diagram, in Markdown, kept with it (N)');
+  const taBtn = iconButton('text', 'Grab from Textual Analysis: relate an analysis and add classes, attributes & operations');
   const helpBtn = iconButton('help', 'Cheat sheet: what the mouse and the keys do (?)');
   helpBtn.classList.add('uml-help');
   const gap = () => make('span', { className: 'uml-gap' });
   const spacer = make('span', { className: 'uml-spacer' });
   const cancelBtn = onCancel && make('button', { type: 'button', textContent: 'Cancel' });
   const applyBtn = onApply && make('button', { type: 'button', className: 'primary', textContent: applyLabel });
-  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), viewGroup, gap(), importBtn, importInput, exportBtn, notesBtn, panelBtn, helpBtn, spacer, cancelBtn, applyBtn);
+  const bar = make('div', { className: 'uml-bar' }, kindSelect, gap(), undoBtn, redoBtn, delBtn, clearAllBtn, gap(), zoomOut, zoomIn, fitBtn, gap(), viewGroup, gap(), importBtn, importInput, exportBtn, taBtn, notesBtn, panelBtn, helpBtn, spacer, cancelBtn, applyBtn);
   const palette = make('div', { className: 'uml-palette', role: 'toolbar', ariaLabel: 'Elements and connectors' });
   const canvas = make('div', { className: 'uml-canvas', tabIndex: 0 });
+  const taPane = make('aside', { className: 'uml-ta-pane', ariaLabel: 'Textual Analysis' });
+  const taFileInput = make('input', { type: 'file', accept: '.json,application/json', hidden: true });
+  taPane.append(taFileInput);
   const panel = make('div', { className: 'uml-panel' });
   const status = make('div', { className: 'uml-status', role: 'status' });
   // Menus go inside the editor's dialog over a note (the page under a modal one is inert).
@@ -146,33 +155,371 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   const codeColor = colorTextarea(code, 'plantuml');
   const renderPane = make('div', { className: 'uml-render-pane' });
   const work = make('div', { className: 'uml-work' }, canvas, codePane, renderPane);
-  const main = make('div', { className: 'uml-main' }, palette, work, notes.pane, panel);
+  const main = make('div', { className: 'uml-main' }, palette, work, taPane, notes.pane, panel);
   root.append(bar, main, status);
-  // The tools, the notes and the properties, each as wide as dragged.
+  // The tools, Textual Analysis, notes and properties, each as wide as dragged.
   const sides = resizablePanels(main, [
     { panel: palette, variable: '--u-left', side: 'left', key: 'uml-left', min: 120, max: 360 },
+    { panel: taPane, variable: '--u-ta', side: 'right', key: 'uml-ta', min: 210, max: 520 },
     { panel: notes.pane, variable: '--u-notes', side: 'right', key: 'uml-notes', min: 200, max: 700 },
-    { panel, variable: '--u-panel', side: 'right', key: 'uml-panel', min: 220, max: 600 },
+    { panel: panel, variable: '--u-panel', side: 'right', key: 'uml-panel', min: 220, max: 600 },
   ]);
+  // Collapsible left & right sidebar edge tabs (like the Pages panel tab).
+  let paletteCollapsed = false;
+  try { paletteCollapsed = localStorage.getItem(PALETTE_COLLAPSED_KEY) === '1'; } catch { /* Optional. */ }
+  const leftTab = make('button', { type: 'button', className: 'panel-collapse-tab' });
+  leftTab.dataset.side = 'left';
+  const rightTab = make('button', { type: 'button', className: 'panel-collapse-tab' });
+  rightTab.dataset.side = 'right';
+  main.append(leftTab, rightTab);
+  let lastRightPane = 'panel';
+  let taOpen = false;
+  try { taOpen = localStorage.getItem(TA_KEY) === '1'; } catch { /* Optional. */ }
+  function rightSideOpen() { return panelOpen || notesOpen || taOpen; }
+  function placeCollapseTabs() {
+    const box = main.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    if (paletteCollapsed) {
+      leftTab.style.left = '0px';
+    } else {
+      const r = palette.getBoundingClientRect();
+      leftTab.style.left = `${Math.max(0, r.right - box.left)}px`;
+    }
+    const rightEl = taOpen ? taPane : notesOpen ? notes.pane : panelOpen ? panel : null;
+    if (rightEl) {
+      const r = rightEl.getBoundingClientRect();
+      rightTab.style.left = `${Math.max(0, r.left - box.left - 18)}px`;
+    } else {
+      rightTab.style.left = `${Math.max(0, box.width - 18)}px`;
+    }
+  }
+  function syncCollapseTabs() {
+    main.classList.toggle('palette-collapsed', paletteCollapsed);
+    leftTab.replaceChildren(icon(paletteCollapsed ? 'chevronRight' : 'chevronLeft'));
+    leftTab.title = paletteCollapsed ? 'Show tools sidebar' : 'Hide tools sidebar';
+    leftTab.setAttribute('aria-label', leftTab.title);
+    leftTab.setAttribute('aria-expanded', String(!paletteCollapsed));
+    const rOpen = rightSideOpen();
+    rightTab.replaceChildren(icon(rOpen ? 'chevronRight' : 'chevronLeft'));
+    rightTab.title = rOpen ? 'Hide right sidebar' : 'Show right sidebar';
+    rightTab.setAttribute('aria-label', rightTab.title);
+    rightTab.setAttribute('aria-expanded', String(rOpen));
+    requestAnimationFrame(() => { sides.update(); placeCollapseTabs(); });
+  }
+  leftTab.onclick = () => {
+    paletteCollapsed = !paletteCollapsed;
+    try { localStorage.setItem(PALETTE_COLLAPSED_KEY, paletteCollapsed ? '1' : '0'); } catch { /* Optional. */ }
+    syncCollapseTabs();
+  };
+  rightTab.onclick = () => {
+    if (rightSideOpen()) {
+      if (taOpen) lastRightPane = 'ta';
+      else if (notesOpen) lastRightPane = 'notes';
+      else lastRightPane = 'panel';
+      if (panelOpen) showPanel(false);
+      if (notesOpen) showNotes(false);
+      if (taOpen) showTa(false);
+    } else {
+      if (lastRightPane === 'ta') showTa(true);
+      else if (lastRightPane === 'notes') showNotes(true);
+      else showPanel(true);
+    }
+  };
+  const collapseObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(() => placeCollapseTabs()) : null;
+  if (collapseObserver) {
+    for (const el of [main, palette, taPane, notes.pane, panel]) collapseObserver.observe(el);
+  }
   // The properties panel: closed unless asked for (names change in place, on the canvas).
   let panelOpen = false;
   try { panelOpen = localStorage.getItem(PANEL_KEY) === '1'; } catch { /* Optional. */ }
   function showPanel(on) {
     panelOpen = on;
+    if (on) lastRightPane = 'panel';
     main.classList.toggle('with-panel', on);
     panelBtn.setAttribute('aria-pressed', String(on));
     try { localStorage.setItem(PANEL_KEY, on ? '1' : '0'); } catch { /* Optional. */ }
     if (on) buildPanel();
+    syncCollapseTabs();
   }
   let notesOpen = false;
   try { notesOpen = localStorage.getItem(NOTES_KEY) === '1'; } catch { /* Optional. */ }
   function showNotes(on, focus = false) {
     notesOpen = on;
+    if (on) lastRightPane = 'notes';
     main.classList.toggle('with-notes', on);
     notesBtn.setAttribute('aria-pressed', String(on));
     try { localStorage.setItem(NOTES_KEY, on ? '1' : '0'); } catch { /* Optional. */ }
     if (on) notes.show().then(() => { if (focus) notes.focus(); }); else notes.hide();
+    syncCollapseTabs();
   }
+  // --- Grab from Textual Analysis sidebar (linked prefab or loaded JSON file) ----------
+  const fileAnalyses = []; // standalone .json Textual Analysis files loaded in this session
+  let activeTaKey = '';
+  const allAnalyses = () => [
+    ...(project?.getAnalyses?.() || []),
+    ...fileAnalyses,
+  ];
+  function currentAnalysisEntry() {
+    const list = allAnalyses();
+    if (activeTaKey) {
+      const hit = list.find((a) => a.key === activeTaKey);
+      if (hit) return hit;
+    }
+    if (model.origin?.module === 'textual-analysis' && model.origin.id) {
+      const linked = list.find((a) => a.spec?.id === model.origin.id);
+      if (linked) { activeTaKey = linked.key; return linked; }
+    }
+    if (list.length) { activeTaKey = list[0].key; return list[0]; }
+    return null;
+  }
+  function linkAnalysis(spec) {
+    if (!spec?.id) return;
+    if (model.origin?.module === 'textual-analysis' && model.origin.id === spec.id) return;
+    snapshot('ta-link');
+    model.origin = { module: 'textual-analysis', id: spec.id, candidates: { ...(model.origin?.candidates || {}) } };
+    onChange?.(model);
+  }
+  function findElForCand(cand) {
+    const cid = cand.id;
+    const byOrigin = Object.entries(model.origin?.candidates || {}).find(([, v]) => v === cid)?.[0];
+    if (byOrigin) {
+      const hit = model.elements.find((e) => e.id === byOrigin);
+      if (hit) return hit;
+    }
+    return model.elements.find((e) => e.modelId === cid) || model.elements.find((e) => e.name.toLowerCase() === String(cand.name || '').toLowerCase()) || null;
+  }
+  function nextFreeSpot() {
+    const col = model.elements.length % 3;
+    const maxY = model.elements.reduce((m, e) => Math.max(m, (e.bounds?.[1] || 0) + (e.bounds?.[3] || 0)), 0);
+    return [30 + col * 240, maxY ? Math.min(maxY + 30, 30 + Math.floor(model.elements.length / 3) * 180) : 30];
+  }
+  function targetClassElement() {
+    if (selected?.kind === 'element') {
+      const el = model.elements.find((e) => e.id === selected.id && (e.type === 'class' || e.type === 'interface'));
+      if (el) return el;
+    }
+    const classes = model.elements.filter((e) => e.type === 'class' || e.type === 'interface');
+    return classes.length === 1 ? classes[0] : null;
+  }
+  function addMemberToClass(el, cand, kind) {
+    if (!el) return say('Select a class on the canvas first to add attributes or operations to it.', true);
+    snapshot('ta-member');
+    el.props ||= {};
+    const listKey = kind === 'operation' ? 'operations' : 'attributes';
+    el.props[listKey] ||= [];
+    const line = kind === 'operation' ? makeOperationLine(cand) : makeAttributeLine(cand);
+    const key = memberName(cand.name || cand.text).replace(/\(.*$/, '').toLowerCase();
+    if (el.props[listKey].some((x) => String(x.name || '').toLowerCase() === key)) {
+      return say(`${el.name} already has ${line.name}.`);
+    }
+    el.props[listKey].push(line);
+    const [, , w, h] = fitBounds(el);
+    el.bounds[2] = Math.max(el.bounds[2], Math.ceil(w));
+    el.bounds[3] = Math.max(el.bounds[3], Math.ceil(h));
+    selected = { kind: 'element', id: el.id };
+    changed();
+    buildTaPane();
+    say(`Added ${line.name} to ${el.name}.`);
+  }
+  function addCandidateElement(entry, spec, kind, mode = 'normal') {
+    snapshot('ta-add');
+    linkAnalysis(spec);
+    let el;
+    const at = nextFreeSpot();
+    if (kind === 'class') {
+      el = makeClassFromCandidate(entry.candidate, { attributes: entry.attributes, operations: entry.operations, at }, model);
+    } else if (kind === 'attr-as-class') {
+      el = makeClassFromAttribute(entry, { at }, model);
+    } else if (kind === 'actor') {
+      el = makeElement('actor', at, { name: entry.name, modelId: entry.id }, model);
+    } else if (kind === 'usecase') {
+      el = makeElement('useCase', at, { name: entry.name, modelId: entry.id }, model);
+    } else {
+      el = makeElement('class', at, { name: entry.name, modelId: entry.id }, model);
+    }
+    model.elements.push(el);
+    model.origin ||= { module: 'textual-analysis', id: spec.id, candidates: {} };
+    model.origin.candidates ||= {};
+    model.origin.candidates[el.id] = (kind === 'class' ? entry.candidate : entry).id;
+    selected = { kind: 'element', id: el.id };
+    changed();
+    buildTaPane();
+    say(`Added ${el.name} to the diagram.`);
+  }
+  function buildTaPane() {
+    if (!taOpen) return;
+    const list = allAnalyses();
+    const cur = currentAnalysisEntry();
+    const spec = cur?.spec ? normalizeAnalysis(cur.spec) : null;
+    const picker = make('select', { ariaLabel: 'Choose Textual Analysis' },
+      ...(list.length
+        ? list.map((a) => make('option', { value: a.key, textContent: `${a.label}${a.where ? ` (${a.where})` : ''}`, selected: cur?.key === a.key }))
+        : [make('option', { value: '', textContent: 'No Textual Analysis in this note' })]),
+    );
+    picker.onchange = () => {
+      activeTaKey = picker.value;
+      const next = allAnalyses().find((a) => a.key === activeTaKey);
+      if (next?.spec) {
+        linkAnalysis(normalizeAnalysis(next.spec));
+        say(`Related to ${next.label}.`);
+      }
+      buildTaPane();
+    };
+    const loadFileBtn = make('button', { type: 'button', title: 'Load a Textual Analysis .json file from disk' }, icon('import'), make('span', { textContent: 'File…' }));
+    loadFileBtn.onclick = () => taFileInput.click();
+    const newTaBtn = project?.createAnalysis ? make('button', { type: 'button', title: 'Create a new Textual Analysis linked to this UML diagram' }, icon('plus'), make('span', { textContent: 'New' })) : null;
+    if (newTaBtn) {
+      newTaBtn.onclick = () => {
+        const created = project.createAnalysis(model);
+        if (!created) return;
+        snapshot('ta-new');
+        model.origin = { module: 'textual-analysis', id: created.id, candidates: { ...(model.origin?.candidates || {}) } };
+        say('Created linked Textual Analysis. Applying will open it.');
+        onApply?.(buildOutput());
+      };
+    }
+    const syncBtn = spec ? make('button', { type: 'button', title: 'Sync all missing classes, attributes and operations from this analysis' }, icon('restart'), make('span', { textContent: 'Sync' })) : null;
+    if (syncBtn && spec) {
+      syncBtn.onclick = () => {
+        snapshot('ta-sync');
+        const { addedElements, addedMembers } = syncDiagramWithAnalysis(model, spec);
+        changed();
+        buildTaPane();
+        say(addedElements || addedMembers ? `Synced: +${addedElements} element(s), +${addedMembers} member(s).` : 'Already up to date with this Textual Analysis.');
+      };
+    }
+    const openTaBtn = cur?.pageIndex != null && project?.jumpTo ? make('button', { type: 'button', title: 'Open this Textual Analysis' }, icon('link'), make('span', { textContent: 'Open' })) : null;
+    if (openTaBtn && cur) {
+      openTaBtn.onclick = () => project.jumpTo({ module: 'textual-analysis', pageIndex: cur.pageIndex, partId: cur.partId }, buildOutput());
+    }
+    const head = make('div', { className: 'uml-ta-head' },
+      make('div', { className: 'uml-ta-head-title' }, make('span', { textContent: 'Textual Analysis' })),
+      picker,
+      make('div', { className: 'uml-ta-head-actions' }, syncBtn, openTaBtn, loadFileBtn, newTaBtn),
+    );
+    const body = make('div', { className: 'uml-ta-body' });
+    if (!spec) {
+      body.append(make('p', { className: 'uml-ta-empty', textContent: 'Create a Textual Analysis prefab in this note or load a .json analysis file to grab classes, attributes and operations here.' }));
+    } else {
+      const grouped = groupAnalysisCandidates(spec);
+      const makeSection = (title, count, items, openByDefault = true) => {
+        if (!items.length) return null;
+        const det = make('details', { className: 'uml-ta-section', open: openByDefault },
+          make('summary', { textContent: `${title} (${count})` }),
+          make('div', { className: 'uml-ta-list' }, ...items),
+        );
+        return det;
+      };
+      // Classes with grouped owned + suggested attributes/operations
+      const classRows = grouped.classes.map((entry) => {
+        const c = entry.candidate;
+        const existing = findElForCand(c);
+        const dot = make('span', { className: 'uml-ta-dot' });
+        dot.style.background = c.colour;
+        const act = make('button', { type: 'button', className: existing ? 'on-canvas' : '', textContent: existing ? '✓' : '+ Add', title: existing ? 'Select on canvas' : `Add class ${c.name} to canvas` });
+        act.onclick = () => {
+          if (existing) { selected = { kind: 'element', id: existing.id }; changed(); }
+          else addCandidateElement(entry, spec, 'class');
+        };
+        const row = make('div', { className: 'uml-ta-item' }, dot, make('span', { className: 'uml-ta-name', textContent: c.name, title: c.description || c.text }), act);
+        const memberRows = [];
+        for (const a of entry.attributes) {
+          const has = existing && (existing.props?.attributes || []).some((x) => String(x.name || '').toLowerCase() === memberName(a.name).toLowerCase());
+          const addM = existing && !has ? make('button', { type: 'button', textContent: '+', title: `Add - ${memberName(a.name)} to ${existing.name}` }) : null;
+          if (addM) addM.onclick = () => addMemberToClass(existing, a, 'attribute');
+          memberRows.push(make('div', { className: 'uml-ta-member' }, make('span', { textContent: `- ${memberName(a.name)}` }), addM));
+        }
+        for (const a of entry.suggestedAttributes) {
+          const addM = existing ? make('button', { type: 'button', textContent: '+', title: `Add suggested attribute - ${memberName(a.name)} to ${existing.name}` }) : null;
+          if (addM) addM.onclick = () => addMemberToClass(existing, a, 'attribute');
+          memberRows.push(make('div', { className: 'uml-ta-member suggested' }, make('span', { textContent: `- ${memberName(a.name)} (suggested)` }), addM));
+        }
+        for (const o of entry.operations) {
+          const has = existing && (existing.props?.operations || []).some((x) => String(x.name || '').toLowerCase() === memberName(o.name).replace(/\(.*$/, '').toLowerCase());
+          const addM = existing && !has ? make('button', { type: 'button', textContent: '+', title: `Add + ${memberName(o.name)}() to ${existing.name}` }) : null;
+          if (addM) addM.onclick = () => addMemberToClass(existing, o, 'operation');
+          memberRows.push(make('div', { className: 'uml-ta-member' }, make('span', { textContent: `+ ${memberName(o.name)}()` }), addM));
+        }
+        return memberRows.length ? make('div', {}, row, make('div', { className: 'uml-ta-members' }, ...memberRows)) : row;
+      });
+      // Unowned attributes / parameters (e.g. numeroTelefono, nombreCliente)
+      const attrRows = grouped.looseAttributes.map((a) => {
+        const dot = make('span', { className: 'uml-ta-dot' });
+        dot.style.background = a.colour;
+        const toClassBtn = make('button', { type: 'button', textContent: '+ Attr', title: `Add - ${memberName(a.name)} as an attribute to the selected class` });
+        toClassBtn.onclick = () => { linkAnalysis(spec); addMemberToClass(targetClassElement(), a, 'attribute'); };
+        const asClassBtn = make('button', { type: 'button', textContent: '+ Class', title: `Create class ${memberName(a.name)[0]?.toUpperCase() || ''}${memberName(a.name).slice(1)} with attribute - ${memberName(a.name)}` });
+        asClassBtn.onclick = () => addCandidateElement(a, spec, 'attr-as-class');
+        return make('div', { className: 'uml-ta-item' }, dot, make('span', { className: 'uml-ta-name', textContent: a.name, title: a.description || a.text }), toClassBtn, asClassBtn);
+      });
+      // Unowned operations
+      const opRows = grouped.looseOperations.map((o) => {
+        const dot = make('span', { className: 'uml-ta-dot' });
+        dot.style.background = o.colour;
+        const toClassBtn = make('button', { type: 'button', textContent: '+ Op', title: `Add + ${memberName(o.name)}() to the selected class` });
+        toClassBtn.onclick = () => { linkAnalysis(spec); addMemberToClass(targetClassElement(), o, 'operation'); };
+        return make('div', { className: 'uml-ta-item' }, dot, make('span', { className: 'uml-ta-name', textContent: `${o.name}()`, title: o.description || o.text }), toClassBtn);
+      });
+      // Actors & Use Cases
+      const ucRows = [
+        ...grouped.actors.map((a) => {
+          const existing = findElForCand(a);
+          const dot = make('span', { className: 'uml-ta-dot' }); dot.style.background = a.colour;
+          const act = make('button', { type: 'button', className: existing ? 'on-canvas' : '', textContent: existing ? '✓' : '+ Add' });
+          act.onclick = () => (existing ? (selected = { kind: 'element', id: existing.id }, changed()) : addCandidateElement(a, spec, 'actor'));
+          return make('div', { className: 'uml-ta-item' }, dot, make('span', { className: 'uml-ta-name', textContent: a.name }), act);
+        }),
+        ...grouped.usecases.map((u) => {
+          const existing = findElForCand(u);
+          const dot = make('span', { className: 'uml-ta-dot' }); dot.style.background = u.colour;
+          const act = make('button', { type: 'button', className: existing ? 'on-canvas' : '', textContent: existing ? '✓' : '+ Add' });
+          act.onclick = () => (existing ? (selected = { kind: 'element', id: existing.id }, changed()) : addCandidateElement(u, spec, 'usecase'));
+          return make('div', { className: 'uml-ta-item' }, dot, make('span', { className: 'uml-ta-name', textContent: u.name }), act);
+        }),
+      ];
+      const sections = [
+        makeSection('Classes', grouped.classes.length, classRows, true),
+        makeSection('Attributes & Parameters', grouped.looseAttributes.length, attrRows, true),
+        makeSection('Operations', grouped.looseOperations.length, opRows, true),
+        makeSection('Actors & Use Cases', ucRows.length, ucRows, model.diagram === 'useCase'),
+      ].filter(Boolean);
+      if (!sections.length) body.append(make('p', { className: 'uml-ta-empty', textContent: 'This Textual Analysis has no candidates yet.' }));
+      else body.append(...sections);
+    }
+    taPane.replaceChildren(taFileInput, head, body);
+  }
+  taFileInput.onchange = async () => {
+    const f = taFileInput.files?.[0];
+    taFileInput.value = '';
+    if (!f) return;
+    try {
+      const raw = JSON.parse(await f.text());
+      if (raw?.type !== 'textual-analysis') throw Error('Not a Textual Analysis JSON file.');
+      const spec = normalizeAnalysis(raw);
+      const key = `file:${f.name}:${spec.id}`;
+      const existing = fileAnalyses.findIndex((a) => a.key === key);
+      const entry = { key, label: spec.title || f.name.replace(/\.json$/i, ''), where: 'file', spec };
+      if (existing >= 0) fileAnalyses[existing] = entry; else fileAnalyses.push(entry);
+      activeTaKey = key;
+      linkAnalysis(spec);
+      buildTaPane();
+      say(`Loaded and linked ${entry.label}.`);
+    } catch (err) {
+      say(err.message || 'Could not load Textual Analysis file.', true);
+    }
+  };
+  function showTa(on) {
+    taOpen = on;
+    if (on) lastRightPane = 'ta';
+    main.classList.toggle('with-ta', on);
+    taBtn.setAttribute('aria-pressed', String(on));
+    try { localStorage.setItem(TA_KEY, on ? '1' : '0'); } catch { /* Optional. */ }
+    if (on) buildTaPane();
+    syncCollapseTabs();
+  }
+  taBtn.onclick = () => showTa(!taOpen);
+  if (taOpen) showTa(true);
+  else syncCollapseTabs();
   const svg = document.createElementNS(SVG, 'svg');
   svg.classList.add('uml-svg');
   canvas.append(svg);
@@ -309,9 +656,12 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     sel.onclick = () => setTool({ kind: 'select' });
     const list = make('div', { className: 'uml-tools' }, ...paletteTools().map(button));
     sortable(list, { items: '.uml-tool', key: (el) => `${el.dataset.kind}:${el.dataset.type}`, axis: 'auto', onReorder: (ids) => { saveOrder(orderName(), ids); buildPalette(); } });
-    // The full editor says what it gives up, above its long list.
-    const warn = DIAGRAMS[model.diagram].notRecommended && make('p', { className: 'uml-hint uml-warn', textContent: 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.' });
-    palette.replaceChildren(...[sel, warn, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
+    // The full editor says what it gives up with a faint yellow tint on the palette, and a tooltip, not a box.
+    const notRecommended = !!DIAGRAMS[model.diagram].notRecommended;
+    palette.classList.toggle('uml-palette-warn', notRecommended);
+    if (notRecommended) palette.title = 'Not recommended: every element of every diagram. The result follows no single kind of UML diagram and exports only as a picture or a NoteComplete diagram.';
+    else palette.removeAttribute('title');
+    palette.replaceChildren(...[sel, make('h4', { textContent: 'Tools', title: 'Elements and connectors' }), list].filter(Boolean),
       make('p', { className: 'uml-hint', textContent: 'Keys 1–9 pick one, Shift S opens them at the pointer. Drag one to reorder them.' }));
     markTool();
   }
@@ -1836,6 +2186,8 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
   requestAnimationFrame(() => { if (root.isConnected && !root.contains(document.activeElement)) canvas.focus({ preventScroll: true }); });
   return {
     model: () => normalizeModel(model),
+    // What Apply would hand back now (with the PlantUML drawing and preamble when kept).
+    output: () => buildOutput(),
     set: (m) => setModel(m),
     select: (id) => { const e = model.elements.find((q) => q.id === id); selected = e ? { kind: 'element', id } : null; changed(); },
     // Zoom from the page around it: dir 1 in, −1 out, 0 the whole diagram.
@@ -1844,30 +2196,69 @@ export function mountUmlEditor(root, initial, { onApply = null, onCancel = null,
     setView,
     preamble: () => [...docPreamble],
     renderedSvg: () => (currentView === 'render' && lastRender.svg ? lastRender.svg : null),
-    destroy: () => { fingers.destroy(); sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
+    destroy: () => { collapseObserver?.disconnect(); fingers.destroy(); sides.destroy(); releaseRenderUrl(); help?.destroy(); ring.destroy(); resize.disconnect(); document.removeEventListener('keydown', stray); closeContextMenu(); root.replaceChildren(); },
   };
 }
 
 // The editor over a note, full-window. Resolves with the new model, or null.
-export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null, project = null } = {}) {
+// `workspace`: other diagrams of the note to open beside it in tabs (uml-workspace.js):
+// { catalog(), open: [keys open last time], projectFor(entry), onApply({ changes, added, openKeys }),
+// remember(openKeys) }. `key`: this diagram's key in the catalog. Apply hands this diagram back
+// (as without tabs) and the other changed or new ones to onApply first.
+export function openUmlEditor(model, { editing = false, markdown = null, view = null, draw = null, project = null, workspace = null, key = 'this' } = {}) {
   ensureStyles();
   return new Promise((resolve) => {
     const dialog = make('dialog', { className: 'uml-dialog' });
     const host = make('div', { className: 'uml-host' });
     dialog.append(host);
     document.body.append(dialog);
-    const finish = (value) => { editor.destroy(); dialog.close(); dialog.remove(); resolve(value); };
+    let editor = null, ws = null;
+    const finish = (value) => {
+      if (ws) {
+        const all = ws.tabs();
+        workspace.remember?.(ws.openKeys());
+        const mine = all.find((t) => t.key === key);
+        if (value) {
+          workspace.onApply?.({ changes: all.filter((t) => t.key !== key && !t.isNew && t.changed).map((t) => ({ key: t.key, data: t.data, spec: t.output })), added: all.filter((t) => t.isNew).map((t) => t.output), openKeys: ws.openKeys() });
+          value = mine ? mine.output : value;
+        }
+        ws.destroy();
+      } else editor.destroy();
+      dialog.close();
+      dialog.remove();
+      resolve(value);
+    };
     // Keys stay in the editor (the note's shortcuts are not for it).
     dialog.addEventListener('keydown', (e) => e.stopPropagation());
     dialog.addEventListener('cancel', (e) => { e.preventDefault(); });
     dialog.showModal();
-    const wrappedProject = project ? {
-      ...project,
+    const wrap = (p) => (p ? {
+      ...p,
       jumpTo: (occ, currentOut) => {
-        project.jumpTo?.(occ, currentOut);
-        finish(currentOut);
+        // Another UML diagram of the note opens in a tab, at that element.
+        const target = ws && occ?.module !== 'textual-analysis' && workspace.catalog().find((e) => e.data?.partId === occ.partId);
+        if (target) {
+          const ed = ws.open(target).editor;
+          const hit = ed?.model().elements.find((q) => q.id === occ.elementId || q.modelId === occ.elementId);
+          if (hit) ed.select(hit.id);
+          return;
+        }
+        p.jumpTo?.(occ, currentOut);
+        finish(ws ? true : currentOut);
       },
-    } : null;
-    const editor = mountUmlEditor(host, model, { onApply: (m) => finish(m), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view, draw, project: wrappedProject });
+    } : null);
+    const options = (tab) => ({ onApply: () => finish(true), onCancel: () => finish(null), applyLabel: editing ? 'Apply' : 'Insert', markdown, view: tab.key === key ? view : null, draw, project: wrap(tab.key === key ? project : workspace.projectFor?.(tab)) });
+    if (!workspace) {
+      editor = mountUmlEditor(host, model, { ...options({ key }), onApply: (m) => finish(m) });
+      return;
+    }
+    import('./uml-workspace.js').then(({ mountUmlWorkspace }) => {
+      const list = workspace.catalog();
+      const tabs = [{ key, spec: model, where: list.find((e) => e.key === key)?.where }, ...(workspace.open || []).filter((k) => k !== key).map((k) => list.find((e) => e.key === k)).filter(Boolean)];
+      ws = mountUmlWorkspace(host, { tabs, active: key, options, catalog: () => workspace.catalog().filter((e) => e.key !== key) });
+    }).catch((e) => {
+      console.warn(e);
+      editor = mountUmlEditor(host, model, { ...options({ key }), onApply: (m) => finish(m) });
+    });
   });
 }

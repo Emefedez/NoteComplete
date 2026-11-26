@@ -292,7 +292,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
   function figureEditor(spec, options = {}) {
     return oneFigure(() => openFigureEditor(spec, options));
   }
-  async function openFigureEditor(spec, { editing = false, mode = "author", references = [], project = null } = {}) {
+  async function openFigureEditor(spec, { editing = false, mode = "author", references = [], project = null, workspace = null } = {}) {
     // The editor its module's manifest names (prefab-registry.js editorOf): its own editor.js,
     // the chart or diagram editor, a window, or the JSON one; a type module edits in its base.
     // A manifest that names none: chosen by the spec's type, as before modules.
@@ -312,7 +312,7 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     }
     if (editor === "graph" || editor === "table") return keepModule(await compoundEditor(editor, spec, editing));
     if (editor === "data") return keepModule(await editPrefab({ spec, editing }));
-    if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing, project));
+    if (editor === "uml-editor" || (!editor && spec?.type === "uml")) return keepModule(await openUmlEditor(spec, editing, project, workspace));
     if ((editor === "chart-editor" || !editor) && editorKind(spec)) {
       try {
         const { openChartEditor } = await loading(import("./chart-editor.js"));
@@ -364,14 +364,14 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       }));
   }
   // The UML diagram editor (uml-editor.js), loaded the first time it is needed.
-  function umlEditor(spec, editing = false) {
-    return oneFigure(() => openUmlEditor(spec, editing));
+  function umlEditor(spec, editing = false, workspace = null, project = null) {
+    return oneFigure(() => openUmlEditor(spec, editing, project, workspace));
   }
-  async function openUmlEditor(spec, editing = false, project = null) {
+  async function openUmlEditor(spec, editing = false, project = null, workspace = null) {
     try {
       const { openUmlEditor: open } = await loading(import("./uml-editor.js"));
       // A new diagram opens in the view chosen in Insert prefab (drawing, PlantUML or both).
-      return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml, project });
+      return await open(spec, { editing, view: editing ? null : savedUmlView(), markdown: (text) => call("markdownHtml", { text }), draw: drawPlantuml, project, ...(workspace ? { workspace, key: workspace.key } : {}) });
     } catch (e) {
       status(`The diagram editor could not open: ${e.message}`, true);
       return null;
@@ -415,7 +415,11 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     if (missing && !(await oneFigure(() => askReinstallPack(missing)))) return false;
     const { starterModel } = await import("./uml.js");
     const note = app.epoch;
-    const spec = await umlEditor(starterModel(diagram));
+    const projState = { pendingJump: null, pendingRenames: [], pendingLinks: [] };
+    const ws = startedEmpty ? null : await umlWorkspace(null, projState);
+    const starter = starterModel(diagram);
+    const project = startedEmpty ? null : makeEditorProject(starter, null, null, projState);
+    const spec = await umlEditor(starter, false, ws, project);
     if (!spec || !sameNote(note, startedEmpty)) return false;
     if (startedEmpty) {
       p = await openBlankNoteForPrefab(prefabName(spec) || "UML Diagram");
@@ -423,6 +427,8 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     }
     const done = await placePrefab(p, spec, box);
     if (done) status(`${prefabName(spec)} inserted. Right-click it, hold it, or tap its ⋯ to edit it again; one undo removes it.`);
+    if (done) await placeQueued(p);
+    if (done && ws) await ws.applyPending(p);
     return done;
   }
   $("insertUml").onclick = () => insertUml(app.panels[app.page]);
@@ -470,7 +476,96 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       },
       renameEverywhere(target, oldName, newName, currentSpec) {
         const el = resolveEl(target, currentSpec);
-        if (el) state.pendingRenames.push({ modelId: el.modelId, oldName, newName });
+        if (el) state.pendingRenames.push({ modelId: el.modelId, oldName, newName, excludePartId: partId });
+      },
+      getAnalyses() {
+        return (projectModel.getPrefabs?.() || [])
+          .filter((d) => d.spec?.type === "textual-analysis")
+          .map((d) => ({
+            key: `p${d.pageIndex}:${d.partId}`,
+            label: String(d.spec.title || "").trim() || "Textual analysis",
+            where: `p. ${d.pageIndex + 1}`,
+            pageIndex: d.pageIndex,
+            partId: d.partId,
+            spec: d.spec,
+          }));
+      },
+      getUmlDiagrams() {
+        return (projectModel.getPrefabs?.() || [])
+          .filter((d) => d.spec?.type === "uml")
+          .map((d) => ({
+            key: `p${d.pageIndex}:${d.partId}`,
+            label: String(d.spec.name || d.spec.title || "").trim() || prefabName(d.spec),
+            where: `p. ${d.pageIndex + 1}`,
+            pageIndex: d.pageIndex,
+            partId: d.partId,
+            spec: d.spec,
+          }));
+      },
+      linkUmlDiagram(target, analysisModel) {
+        if (!target?.spec || !analysisModel?.id) return;
+        state.pendingLinks ||= [];
+        const updated = {
+          ...target.spec,
+          origin: {
+            module: "textual-analysis",
+            id: analysisModel.id,
+            candidates: { ...(target.spec.origin?.candidates || {}) },
+          },
+        };
+        state.pendingLinks.push({ pageIndex: target.pageIndex, partId: target.partId, spec: updated });
+      },
+      createAnalysis(umlModel) {
+        const id = `ta-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const created = {
+          type: "textual-analysis",
+          id,
+          title: String(umlModel?.name || "").trim(),
+          show: "both",
+          match: { plural: false, accents: false },
+          text: "",
+          candidates: [],
+        };
+        queuedFigures.push(created);
+        return created;
+      },
+    };
+  }
+  // Workspace tabs in the UML editor (uml-workspace.js): the note's other UML diagrams can be
+  // opened beside the one being edited, as in Visual Paradigm. Which tabs were open is kept for
+  // the note while it stays open. After Apply, `applyPending(page, near)` draws the other changed
+  // diagrams where they are and puts new ones on `page`, under the box `near` when given (each
+  // its own undo step).
+  const umlTabs = { epoch: null, keys: [] };
+  async function umlWorkspace(self, projState = { pendingJump: null, pendingRenames: [] }) {
+    if (!app.doc || !projectModel) return null;
+    try { await projectModel.ensureLoaded?.(); } catch { return null; }
+    if (umlTabs.epoch !== app.epoch) { umlTabs.epoch = app.epoch; umlTabs.keys = []; }
+    const keyOf = (pageIndex, partId) => `p${pageIndex}:${partId}`;
+    const list = (projectModel.getPrefabs?.() || []).filter((d) => d.spec?.type === "uml").map((d) => ({ key: keyOf(d.pageIndex, d.partId), spec: d.spec, label: String(d.spec.name || d.spec.title || "").trim() || prefabName(d.spec), where: `p. ${d.pageIndex + 1}`, data: { pageIndex: d.pageIndex, partId: d.partId } }));
+    let pending = { changes: [], added: [] };
+    return {
+      key: self ? keyOf(self.pageIndex, self.partId) : "new",
+      open: umlTabs.keys,
+      catalog: () => list,
+      projectFor: (tab) => (tab.data ? makeEditorProject(tab.spec, tab.data.partId, null, projState) : null),
+      remember: (keys) => { umlTabs.keys = keys.filter((k) => list.some((e) => e.key === k)); },
+      onApply: (result) => { pending = result; },
+      async applyPending(page, near = null) {
+        let n = 0;
+        for (const ch of pending.changes) if (ch.data && await replacePrefabSpec(ch.data.pageIndex, ch.data.partId, ch.spec)) n++;
+        let y = near ? near[1] + near[3] + 24 : 0;
+        for (const spec of pending.added) {
+          const h = near ? Math.min(prefabSvg(spec)?.width || 440, page?.size?.[0] - 60 || 440) * prefabAspect(spec) : 0;
+          if (page && await placePrefab(page, spec, near ? [near[0], y, 0, 0] : null)) { n++; y += h + 24; }
+        }
+        pending = { changes: [], added: [] };
+        if (n) status(`${n + 1} diagrams changed or added. Each has its own undo step.`);
+        // A new diagram has no edit of its own to follow (editCompound does this for one that does).
+        if (!self) {
+          for (const r of projState.pendingRenames.splice(0)) await projectModel?.applyRename?.(r.modelId, r.newName, { excludePartId: r.excludePartId });
+          if (projState.pendingJump) await projectModel?.jumpTo?.(projState.pendingJump);
+        }
       },
     };
   }
@@ -495,18 +590,23 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
       if (projectModel && (spec?.type === "uml" || spec?.type === "textual-analysis")) {
         await projectModel.ensureLoaded?.();
       }
-      const projState = { pendingJump: null, pendingRenames: [] };
+      const projState = { pendingJump: null, pendingRenames: [], pendingLinks: [] };
       const project = makeEditorProject(spec, c.id, focusElementId, projState);
+      const ws = spec?.type === "uml" && mode === "author" ? await umlWorkspace({ pageIndex: item.page, partId: c.id }, projState) : null;
       const note = app.epoch;
-      const chosen = await figureEditor(spec, { editing: true, mode, references, project });
+      const chosen = await figureEditor(spec, { editing: true, mode, references, project, workspace: ws });
       if (!chosen || !sameNote(note)) return;
       const frame = await compoundFrame(item);
       selection.clear();
       if (await placePrefab(app.panels[item.page], chosen, frame, c.items, c.id)) {
         status(`${prefabName(chosen)} changed. One undo brings back the one before.`);
         await placeQueued(app.panels[item.page]);
+        if (ws) await ws.applyPending(app.panels[item.page], [frame[0], frame[1], frame[2], frame[2] * prefabAspect(chosen)]);
+        for (const lk of projState.pendingLinks) {
+          await replacePrefabSpec(lk.pageIndex, lk.partId, lk.spec);
+        }
         for (const r of projState.pendingRenames) {
-          await projectModel?.applyRename?.(r.modelId, r.newName, { excludePartId: c.id });
+          await projectModel?.applyRename?.(r.modelId, r.newName, { excludePartId: r.excludePartId ?? c.id });
         }
         if (projState.pendingJump) {
           await projectModel?.jumpTo?.(projState.pendingJump);
@@ -642,6 +742,29 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     const frame = await compoundFrame(item);
     return placePrefab(p, newSpec, frame, item.compound.items, partId);
   }
+  // A figure for a Markdown editor (markdown-prefab.js): chosen in the picker and set in its
+  // editor, but not placed on a page. Resolves with { spec }, { kind: "table" } (Markdown has
+  // its own tables), or null. The function graph is an ink object of a page: not offered.
+  async function chooseFigureSpec() {
+    const choice = await oneFigure(() => choosePrefab({ only: (c) => c.kind === "prefab" || c.kind === "uml" || c.kind === "table" }));
+    if (!choice) return null;
+    if (choice.kind === "uml-import") {
+      try {
+        const imported = await importDiagramSpec(choice.text, choice.fileName);
+        const spec = await umlEditor(imported, false);
+        return spec ? { spec } : null;
+      } catch (e) {
+        status(e.message, true);
+        return null;
+      }
+    }
+    notePrefabUsed(choice.id);
+    if (choice.kind === "table") return { kind: "table" };
+    const start = choice.module && choice.spec && !choice.spec.module && moduleOf(choice.spec)?.manifest.id !== choice.module ? { module: choice.module, ...choice.spec } : choice.spec;
+    const spec = await figureEditor(start);
+    queuedFigures.length = 0;
+    return spec ? { spec } : null;
+  }
   $("editCompound").onclick = () => editCompound(selection.item);
-  return { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
+  return { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
 }

@@ -4855,7 +4855,35 @@ if ($("newNoteOpen")) {
     closeMenus();
     closeHomeFileMenu();
     $("newNoteMenuDialog")?.showModal();
+    numberChoices($("newNoteMenuDialog"));
   };
+}
+// A menu dialog of .export-item choices (New note…): the first nine shown carry keys 1–9 on
+// them, as in Import, export and share; the key chooses, the arrows move between them.
+function numberChoices(dialog) {
+  const items = () => [...dialog.querySelectorAll(".export-item")].filter((b) => !b.closest("[hidden]") && !b.hidden);
+  for (const b of dialog.querySelectorAll(".export-item[data-num]")) { delete b.dataset.num; b.removeAttribute("aria-keyshortcuts"); }
+  items().slice(0, 9).forEach((b, i) => { b.dataset.num = String(i + 1); b.setAttribute("aria-keyshortcuts", String(i + 1)); });
+  if (dialog.dataset.numbered) return;
+  dialog.dataset.numbered = "1";
+  dialog.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || e.target.matches?.("input, textarea, select")) return;
+    if (/^[1-9]$/.test(e.key)) {
+      const item = items()[Number(e.key) - 1];
+      if (!item || item.disabled) return;
+      e.preventDefault();
+      item.focus();
+      item.click();
+      return;
+    }
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    const list = items().filter((b) => !b.disabled);
+    if (!list.length) return;
+    e.preventDefault();
+    const i = list.indexOf(e.target);
+    list[i < 0 ? (step > 0 ? 0 : list.length - 1) : (i + step + list.length) % list.length].focus();
+  });
 }
 if ($("newNoteMenuClose")) $("newNoteMenuClose").onclick = () => $("newNoteMenuDialog")?.close();
 if ($("newNoteMenuDialog")) {
@@ -4896,13 +4924,12 @@ function officeButton() {
   const b = $("textOpenOffice");
   if (!b) return;
   const isOffice = Boolean(officeFile && euroOfficeMode(officeFile.name));
-  const mdName = textView.name || activeFileName || "";
-  const isMd = !isOffice && isMarkdownName(mdName);
+  const isMd = !isOffice && Boolean(markdownOfficeName());
   b.hidden = !(textView.hasDocument && (isOffice || isMd));
   if (b.hidden) return;
-  const shown = isOffice ? officeFile : mdName;
+  const shown = isOffice ? officeFile : markdownOfficeName();
   void moduleState().then(({ installed }) => {
-    if ((isOffice ? officeFile : (textView.name || activeFileName || "")) !== shown) return;
+    if ((isOffice ? officeFile : markdownOfficeName()) !== shown) return;
     b.setAttribute("aria-disabled", String(!installed));
     b.title = installed
       ? (isMd ? "Turn this Markdown file into a Euro-Office document (.docx)" : "Open this file in Euro-Office, the office suite")
@@ -4912,16 +4939,60 @@ function officeButton() {
 if ($("textOpenOffice")) $("textOpenOffice").onclick = () => {
   const b = $("textOpenOffice");
   if (b.getAttribute("aria-disabled") === "true") return notInstalledMenu(b);
-  if (officeFile && euroOfficeMode(officeFile.name)) {
-    void reopenWith(officeFile, "euro-office");
-    return;
-  }
-  const mdName = textView.name || activeFileName || "";
-  if (textView.hasDocument && isMarkdownName(mdName)) {
-    const file = new File([textView.text || ""], mdName, { type: "text/markdown" });
-    void reopenWith(file, "euro-office");
-  }
+  void openTextInOffice();
 };
+// The text view's document in Euro-Office (the bar button, and the Markdown editor's right-click
+// menu): an office file shown as text as itself; Markdown as it is now, its prefab
+// pictures (SVG, which Euro-Office's converter does not draw) and the pictures beside it put in
+// as PNG/JPEG data, so the Word document it becomes shows them.
+async function openTextInOffice(anchor = $("textOpenOffice")) {
+  if (!(await moduleState()).installed) return anchor && notInstalledMenu(anchor);
+  if (officeFile && euroOfficeMode(officeFile.name)) return reopenWith(officeFile, "euro-office");
+  const mdName = markdownOfficeName();
+  if (!mdName) return status("Only Markdown documents can be opened in Euro-Office from here.", true);
+  // Euro-Office can take a while to start: say so at once.
+  status("Opening in Euro-Office…");
+  let md = textView.text || "";
+  if (/!\[[^\]]*\]\(/.test(md)) {
+    status("Preparing the pictures for Euro-Office…");
+    const { markdownForOffice, svgUriToPng } = await import("./markdown-prefab.js");
+    md = await markdownForOffice(md, (uri) => svgUriToPng(uri));
+    md = await inlineSiblingPictures(md);
+  }
+  // Unsaved edits go with it (Euro-Office saves the result as a new .docx), so opening it there
+  // does not ask to discard them; they are kept if it does not open.
+  const before = { dirty, changed };
+  dirty = changed = false;
+  const opened = await reopenWith(new File([md], mdName, { type: "text/markdown" }), "euro-office");
+  if (!opened && activeDocKind === "text") ({ dirty, changed } = before);
+  return opened;
+}
+// The .md name the text view's document goes to Euro-Office under, or "" when it is not Markdown.
+// A new Markdown note not saved yet is "Untitled" (no extension): it is Markdown all the same.
+function markdownOfficeName() {
+  if (!textView.hasDocument || textView.diagram) return "";
+  const name = textView.name || activeFileName || "";
+  if (isMarkdownName(name)) return name;
+  if (isMarkdownName(activeFileName || "")) return activeFileName;
+  return textView.markdown && !/\.[a-z0-9]{1,6}$/i.test(name) ? `${name || "Untitled"}.md` : "";
+}
+// Pictures a Markdown file links to beside it (![a](img/x.png)) as data URIs: the copy Euro-Office
+// converts has no folder around it.
+async function inlineSiblingPictures(md) {
+  const links = [...md.matchAll(/!\[([^\]\n]*)\]\(([^()\s]+)\)/g)].filter((m) => !/^[a-z][a-z0-9+.-]*:/i.test(m[2]));
+  let out = md;
+  for (const m of links) {
+    let path = m[2];
+    try { path = decodeURIComponent(path); } catch { /* As written. */ }
+    const url = await textImageUrl(path).catch(() => null);
+    if (!url) continue;
+    const blob = await fetch(url).then((r) => r.blob()).catch(() => null);
+    if (!blob) continue;
+    const data = await new Promise((resolve) => { const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => resolve(null); r.readAsDataURL(blob); });
+    if (data) out = out.replace(m[0], () => `![${m[1]}](${data})`);
+  }
+  return out;
+}
 // Opening the same file again another way (the bar button above, and Sprint 6's "Open as text").
 setReopenWith(async (file, opener) => {
   if (!file || busy() || !canReplace()) return false;
@@ -5165,6 +5236,7 @@ function notesApi() {
       store: library.store,
       status,
       editPrefab: (spec) => figureEditor(spec, { editing: true }),
+      choosePrefab: () => chooseFigureSpec(),
     });
     if (doc) return notes.load(find.fingerprint).then(() => notes);
     if (htmlView.hasDocument || textView.hasDocument) return notes.load(sideFp, { core: false }).then(() => notes);
@@ -6113,6 +6185,8 @@ const textView = textViewer({
   // The Notes panel's TinyMDE, for Markdown files.
   loadEditor: () => import("./notes.js").then((m) => m.loadEditor()),
   editPrefab: (spec) => figureEditor(spec, { editing: true }),
+  choosePrefab: () => chooseFigureSpec(),
+  openInOffice: () => openTextInOffice(),
   tablePage: (info) => tablePageMenu(info),
   tableNotify: (message, error = false) => status(message, error),
   // A relative link to another file opens it here, from this file's folder.
@@ -6690,6 +6764,16 @@ $("htmlSide").onclick = $("textSide").onclick = $("webSide").onclick = () => {
 };
 let docMember = null, lastNoteMember = null;
 const isNoteMemberName = (name) => /\.(noteful|nfedit|notecomp(lete)?|notepart|goodnotes|ntb)$/i.test(name || "");
+function currentFilePath() {
+  if (!doc && !sideView()) return "";
+  if (docMember?.source === "local" && docMember.path) return docMember.path;
+  return notePath || "";
+}
+function syncShowInFolder() {
+  const btn = $("showInFolder");
+  if (!btn || btn.hidden) return;
+  btn.disabled = !currentFilePath();
+}
 function setDocMember(member) {
   docMember = member;
   if (doc && member && isNoteMemberName(member.name)) lastNoteMember = member;
@@ -6699,6 +6783,7 @@ function setDocMember(member) {
   else if (textView.hasDocument && textView.diagram && textView.markdown && /^\s*!include/m.test(textView.text)) textView.rerender();
   groupList.mount(htmlView.hasDocument ? $("htmlGroupSlot") : textView.hasDocument ? $("textGroupSlot") : webView.hasDocument ? $("webGroupSlot") : $("pagesGroupSlot"));
   $("addDocuments").disabled = !member;
+  syncShowInFolder();
   // Opening a document of a folder brings that folder to the front of Home's Folders.
   return groupList.set(member).then(() => groupList.group && groups.touch(groupList.group)).catch((e) => console.warn("Group panel:", e));
 }
@@ -6746,6 +6831,19 @@ if (window.notecompleteFiles?.openFolder) {
     } catch (error) { status(error.message, true); }
   };
   $("addDocuments").onclick = () => groupList.pick().catch((error) => status(error.message, true));
+}
+if (window.notecompleteFiles?.showInFolder && $("showInFolder")) {
+  $("showInFolder").hidden = false;
+  $("showInFolder").onclick = async () => {
+    const target = currentFilePath();
+    if (!target) return;
+    try {
+      await window.notecompleteFiles.showInFolder(target);
+    } catch (error) {
+      status(error.message, true);
+    }
+  };
+  syncShowInFolder();
 }
 // The quiz and Ask AI windows live in the page editor; a text document, which can be
 // studied too, takes them while it is shown (text-study.js).
@@ -6936,6 +7034,7 @@ function documentControls() {
   if ($("studyOpenDeck")) $("studyOpenDeck").disabled = false;
   if (!open) $("svg").disabled = true;
   syncPageMoveMenus();
+  syncShowInFolder();
 }
 // Menu items that mirror toolbar controls share their handler and state.
 const proxies = [...document.querySelectorAll("#commandBar [data-proxy], #commandBar [data-proxy-tool]")];
@@ -6946,6 +7045,7 @@ function proxyTarget(item) {
 }
 function syncMenus() {
   syncPageMoveMenus();
+  syncShowInFolder();
   for (const item of proxies) {
     const target = proxyTarget(item);
     const inEditor = target?.closest("#editor");
@@ -7240,13 +7340,21 @@ function resizeFrame(p) {
   done.type = "button";
   done.textContent = "Done";
   done.onclick = () => endResizeDrag();
+  // × puts the page back as it was before resizing by dragging: each drag is one undo step.
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "page-resize-cancel";
+  cancel.textContent = "×";
+  cancel.title = "Cancel: put the page back to its size before resizing";
+  cancel.setAttribute("aria-label", "Cancel resizing");
+  cancel.onclick = () => cancelResizeDrag();
   const text = document.createElement("span");
   const show = (size) => {
     frame.style.width = `${(size[0] / p.size[0]) * 100}%`;
     frame.style.height = `${(size[1] / p.size[1]) * 100}%`;
     text.textContent = `${mm(size[0])} × ${mm(size[1])} mm`;
   };
-  label.append(text, done);
+  label.append(text, done, cancel);
   frame.append(label);
   for (const edge of ["e", "s", "se"]) {
     const handle = document.createElement("div");
@@ -7269,8 +7377,10 @@ function resizeFrame(p) {
       handle.onpointerup = handle.onpointercancel = (u) => {
         handle.onpointermove = handle.onpointerup = handle.onpointercancel = null;
         const next = size.map((v) => Math.round(v));
-        if (u.type === "pointerup" && next.some((v, i) => Math.abs(v - p.size[i]) >= 1))
+        if (u.type === "pointerup" && next.some((v, i) => Math.abs(v - p.size[i]) >= 1)) {
+          if (resizeMode) resizeMode.steps++;
           action("resizePage", { page: p.index, size: next, focus: p.index });
+        }
         else show(p.size);
       };
     };
@@ -7283,14 +7393,28 @@ function startResizeDrag() {
   const p = panels[page];
   if (!doc || !p?.view) return;
   endResizeDrag();
-  resizeMode = { page };
+  resizeMode = { page, steps: 0, edits: doc.edit_count, size: [...p.view.size] };
   p.el.append(resizeFrame(p));
-  status("Drag the right or bottom border of the page. Done or Esc to finish.");
+  status("Drag the right or bottom border of the page. Done or Esc to finish, × to cancel.");
 }
 function endResizeDrag() {
   if (!resizeMode) return;
   resizeMode = null;
   for (const frame of document.querySelectorAll(".page-resize-frame")) frame.remove();
+}
+// Undoes the resizes made since resizing by dragging began, then leaves it.
+// If something else was edited meanwhile, undoing would take that back too, so the
+// page is resized back to its old size instead.
+async function cancelResizeDrag() {
+  const mode = resizeMode;
+  endResizeDrag();
+  if (!mode?.steps || !doc) return;
+  if (doc.edit_count === mode.edits + mode.steps) {
+    for (let k = 0; k < mode.steps && doc?.can_undo; k++) await action("undo");
+  } else {
+    const view = panels[mode.page]?.view;
+    if (view && view.size.some((v, i) => v !== mode.size[i])) await action("resizePage", { page: mode.page, size: mode.size, focus: mode.page });
+  }
 }
 $("resizeDrag").onclick = startResizeDrag;
 $("resizeDragInstead").onclick = () => { $("resizeDialog").close(); startResizeDrag(); };
@@ -7456,7 +7580,7 @@ const projectModelController = {
   applyRename: (modelId, newName, opts) => applyProjectRename(modelId, newName, opts),
 };
 // Graphs, tables, prefabs, UML and the figure editors on the page (figures.js).
-const { editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
+const { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
   $,
   TOOL_DEFAULTS,
   action,

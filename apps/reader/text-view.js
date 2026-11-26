@@ -8,7 +8,7 @@ import { highlight, langFromName, codeEditor } from './code-highlight.js';
 import { attachIme, zhButton } from './chinese/ime.js';
 import { fieldMode, setFieldMode } from './chinese/settings.js';
 import { rubyOn, setRuby, rubyElement } from './chinese/ruby.js';
-import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu } from './markdown-prefab.js';
+import { decorateTinyMdeLines, attachMarkdownPrefabContextMenu, prefabCommand, insertPrefabInto } from './markdown-prefab.js';
 
 export { isTextName, isMarkdownName, isDiagramName } from './text-types.js';
 
@@ -78,7 +78,7 @@ export function headingFor(headings, fragment) {
 // button (UML instead of MD) is on; draw() resolves to { svg, error? }, { missing } or { unavailable }.
 // tablePage(info): where a rendered table can go as a page table, tableNotify(message, error):
 // a word after a table's copy (table-filter.js attachTableFilters says more).
-export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, editorZoom = null, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null, tablePage = null, tableNotify = () => {} }) {
+export function textViewer({ root, body, editorHost, title, format, edit, ruby = null, split = null, zoom, editorZoom = null, toHtml, loadEditor, onChange = () => {}, openLink = () => {}, imageUrl = null, diagram = null, editPrefab = null, choosePrefab = null, openInOffice = null, tablePage = null, tableNotify = () => {} }) {
   let text = '', name = '', key = '', markdown = false, renders = 0, editing = false, splitPreview = false, mde = null, code = null, ime = null, mount = 0, splitTimer = 0, diagramUrl = '', diagramDoc = null, lastDiagramSvg = '', diagramBar = null, helpSheet = null;
   attachMarkdownPrefabContextMenu({
     editorContainer: editorHost,
@@ -95,6 +95,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       if (!editing || splitPreview) render();
     },
     editPrefab,
+    getEditor: () => mde?.editor || null,
+    choosePrefab,
+    afterInsert: () => requestAnimationFrame(() => decorateTinyMdeLines(editorHost?.querySelector('.TinyMDE'))),
+    extraEntries: () => (openInOffice ? [{ label: 'Open in Euro-Office', icon: 'office', run: () => openInOffice() }] : []),
   });
   const rubyBtn = ruby || root?.querySelector?.('#textRubyToggle') || null;
   const splitBtn = split || root?.querySelector?.('#textSplitToggle') || null;
@@ -209,6 +213,10 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
               { keys: '$x^2$  $$\\int f(x)dx$$', does: 'Inline and display LaTeX math formulas' },
               { keys: '- item  1. item', does: 'Bullet and numbered lists' },
               { keys: '`code`  ```lang', does: 'Inline code and fenced code blocks' },
+            ] },
+            { title: 'Prefabs & Euro-Office', icon: 'graph', rows: [
+              { keys: 'Insert prefab button / right-click', does: 'Put a UML diagram, chart, algorithm, stroke order… in the text; double-click it to edit it again' },
+              { keys: 'Open in Euro-Office (bar)', does: 'Open this Markdown in Euro-Office as a Word document, prefabs as pictures' },
             ] },
             { title: 'Chinese input, pinyin & stroke order', icon: 'draw', rows: [
               { keys: '中 / Ctrl Shift Space', does: 'Toggle Chinese mode (Hanzi / Pinyin tones / Latin) and show Pinyin & Trace tools' },
@@ -467,8 +475,13 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       editorHost.append(commands, area);
       const { MARKDOWN_COMMANDS, MARKDOWN_GRAMMAR } = await import('./notes.js');
       const editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: area, content: text, placeholder: 'Write Markdown here (# heading, **bold**, ==highlight==, $math$, - list)…' });
-      const bar = new TinyMDE.CommandBar({ element: commands, editor, commands: MARKDOWN_COMMANDS });
       const markEditorLines = () => decorateTinyMdeLines(area.querySelector('.TinyMDE'));
+      // Beside the formatting: Insert prefab (any figure, as a picture that edits again). Open in
+      // Euro-Office is the document bar's button, as for an office file.
+      const extra = [
+        choosePrefab && prefabCommand((ed) => insertPrefabInto(ed, choosePrefab, () => requestAnimationFrame(markEditorLines))),
+      ].filter(Boolean);
+      const bar = new TinyMDE.CommandBar({ element: commands, editor, commands: extra.length ? [...MARKDOWN_COMMANDS, '|', ...extra] : MARKDOWN_COMMANDS });
       editor.addEventListener('change', (event) => {
         changed(event.content);
         requestAnimationFrame(markEditorLines);

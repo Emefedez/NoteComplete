@@ -340,7 +340,8 @@ function tableBar(table, { pageMenu }) {
     const values = doc.createElement('button');
     values.type = 'button';
     values.className = 'tf-values';
-    values.dataset.label = '▾';
+    // A funnel, not a second arrow: the header's only arrow is the sort one.
+    values.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M4 5h16l-6 7.5V19l-4 1.5v-8z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>';
     values.title = `Show only some values of ${name}`;
     values.setAttribute('aria-label', `Filter by the values of ${name}`);
     values.onclick = (event) => { event.stopPropagation(); valueMenu(values, column, name); };
@@ -375,7 +376,10 @@ function tableBar(table, { pageMenu }) {
     clear.hidden = !active;
     for (const { th, column } of headers) {
       th.setAttribute('aria-sort', state.column === column ? (state.dir === 1 ? 'ascending' : 'descending') : 'none');
-      th.querySelector('.tf-sort').dataset.label = state.column === column ? (state.dir === 1 ? '▲' : '▼') : '';
+      // ↑ / ↓ on the sorted column; ↕ (shown on hover) on the others.
+      const mark = th.querySelector('.tf-sort');
+      mark.dataset.label = state.column === column ? (state.dir === 1 ? '↑' : '↓') : spanned ? '' : '↕';
+      mark.classList.toggle('active', state.column === column);
       th.querySelector('.tf-values').classList.toggle('active', state.values.has(column));
     }
     wrap.classList.toggle('tf-active', active);

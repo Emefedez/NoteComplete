@@ -63,9 +63,9 @@ function drawText(model, top) {
         if (last && last.run === p.run) last.x1 = p.x + p.w; else spans.push({ run: p.run, x0: p.x, x1: p.x + p.w });
       }
       for (const s of spans) {
-        const l = looks[s.run], x0 = PAD + s.x0 - 1.5, w = s.x1 - s.x0 + 3;
-        if (l.fill) parts.push(`<rect x="${x0.toFixed(1)}" y="${(y + 2).toFixed(1)}" width="${w.toFixed(1)}" height="${size + 5}" rx="3" fill="${l.fill}"/>`);
-        if (l.underline) parts.push(`<rect x="${x0.toFixed(1)}" y="${(y + size + 3).toFixed(1)}" width="${w.toFixed(1)}" height="2" fill="${l.underline}"/>`);
+        const l = looks[s.run], x0 = PAD + s.x0 - 2, w = s.x1 - s.x0 + 4;
+        if (l.fill) parts.push(`<rect x="${x0.toFixed(1)}" y="${(y + 1.5).toFixed(1)}" width="${w.toFixed(1)}" height="${size + 4.5}" rx="4" fill="${l.fill}" fill-opacity="0.88"/>`);
+        if (l.underline) parts.push(`<rect x="${x0.toFixed(1)}" y="${(y + size + 3).toFixed(1)}" width="${w.toFixed(1)}" height="2" rx="1" fill="${l.underline}"/>`);
       }
       // Each run's words start where the estimate put them, so a band stays under its words.
       for (const s of spans) {
@@ -131,7 +131,7 @@ function drawTable(model, top) {
     });
     parts.push(`<text x="${cx + COLUMNS[5][1] - 14}" y="${y + 18}" font-size="${size}" fill="${INK}" text-anchor="end">${counts[i]}</text>`);
     cx += COLUMNS[5][1];
-    parts.push(`<rect x="${cx + 8}" y="${y + 6}" width="${COLUMNS[6][1] - 22}" height="15" rx="3" fill="${c.colour}" stroke="#0000002e"/>`);
+    parts.push(`<rect x="${cx + Math.round((COLUMNS[6][1] - 28) / 2)}" y="${y + 7}" width="28" height="14" rx="7" fill="${c.colour}" stroke="#00000024"/>`);
     y += h;
   });
   // Column rules and the frame.

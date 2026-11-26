@@ -23,66 +23,14 @@
       "icon": "text",
       "spec": {
         "type": "textual-analysis",
-        "title": "Actividades Aventura",
+        "title": "",
         "show": "both",
         "match": {
           "plural": false,
           "accents": false
         },
-        "text": "Se quiere desarrollar una aplicación =={.red}(la aplicación NO es una clase)== para gestionar **actividades de aventura** y las reservas de los clientes.\n\n- De cada cliente será necesario disponer de la siguiente información:\n  - Nombre de cliente, fecha de nacimiento y una única dirección de correo electrónico.\n  - Dirección postal: estará compuesta por calle, número, piso, código postal, localidad, municipio y provincia.\n  - Uno o más números de teléfono. Cada teléfono sólo podrá estar asociado a un único cliente.\n- Un cliente puede reservar plazas en varias actividades de aventura; cada reserva es de un solo cliente.\n- De cada actividad de aventura se guarda su nombre, la fecha y el número de plazas libres.\n- Si el cliente cancela una reserva, la plaza queda libre para otro cliente, y se le avisa por correo electrónico.",
-        "candidates": [
-          {
-            "name": "ActividadAventura",
-            "text": "actividades de aventura",
-            "aliases": [
-              "actividad de aventura"
-            ],
-            "kind": "class",
-            "description": "",
-            "folder": "Clases",
-            "order": 0
-          },
-          {
-            "name": "Cliente",
-            "text": "cliente",
-            "kind": "class",
-            "description": "",
-            "folder": "Clases",
-            "order": 1
-          },
-          {
-            "name": "ReservaPlaza",
-            "text": "las reservas de los clientes",
-            "kind": "class",
-            "description": "",
-            "folder": "Clases",
-            "order": 2
-          },
-          {
-            "name": "nombreCliente",
-            "text": "Nombre de cliente",
-            "kind": "attribute",
-            "description": "",
-            "owner": "Cliente",
-            "order": 3
-          },
-          {
-            "name": "DireccionPostal",
-            "text": "Dirección postal",
-            "kind": "class",
-            "description": "Al no ser atómico y tener atributos dentro, es clase y no atributo",
-            "folder": "Clases",
-            "order": 4
-          },
-          {
-            "name": "numeroTelefono",
-            "text": "números de teléfono",
-            "kind": "class",
-            "description": "Uno o más por cliente",
-            "folder": "Clases",
-            "order": 5
-          }
-        ]
+        "text": "",
+        "candidates": []
       }
     }
   ]

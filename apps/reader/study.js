@@ -171,7 +171,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     mode = kind;
     await fillProviders();
     const { pages, unit } = documentInfo(), text = unit === 'section';
-    $('studyTitle').textContent = kind === 'cards' ? 'Generate flashcards' : kind === 'check' ? 'Fact check' : 'Quiz me';
+    $('studyTitle').textContent = kind === 'cards' ? 'Generate flashcards' : kind === 'check' ? 'Fact check' : 'Generate quiz (AI)';
     $('studyAmountLabel').firstChild.textContent = `${kind === 'cards' ? 'Cards' : 'Questions'} per ${text ? 'section' : 'page'} `;
     // A fact check has no amount: it reports what it finds, and adds it to the notes.
     $('studyAmountLabel').hidden = kind === 'check';
