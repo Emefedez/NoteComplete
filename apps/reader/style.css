@@ -2610,8 +2610,11 @@ body.bar-compact .tab { height: 22px; }
 .notes-render th.tf-head { white-space: nowrap; }
 .notes-render th.tf-sortable { cursor: pointer; user-select: none; }
 .notes-render th.tf-sortable:hover { background: var(--accent-soft); }
-.notes-render th .tf-sort { display: inline-block; min-width: 1em; margin-left: 2px; color: var(--accent); font-size: 10px; }
-.notes-render th .tf-values { min-height: 0; width: 20px; height: 20px; margin-left: 2px; padding: 0; font-size: 11px; color: var(--muted); vertical-align: middle; opacity: .55; }
+/* Sort (↕ ↑ ↓) and filter (funnel): one size and colour; the accent marks the one in use. */
+.notes-render th .tf-sort { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-left: 2px; color: var(--muted); font-size: 13px; line-height: 1; vertical-align: middle; opacity: 0; }
+.notes-render th:is(:hover, :focus-visible) .tf-sort, .notes-render th .tf-sort.active { opacity: 1; }
+.notes-render th .tf-sort.active { color: var(--accent); font-weight: 700; }
+.notes-render th .tf-values { display: inline-grid; place-items: center; min-height: 0; width: 20px; height: 20px; margin-left: 2px; padding: 0; color: var(--muted); vertical-align: middle; opacity: .55; }
 .notes-render th:hover .tf-values, .notes-render th .tf-values:focus-visible { opacity: 1; }
 .notes-render th .tf-values.active { opacity: 1; color: var(--surface); background: var(--accent); }
 .tf-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 6px; width: 240px; max-height: min(360px, 70vh); padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-box); background: var(--menu); color: var(--ink); box-shadow: var(--shadow-pop); font-size: 13px; }
