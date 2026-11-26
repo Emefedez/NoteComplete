@@ -8,6 +8,7 @@ import {
   isPlottable,
   asSimpleFraction,
   evalAst,
+  parseAst,
 } from './cas.js';
 
 test('evaluateMath handles LaTeX, implicit multiplication, trig deg/rad, and exact fractions', () => {
@@ -61,4 +62,20 @@ test('isPlottable distinguishes functions of x from invalid input', () => {
   assert.equal(isPlottable('3 + 4'), true);
   assert.equal(isPlottable('2x = 5'), false);
   assert.equal(isPlottable(''), false);
+});
+
+test('Unicode math typed or pasted into the bar: superscripts, subscripts, ×, ÷, −, √, π', () => {
+  assert.equal(evaluateMath('x³ + 6', { vars: { x: 2 } }).value, 14);
+  assert.equal(evaluateMath('2⁻¹').value, 0.5);
+  assert.equal(evaluateMath('10¹²').value, 1e12);
+  assert.equal(evaluateMath('3 × 4 ÷ 2 − 1').value, 5);
+  assert.equal(evaluateMath('2·3⋅4').value, 24);
+  assert.equal(evaluateMath('√16 + ∛27').value, 7);
+  assert.equal(evaluateMath('√(9) × ½').value, 1.5);
+  assert.ok(Math.abs(evaluateMath('2π').value - 2 * Math.PI) < 1e-12);
+  assert.equal(evaluateMath('x₁ + x₂', { vars: { 'x_{1}': 1, 'x_{2}': 2 } }).value, 3);
+  assert.equal(evaluateMath('x_1 * x_{1}', { vars: { 'x_{1}': 3 } }).value, 9);
+  assert.match(symbolicDerivative('x³').latex, /3/);
+  assert.deepEqual(solveEquation('x² − 4 = 0').roots, [-2, 2]);
+  assert.ok(Math.abs(evalAst(parseAst('log₂(8)')) - 3) < 1e-12);
 });
