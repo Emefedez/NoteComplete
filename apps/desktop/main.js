@@ -1057,7 +1057,25 @@ app.whenReady().then(async () => {
       return token;
     } finally { pendingDropboxAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
-  // Moodle LMS (SAML2 SSO via dedicated BrowserWindow + Web Service token + student tools).
+  // Moodle LMS (SAML2 SSO via dedicated BrowserWindow + OS-keyring autofill + Web Service token + student tools).
+  const moodleCredsFile = path.join(app.getPath('userData'), 'moodle-creds.json');
+  async function readMoodleCreds() {
+    try {
+      const raw = await readFile(moodleCredsFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (parsed?.encrypted && safeStorage?.isEncryptionAvailable?.()) {
+        return JSON.parse(safeStorage.decryptString(Buffer.from(parsed.encrypted, 'base64')));
+      }
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch { return {}; }
+  }
+  async function writeMoodleCreds(map) {
+    const serialized = JSON.stringify(map || {});
+    const payload = safeStorage?.isEncryptionAvailable?.()
+      ? JSON.stringify({ encrypted: safeStorage.encryptString(serialized).toString('base64') })
+      : serialized;
+    await writeFile(moodleCredsFile, payload, { mode: 0o600 });
+  }
   const moodle = createMoodleService({
     sessionFile: path.join(app.getPath('userData'), 'moodle-session.json'),
     safeStorage,
@@ -1080,6 +1098,7 @@ app.whenReady().then(async () => {
         },
       });
       let settled = false;
+      let pendingCred = null;
       const finish = (err, val) => {
         if (settled) return;
         settled = true;
@@ -1087,13 +1106,85 @@ app.whenReady().then(async () => {
         if (err) reject(err);
         else resolve(val);
       };
+      // Capture form credentials submitted inside the SSO window (only when user keeps "Remember" checked).
+      win.webContents.on('console-message', (_e, _level, message) => {
+        if (typeof message !== 'string') return;
+        if (message === '__NC_SSO_FORGET__') {
+          pendingCred = { forget: true };
+          readMoodleCreds().then((m) => { delete m[baseOrigin]; return writeMoodleCreds(m); }).catch(() => {});
+          return;
+        }
+        if (message.startsWith('__NC_SSO_CRED__:')) {
+          try { pendingCred = JSON.parse(message.slice('__NC_SSO_CRED__:'.length)); } catch { /* ignore */ }
+        }
+      });
+      const injectAutofillAndSaveBar = async () => {
+        if (settled || win.isDestroyed()) return;
+        const allCreds = await readMoodleCreds();
+        const saved = allCreds[baseOrigin] || null;
+        await win.webContents.executeJavaScript(`(() => {
+          const passEl = document.querySelector('input[type="password"]');
+          if (!passEl || document.getElementById('__ncSsoBar')) return;
+          const form = passEl.form || passEl.closest('form') || document;
+          const userEl = form.querySelector('input[type="text"], input[type="email"], input[name*="user" i], input[id*="user" i], input:not([type])');
+          const saved = ${JSON.stringify(saved ? { username: saved.username || '', password: saved.password || '' } : null)};
+          const setVal = (el, val) => {
+            if (!el || !val) return;
+            const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+            if (setter) setter.call(el, val);
+            else el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+          };
+          if (saved && saved.username && saved.password) {
+            setVal(userEl, saved.username);
+            setVal(passEl, saved.password);
+          }
+          const bar = document.createElement('div');
+          bar.id = '__ncSsoBar';
+          bar.style.cssText = 'position:sticky;top:0;z-index:2147483647;display:flex;align-items:center;gap:10px;padding:7px 14px;background:#1e293b;color:#f8fafc;font:13px/1.3 system-ui,sans-serif;border-bottom:1px solid #334155;';
+          bar.innerHTML = '<label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin:0;"><input id="__ncSsoRemember" type="checkbox" checked /><span>Remember login in NoteComplete (encrypted)</span></label>';
+          if (saved) {
+            const note = document.createElement('span');
+            note.style.cssText = 'opacity:.8;font-size:12px;';
+            note.textContent = 'Autofilled saved credentials';
+            const forget = document.createElement('button');
+            forget.type = 'button';
+            forget.textContent = 'Forget saved';
+            forget.style.cssText = 'margin-left:auto;padding:3px 9px;border-radius:6px;border:1px solid #475569;background:#334155;color:#f8fafc;cursor:pointer;font-size:12px;';
+            forget.onclick = () => {
+              console.debug('__NC_SSO_FORGET__');
+              if (userEl) setVal(userEl, '');
+              setVal(passEl, '');
+              note.textContent = 'Saved login removed';
+              forget.remove();
+            };
+            bar.append(note, forget);
+          }
+          document.body?.prepend(bar);
+          const emit = () => {
+            const remember = Boolean(document.getElementById('__ncSsoRemember')?.checked);
+            console.debug('__NC_SSO_CRED__:' + JSON.stringify({
+              remember,
+              username: userEl ? String(userEl.value || '') : '',
+              password: String(passEl.value || ''),
+            }));
+          };
+          userEl?.addEventListener('input', emit);
+          passEl.addEventListener('input', emit);
+          document.getElementById('__ncSsoRemember')?.addEventListener('change', emit);
+          if (form && form.addEventListener) form.addEventListener('submit', emit, true);
+        })()`, true).catch(() => {});
+      };
       const checkLoggedIn = async () => {
         if (settled || win.isDestroyed()) return;
         const curUrl = win.webContents.getURL();
         let u;
         try { u = new URL(curUrl); } catch { return; }
-        if (u.origin !== baseOrigin) return;
-        if (/\/(login|auth\/saml2)\//i.test(u.pathname)) return;
+        if (u.origin !== baseOrigin || /\/(login|auth\/saml2)\//i.test(u.pathname)) {
+          void injectAutofillAndSaveBar();
+          return;
+        }
         try {
           const info = await win.webContents.executeJavaScript(`(() => {
             const sesskey = (window.M && window.M.cfg && window.M.cfg.sesskey) || '';
@@ -1105,6 +1196,11 @@ app.whenReady().then(async () => {
           const cookies = await win.webContents.session.cookies.get({ url: baseUrl });
           const hasMoodleCookie = cookies.some((c) => /moodlesession/i.test(c.name) && c.value);
           if (hasMoodleCookie && (info?.sesskey || /\/(my|course|user)/i.test(u.pathname))) {
+            if (pendingCred && !pendingCred.forget && pendingCred.remember && pendingCred.username && pendingCred.password) {
+              const map = await readMoodleCreds();
+              map[baseOrigin] = { username: pendingCred.username, password: pendingCred.password, savedAt: Date.now() };
+              await writeMoodleCreds(map).catch(() => {});
+            }
             const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
             finish(null, { cookies: cookieStr, sesskey: info?.sesskey || '', userName: info?.userName || '', userId: info?.userId || 0 });
           }
