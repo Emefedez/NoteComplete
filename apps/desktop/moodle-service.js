@@ -74,6 +74,75 @@ export function parseCoursesFromHtml(html, baseUrl) {
   return [...seen.values()];
 }
 
+export function parseCourseStateJson(rawState, baseUrl) {
+  let state = rawState;
+  if (typeof state === 'string') {
+    try { state = JSON.parse(state); } catch { return []; }
+  }
+  const rawSections = Array.isArray(state?.section) ? state.section : [];
+  const rawCms = Array.isArray(state?.cm) ? state.cm : [];
+  if (!rawSections.length || !rawCms.length) return [];
+
+  const cmById = new Map();
+  for (const cm of rawCms) {
+    if (cm?.id != null) cmById.set(String(cm.id), cm);
+  }
+
+  const sections = [];
+  for (const sec of rawSections) {
+    const cmIds = Array.isArray(sec.cmlist) ? sec.cmlist : [];
+    const items = [];
+    for (const rawId of cmIds) {
+      const cm = cmById.get(String(rawId));
+      if (!cm) continue;
+      const modname = String(cm.module || cm.modname || 'resource').toLowerCase();
+      const absUrl = cm.url
+        ? (() => { try { return new URL(decodeHtmlEntities(cm.url), baseUrl).href; } catch { return ''; } })()
+        : new URL(`/mod/${modname}/view.php?id=${cm.id}`, baseUrl).href;
+      if (!absUrl) continue;
+      const isFolder = modname === 'folder';
+      const isDownloadable = modname === 'resource' || /\/pluginfile\.php\//i.test(absUrl);
+      const downloadUrl = modname === 'resource'
+        ? `${absUrl}${absUrl.includes('?') ? '&' : '?'}redirect=1`
+        : isDownloadable ? absUrl : '';
+      items.push({
+        id: `cm:${cm.id}`,
+        cmid: Number(cm.id) || 0,
+        name: decodeHtmlEntities(cm.name || 'Resource'),
+        modname,
+        url: absUrl,
+        downloadUrl,
+        isFolder,
+        isDownloadable,
+      });
+    }
+    if (items.length) {
+      sections.push({
+        id: Number(sec.number ?? sec.id ?? sections.length),
+        name: decodeHtmlEntities(sec.title || sec.name || `Section ${sec.number ?? sections.length}`),
+        items,
+      });
+    }
+  }
+  return sections;
+}
+
+export function extractSubSectionUrls(html, baseUrl, courseId) {
+  const urls = [];
+  const seen = new Set();
+  const re = /<a\b[^>]*href=["']([^"']*(?:\/course\/view\.php\?[^"']*\bsection=\d+|\/course\/section\.php\?id=\d+)[^"']*)["'][^>]*>/gi;
+  let m;
+  while ((m = re.exec(String(html || '')))) {
+    let abs;
+    try { abs = new URL(decodeHtmlEntities(m[1]), baseUrl).href; } catch { continue; }
+    if (abs.includes('/course/view.php') && courseId && !new RegExp(`[?&]id=${courseId}(?:&|$)`).test(abs)) continue;
+    if (seen.has(abs)) continue;
+    seen.add(abs);
+    urls.push(abs);
+  }
+  return urls.slice(0, 24);
+}
+
 export function parseCourseSectionsFromHtml(html, baseUrl) {
   const src = String(html || '');
   const sections = [];
@@ -466,13 +535,59 @@ export function createMoodleService({
         return { courseUrl, sections };
       }
 
+      // 1. Try Moodle 4.x AJAX course state (returns ALL Temas/sections & resources even in Tiles/Tabs/One-section-per-page courses!)
+      if (s.sesskey) {
+        try {
+          const stateData = await ajaxCall('core_courseformat_get_state', { courseid: cid });
+          const parsedState = parseCourseStateJson(stateData, s.baseUrl);
+          if (parsedState.length) {
+            return { courseUrl, sections: parsedState };
+          }
+        } catch { /* Fall back to HTML parsing below. */ }
+      }
+
+      // 2. HTML fallback: fetch course page + any multi-page/topic sub-section links (?section=N or /course/section.php?id=N)
       const res = await authedFetch(courseUrl);
       if (!res.ok) throw Error(`Could not load course (HTTP ${res.status}).`);
       if (/\/login\/index\.php|SAMLRequest/i.test(res.url || '')) {
         throw Error('Your Moodle SSO session expired. Click Reconnect to sign in again.');
       }
       const html = await res.text();
-      return { courseUrl, sections: parseCourseSectionsFromHtml(html, s.baseUrl) };
+      const sessMatch = html.match(/"sesskey"\s*:\s*"([^"]+)"/);
+      if (sessMatch && sessMatch[1] && sessMatch[1] !== s.sesskey) {
+        s.sesskey = sessMatch[1];
+        await saveSession(s);
+        // Retry Moodle 4.x AJAX state now that we have a fresh sesskey!
+        try {
+          const stateData = await ajaxCall('core_courseformat_get_state', { courseid: cid });
+          const parsedState = parseCourseStateJson(stateData, s.baseUrl);
+          if (parsedState.length) {
+            return { courseUrl, sections: parsedState };
+          }
+        } catch { /* continue with HTML */ }
+      }
+
+      const sections = parseCourseSectionsFromHtml(html, s.baseUrl);
+      const subUrls = extractSubSectionUrls(html, s.baseUrl, cid);
+      if (subUrls.length) {
+        const seenItemUrls = new Set(sections.flatMap((sec) => sec.items.map((it) => it.url)));
+        for (let i = 0; i < subUrls.length; i += 4) {
+          const batch = subUrls.slice(i, i + 4);
+          const pages = await Promise.all(batch.map((u) => authedFetch(u).then((r) => (r.ok ? r.text() : '')).catch(() => '')));
+          for (const subHtml of pages) {
+            if (!subHtml) continue;
+            for (const subSec of parseCourseSectionsFromHtml(subHtml, s.baseUrl)) {
+              const freshItems = subSec.items.filter((it) => !seenItemUrls.has(it.url));
+              if (!freshItems.length) continue;
+              for (const it of freshItems) seenItemUrls.add(it.url);
+              const existing = sections.find((sec) => sec.name === subSec.name);
+              if (existing) existing.items.push(...freshItems);
+              else sections.push({ ...subSec, items: freshItems });
+            }
+          }
+        }
+      }
+      return { courseUrl, sections };
     },
 
     async getFolderFiles(folderUrl) {

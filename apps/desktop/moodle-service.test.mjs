@@ -7,6 +7,8 @@ import {
   MOODLE_PRESETS,
   normalizeBaseUrl,
   parseCoursesFromHtml,
+  parseCourseStateJson,
+  extractSubSectionUrls,
   parseCourseSectionsFromHtml,
   parseFolderFilesFromHtml,
   extractFilenameFromResponse,
@@ -57,6 +59,28 @@ test('HTML parsers extract courses, sections, resources, and folder files', () =
   assert.equal(files.length, 1);
   assert.equal(files[0].name, 'Lab1.pdf');
   assert.equal(files[0].isDownloadable, true);
+
+  const fromState = parseCourseStateJson(JSON.stringify({
+    section: [
+      { id: 10, number: 1, title: 'Tema 1: Requisitos', cmlist: [501, 502] },
+    ],
+    cm: [
+      { id: 501, name: 'Transparencias T1', module: 'resource', url: 'https://moovi.uvigo.gal/mod/resource/view.php?id=501' },
+      { id: 502, name: 'Boletines', module: 'folder', url: 'https://moovi.uvigo.gal/mod/folder/view.php?id=502' },
+    ],
+  }), base);
+  assert.equal(fromState.length, 1);
+  assert.equal(fromState[0].name, 'Tema 1: Requisitos');
+  assert.equal(fromState[0].items.length, 2);
+  assert.equal(fromState[0].items[0].isDownloadable, true);
+  assert.equal(fromState[0].items[1].isFolder, true);
+
+  const subUrls = extractSubSectionUrls(
+    `<a href="/course/view.php?id=99&amp;section=1">Tema 1</a><a href="/course/section.php?id=444">Tema 2</a>`,
+    base,
+    99,
+  );
+  assert.equal(subUrls.length, 2);
 });
 
 test('extractFilenameFromResponse decodes Content-Disposition and URL fallback', () => {
