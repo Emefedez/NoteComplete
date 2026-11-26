@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.6
+
+- **Back from Euro-Office to your Markdown.** After opening a Markdown file (such as *backlog.md*) in Euro-Office, **Open as text** at the far right of the bar takes you back to it: the same file, where it is saved, with its prefabs still editable and any edits you had not saved yet. Before, there was no way back.
+- **Ctrl shortcuts work inside Euro-Office.** The editor took every key, so Ctrl S did not save and Ctrl O, Ctrl N and Ctrl 1–9 did nothing while you were typing in a document. They now work as everywhere else in NoteComplete (Ctrl S saves the document). The editor's own shortcuts (undo, copy, paste, bold, links, find…) are unchanged.
+
 ## 2.0.5
 
 - **The ? button lets go when the cheat sheet closes.** Closing an editor's cheat sheet with its × or Escape left the ? button looking pressed until it was clicked again. It now shows pressed only while the cheat sheet is open, in the UML, chart and prefab editors, the text documents and the notes.
