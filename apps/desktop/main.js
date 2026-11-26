@@ -4,12 +4,14 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
 import { dropboxDesktopSignIn, refreshDropboxDesktopToken } from './dropbox-auth.js';
+import { createMoodleService } from './moodle-service.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles, withExtension } from './library-files.js';
 import { launchFiles, openablePath } from './open-with.js';
 import { integrateLinux, setEuroOfficeMenuEntry } from './linux-integration.js';
 import { aiRunner } from './ai-runner.js';
+import { T3CodeService } from './t3code-service.js';
 import { agentSetup, readMcpSettings, stableBinary, writeMcpSettings } from './agent-setup.js';
 import { transcriber } from './transcriber.js';
 import { existsSync } from 'node:fs';
@@ -741,7 +743,22 @@ app.whenReady().then(async () => {
   // Flashcards, quizzes and chat through the user's own AI CLIs; see ai-runner.js.
   const serverName = process.platform === 'win32' ? 'noteful.exe' : 'noteful';
   const bundled = app.isPackaged ? path.join(process.resourcesPath, serverName) : fileURLToPath(new URL(`../../target/release/${serverName}`, import.meta.url));
-  const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null });
+  const t3 = new T3CodeService();
+  const ai = aiRunner({ mcpBinary: existsSync(bundled) ? bundled : null, t3 });
+  ipcMain.handle('t3:status', guarded(() => t3.getStatus()));
+  ipcMain.handle('t3:start', guarded(() => t3.startBackend()));
+  ipcMain.handle('t3:stop', guarded(() => t3.stopBackendIfOwned()));
+  ipcMain.handle('t3:install', guarded((event, opts = {}) => t3.installT3Code({
+    preferWsl: opts?.preferWsl !== false,
+    onProgress: (p) => { if (!event.sender.isDestroyed()) event.sender.send('t3:install-progress', p); },
+  })));
+  let t3Closing = false;
+  app.on('before-quit', (event) => {
+    if (!t3.owned || t3Closing) return;
+    t3Closing = true;
+    event.preventDefault();
+    t3.stopBackendIfOwned().catch(() => {}).finally(() => app.quit());
+  });
   // The same server, at a path that survives updates and AppImage remounts, for the
   // user's AI tools outside the app (see agent-setup.js).
   let stableServer = null;
@@ -1040,6 +1057,82 @@ app.whenReady().then(async () => {
       return token;
     } finally { pendingDropboxAuth.delete(sender.id); sender.removeListener('destroyed', cancelled); }
   });
+  // Moodle LMS (SAML2 SSO via dedicated BrowserWindow + Web Service token + student tools).
+  const moodle = createMoodleService({
+    sessionFile: path.join(app.getPath('userData'), 'moodle-session.json'),
+    safeStorage,
+    clearSsoCookies: async () => {
+      const ses = session.fromPartition('persist:moodle');
+      await ses.clearStorageData({ storages: ['cookies'] });
+    },
+    openSsoWindow: ({ baseUrl, ssoUrl, label }) => new Promise((resolve, reject) => {
+      const baseOrigin = new URL(baseUrl).origin;
+      const win = new BrowserWindow({
+        width: 920,
+        height: 740,
+        title: `Sign in to ${label || 'Moodle'}`,
+        autoHideMenuBar: true,
+        webPreferences: {
+          partition: 'persist:moodle',
+          nodeIntegration: false,
+          contextIsolation: true,
+          sandbox: true,
+        },
+      });
+      let settled = false;
+      const finish = (err, val) => {
+        if (settled) return;
+        settled = true;
+        if (!win.isDestroyed()) win.close();
+        if (err) reject(err);
+        else resolve(val);
+      };
+      const checkLoggedIn = async () => {
+        if (settled || win.isDestroyed()) return;
+        const curUrl = win.webContents.getURL();
+        let u;
+        try { u = new URL(curUrl); } catch { return; }
+        if (u.origin !== baseOrigin) return;
+        if (/\/(login|auth\/saml2)\//i.test(u.pathname)) return;
+        try {
+          const info = await win.webContents.executeJavaScript(`(() => {
+            const sesskey = (window.M && window.M.cfg && window.M.cfg.sesskey) || '';
+            const userEl = document.querySelector('.usertext, .usermenu .userbutton, [data-userid]');
+            const userName = userEl ? (userEl.textContent || '').trim().slice(0, 80) : '';
+            const userId = Number(document.querySelector('[data-userid]')?.getAttribute('data-userid') || 0);
+            return { sesskey, userName, userId };
+          })()`, true);
+          const cookies = await win.webContents.session.cookies.get({ url: baseUrl });
+          const hasMoodleCookie = cookies.some((c) => /moodlesession/i.test(c.name) && c.value);
+          if (hasMoodleCookie && (info?.sesskey || /\/(my|course|user)/i.test(u.pathname))) {
+            const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+            finish(null, { cookies: cookieStr, sesskey: info?.sesskey || '', userName: info?.userName || '', userId: info?.userId || 0 });
+          }
+        } catch { /* page still loading */ }
+      };
+      win.webContents.on('did-finish-load', checkLoggedIn);
+      win.webContents.on('did-navigate', checkLoggedIn);
+      win.on('closed', () => finish(Error('Moodle sign-in window was closed before completing login.')));
+      win.loadURL(ssoUrl).catch((e) => finish(e));
+    }),
+  });
+  ipcMain.handle('moodle:presets', guarded(() => moodle.presets()));
+  ipcMain.handle('moodle:session', guarded(() => moodle.getSession()));
+  ipcMain.handle('moodle:sign-in', guarded((_event, opts) => moodle.signIn(opts || {})));
+  ipcMain.handle('moodle:disconnect', guarded(() => moodle.disconnect()));
+  ipcMain.handle('moodle:courses', guarded(() => moodle.listCourses()));
+  ipcMain.handle('moodle:course-contents', guarded((_event, courseId) => moodle.getCourseContents(courseId)));
+  ipcMain.handle('moodle:folder-files', guarded((_event, folderUrl) => moodle.getFolderFiles(String(folderUrl || ''))));
+  ipcMain.handle('moodle:download', guarded((_event, url, name) => moodle.downloadFile(String(url || ''), String(name || 'document'))));
+  ipcMain.handle('moodle:deadlines', guarded((_event, opts) => moodle.getUpcomingDeadlines(opts || {})));
+  ipcMain.handle('moodle:grades', guarded((_event, courseId) => moodle.getGrades(courseId)));
+  ipcMain.handle('moodle:announcements', guarded((_event, courseId) => moodle.getAnnouncements(courseId)));
+  ipcMain.handle('moodle:mcp-config', guarded(() => moodle.getMcpConfig()));
+  ipcMain.handle('moodle:open-external', guarded((_event, url) => {
+    const raw = String(url || '').trim();
+    if (!/^https?:\/\//i.test(raw)) throw Error('Invalid Moodle URL.');
+    return shell.openExternal(raw);
+  }));
   started = true;
   const launchedEuroOffice = process.argv.includes('--euro-office');
   // Back from a restart for an update: the windows and tabs that were open, each opening its

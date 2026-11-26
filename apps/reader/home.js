@@ -73,7 +73,7 @@ export function isTinyCoverSize(width, height) {
 // The group member a Recent entry stands for (groups.js).
 export const memberOf = (entry) => entry.source === 'local' ? localMember(entry.path, entry.name)
   : entry.source === 'web' ? webMember(entry.url, entry.name) : { key: entry.key, name: entry.name, source: entry.source || 'drive' };
-export function homeScreen({ library, drive, dropbox = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null, pageCanvas = null, findIn = null, onContentKept = () => {}, shareZip = null }) {
+export function homeScreen({ library, drive, dropbox = null, moodle = null, github = null, webdav = null, open, openLink = null, status, versions = null, current = () => ({}), exportStudy = null, cutHistory = null, exportNote = null, groups = null, archive = null, openArchive = null, jobs = null, pageCanvas = null, findIn = null, onContentKept = () => {}, shareZip = null }) {
   const $ = id => document.getElementById(id);
   // Batch actions over Recent: one selection mode at a time.
   const contents = contentSearcher(library);
@@ -548,7 +548,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
   if (!Array.isArray(filters.types)) filters.types = [];
   if (!Array.isArray(filters.sources)) filters.sources = [];
-  const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', github: 'GitHub', webdav: 'Nextcloud / WebDAV', archive: 'Internet Archive' };
+  const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', moodle: 'Moodle', github: 'GitHub', webdav: 'Nextcloud / WebDAV', archive: 'Internet Archive' };
   const chip = (label, pressed, onclick) => {
     const b = document.createElement('button');
     b.type = 'button'; b.className = 'chip'; b.textContent = label;
@@ -724,6 +724,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   setupCollapsible('cloudToggle', 'cloudContent', 'cloud');
   setupCollapsible('drivePanelToggle', 'drivePanelBody', 'cloud_drive');
   setupCollapsible('dropboxPanelToggle', 'dropboxPanelBody', 'cloud_dropbox');
+  setupCollapsible('moodlePanelToggle', 'moodlePanelBody', 'cloud_moodle');
   setupCollapsible('githubPanelToggle', 'githubPanelBody', 'cloud_github');
   setupCollapsible('webdavPanelToggle', 'webdavPanelBody', 'cloud_webdav');
   setupCollapsible('archivePanelToggle', 'archivePanelBody', 'cloud_archive');
@@ -733,6 +734,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
   const cloudPanels = {
     drive: ['driveSection', drive],
     dropbox: ['dropboxSection', dropbox],
+    moodle: ['moodleSection', moodle],
     github: ['githubSection', github],
     webdav: ['webdavSection', webdav],
     archive: ['archiveSection', archive],
@@ -888,6 +890,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     const map = {
       drive: ['driveSearch', 'driveFind'],
       dropbox: ['dropboxSearch', 'dropboxFind'],
+      moodle: ['moodleSearch', 'moodleFind'],
       github: ['githubSearch', 'githubFind'],
       webdav: ['webdavSearch', 'webdavFind'],
       archive: ['archiveSearch', null],
@@ -927,6 +930,163 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     };
   }
 
+  // Global search bar: searches across Recent, all currently enabled cloud sources,
+  // and the currently chosen Moodle (Moovi) course in one place, separate from the
+  // individual section search bars.
+  let globalSearchTimer = 0;
+  function updateGlobalSearchScope() {
+    const scopeEl = $('homeGlobalSearchScope');
+    if (!scopeEl) return;
+    const parts = ['Recent', ...selectedClouds.map((id) => SOURCES[id] || id)];
+    if (moodle?.activeCourseName) parts.push(moodle.activeCourseName);
+    scopeEl.textContent = parts.join(' · ');
+  }
+  function renderGlobalSearchResults(rawQuery) {
+    const box = $('homeGlobalResults');
+    const list = $('homeGlobalResultsList');
+    const summary = $('homeGlobalResultsSummary');
+    if (!box || !list || !summary) return;
+    const q = String(rawQuery || '').trim();
+    if ($('homeGlobalSearchClear')) $('homeGlobalSearchClear').hidden = !q;
+    if (!q) {
+      box.hidden = true;
+      list.replaceChildren();
+      return;
+    }
+    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const hits = [];
+    const seen = new Set();
+
+    // 1. Recent notes
+    for (const card of document.querySelectorAll('#recentList .note-card')) {
+      const name = card.note?.title || card.note?.name || card.querySelector('strong')?.textContent || '';
+      const hay = `${name} ${card.textContent || ''}`.toLowerCase();
+      if (!terms.every((t) => hay.includes(t))) continue;
+      const key = `recent:${card.noteEntry?.key || name}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      hits.push({
+        source: 'Recent',
+        sub: card.note?.source ? (SOURCES[card.note.source] || 'Local') : 'On this device',
+        name: name || 'Untitled note',
+        open: () => card.querySelector('button.note-open, button')?.click(),
+      });
+    }
+
+    // 2. Currently chosen Moodle (Moovi) course & courses
+    if (moodle?.searchDocs && (selectedClouds.includes('moodle') || moodle.connected)) {
+      for (const mHit of moodle.searchDocs(q)) {
+        const key = `moodle:${mHit.url || mHit.name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hits.push(mHit);
+      }
+    }
+
+    // 3. All other currently enabled cloud panels' loaded cards
+    const listByCloud = {
+      drive: ['#driveList', 'Google Drive'],
+      dropbox: ['#dropboxList', 'Dropbox'],
+      github: ['#githubList', 'GitHub'],
+      webdav: ['#webdavList', 'WebDAV'],
+      archive: ['#archiveList', 'Archive'],
+    };
+    for (const id of selectedClouds) {
+      const pair = listByCloud[id];
+      if (!pair) continue;
+      const [sel, label] = pair;
+      for (const card of document.querySelectorAll(`${sel} .note-card`)) {
+        const name = card.note?.title || card.note?.name || card.querySelector('strong')?.textContent || '';
+        const hay = `${name} ${card.textContent || ''}`.toLowerCase();
+        if (!terms.every((t) => hay.includes(t))) continue;
+        const key = `${id}:${name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        hits.push({
+          source: label,
+          sub: label,
+          name: name || 'Document',
+          open: () => card.querySelector('button.note-open, button')?.click(),
+        });
+      }
+    }
+
+    summary.textContent = hits.length
+      ? `${hits.length} match${hits.length === 1 ? '' : 'es'} across enabled sources`
+      : `No matches for “${q}” in Recent or enabled clouds yet (cloud searches may still be loading…)`;
+    list.replaceChildren(...hits.slice(0, 40).map((h) => {
+      const li = document.createElement('li');
+      li.className = 'home-global-hit';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'home-global-hit-open';
+      const badge = document.createElement('span');
+      badge.className = 'home-global-hit-badge';
+      badge.textContent = h.source;
+      const title = document.createElement('strong');
+      title.textContent = h.name;
+      const sub = document.createElement('span');
+      sub.className = 'muted';
+      sub.textContent = h.sub || '';
+      btn.append(badge, title, sub);
+      btn.onclick = () => h.open?.();
+      li.append(btn);
+      if (typeof h.openBrowser === 'function') {
+        const ext = document.createElement('button');
+        ext.type = 'button';
+        ext.className = 'icon-button';
+        ext.title = 'Open in browser';
+        ext.setAttribute('aria-label', `Open ${h.name} in browser`);
+        ext.append(icon('open'));
+        ext.onclick = () => h.openBrowser();
+        li.append(ext);
+      }
+      return li;
+    }));
+    box.hidden = false;
+  }
+  function runGlobalSearch(rawQuery, triggerRemote = false) {
+    const q = String(rawQuery || '').trim();
+    if ($('recentSearch') && $('recentSearch').value !== q) {
+      $('recentSearch').value = q;
+      $('recentSearch').dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if ($('cloudMultiSearch') && $('cloudMultiSearch').value !== q) {
+      $('cloudMultiSearch').value = q;
+    }
+    runMultiCloudSearch(q, triggerRemote);
+    updateGlobalSearchScope();
+    renderGlobalSearchResults(q);
+  }
+  if ($('homeGlobalSearch')) {
+    updateGlobalSearchScope();
+    $('homeGlobalSearch').oninput = () => {
+      const val = $('homeGlobalSearch').value;
+      runGlobalSearch(val, false);
+      clearTimeout(globalSearchTimer);
+      globalSearchTimer = setTimeout(() => runGlobalSearch(val, true), 320);
+    };
+    $('homeGlobalSearch').onkeydown = (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(globalSearchTimer);
+        runGlobalSearch($('homeGlobalSearch').value, true);
+      } else if (event.key === 'Escape' && $('homeGlobalSearch').value) {
+        event.preventDefault();
+        event.stopPropagation();
+        $('homeGlobalSearch').value = '';
+        runGlobalSearch('', true);
+      }
+    };
+    if ($('homeGlobalSearchClear')) {
+      $('homeGlobalSearchClear').onclick = () => {
+        $('homeGlobalSearch').value = '';
+        runGlobalSearch('', true);
+        $('homeGlobalSearch').focus();
+      };
+    }
+  }
+
   applySelectedCloudPanels();
 
   // A Source filter shows those clouds' panels while it is on (opened once when it changes);
@@ -953,9 +1113,13 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
     const cloudQuery = ($('cloudMultiSearch')?.value || '').trim().toLowerCase();
     const cloudTerms = cloudQuery ? cloudQuery.split(/\s+/).filter(Boolean) : [];
     if ($('recentSearchClear')) $('recentSearchClear').hidden = !query;
+    if (query && $('homeGlobalSearch')?.value?.trim()) {
+      updateGlobalSearchScope();
+      renderGlobalSearchResults($('homeGlobalSearch').value);
+    }
     const active = filters.sources.length || filters.favourites || filters.period || filters.audio || filters.tags.length || filters.sizes.length || filters.types.length;
     let hidden = 0, unknown = 0, recentVisible = 0, recentTotal = 0;
-    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #githubList .note-card, #webdavList .note-card, #archiveList .note-card')) {
+    for (const card of document.querySelectorAll('#recentList .note-card, #driveList .note-card, #dropboxList .note-card, #moodleList .note-card, #githubList .note-card, #webdavList .note-card, #archiveList .note-card')) {
       const inRecent = Boolean(card.closest('#recentList'));
       if (inRecent) recentTotal++;
       let show = !active || !card.note || matches(card.note, filters);
@@ -1268,7 +1432,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         $('homeButton').setAttribute('aria-pressed', 'true');
         $('homeButton').title = hasDocument ? 'Back to open document' : 'Home: recent notes and cloud storage';
       }
-      if (!shown) { shown = true; drive?.show?.(); dropbox?.show?.(); github?.show?.(); webdav?.show?.(); archive?.show?.(); }
+      if (!shown) { shown = true; drive?.show?.(); dropbox?.show?.(); moodle?.show?.(); github?.show?.(); webdav?.show?.(); archive?.show?.(); }
       renderRecent(); renderFolder();
     },
     hide() {
@@ -1278,7 +1442,7 @@ export function homeScreen({ library, drive, dropbox = null, github = null, webd
         $('homeButton').setAttribute('aria-pressed', 'false');
         $('homeButton').title = 'Home: recent notes and cloud storage';
       }
-      if (shown) { shown = false; drive?.hide?.(); dropbox?.hide?.(); github?.hide?.(); webdav?.hide?.(); archive?.hide?.(); }
+      if (shown) { shown = false; drive?.hide?.(); dropbox?.hide?.(); moodle?.hide?.(); github?.hide?.(); webdav?.hide?.(); archive?.hide?.(); }
     },
     get visible() { return !$('empty').hidden; },
     rememberCover,

@@ -6,7 +6,7 @@ import { icon } from './icons.js';
 import { optionsFrom } from './convert.js';
 import { jsonFrom, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationPrompt, mergePartialExamJson } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
-import { runAI } from './small-model.js';
+import { createDocOrchestrator } from './ai-failover.js';
 import { createSourcePicker } from './source-picker.js';
 import {
   resolveSources,
@@ -541,7 +541,21 @@ export function examController({
     let streamed = '';
     try {
       const m = model.value;
-      const caps = ai.capabilities?.(provider, m) || {};
+      const orch = await createDocOrchestrator({
+        ai,
+        primaryProvider: provider,
+        primaryModel: m,
+        store,
+        signal: ac.signal,
+        onStatus: (msg) => {
+          el('examStatus').textContent = msg;
+          job?.progress?.(msg);
+        },
+        onSwitch: (info) => {
+          status?.(`${info.fromLabel} failed — handing off to ${info.toLabel}.`);
+        },
+      });
+      const caps = orch.capabilities();
       const userTitle = el('examTitle').value.trim() || draft?.title || '';
       const extraInstructions = el('examInstructions').value.trim();
 
@@ -567,7 +581,6 @@ export function examController({
       }
 
       if (mode === 'solve') {
-        const providerName = el('examTool').selectedOptions?.[0]?.textContent || provider;
         if (!checkpoint?.exercises?.length) {
           const bundle = formatSourceBundle(resolved, { maxChars: 90000 });
           const vis = await collectVisualCandidates(resolved, { maxImages: 6, maxWidth: 1000, renderMissing: caps.vision !== false });
@@ -585,24 +598,19 @@ export function examController({
             language: prefs.language,
             instructions: extraInstructions,
           });
-          const splitRes = await runAI(
-            ai,
-            {
-              provider,
-              model: m,
-              prompt: splitPromptText,
-              images: caps.vision === false ? [] : (vis.images.length ? vis.images : bundle.images),
-              tag: 'solve-split',
-              label: 'Splitter · cut exam into exercises',
-              peek: () => splitStream,
-              signal: ac.signal,
-            },
-            (chunk) => {
+          const splitRes = await orch.runStage({
+            prompt: splitPromptText,
+            images: caps.vision === false ? [] : (vis.images.length ? vis.images : bundle.images),
+            tag: 'solve-split',
+            label: 'Splitter · cut exam into exercises',
+            kind: 'exam',
+            small: model.small,
+            vision: caps.vision !== false,
+            onDelta: (chunk) => {
               splitStream += chunk;
               el('examStatus').textContent = `Stage 1/3 · Splitting exam… (${splitStream.length} chars)`;
             },
-            { small: model.small, vision: caps.vision !== false },
-          );
+          });
           if (ac.signal.aborted) throw Error('Cancelled.');
 
           let splitRaw = null;
@@ -624,7 +632,7 @@ export function examController({
               ? formatSourceBundle(resolved.slice(1), { maxChars: 14000 }).promptText
               : '',
             prefs,
-            provider,
+            provider: orch.provider,
             resourceKeys: sourceLinks.resourceKeys,
             resourceLabels: sourceLinks.resourceLabels,
           };
@@ -633,21 +641,20 @@ export function examController({
 
         // Stage 2: Solve every exercise concurrently across up to PARALLEL_WORKERS subagents.
         const exercises = checkpoint.exercises;
-        const solved = [...(checkpoint.solved || Array(exercises.length).fill(null))];
-        const pendingIndices = exercises.map((_, i) => i).filter((i) => !solved[i]);
-        let nextCursor = 0;
-        let doneCount = exercises.length - pendingIndices.length;
+        const initialSolved = [...(checkpoint.solved || Array(exercises.length).fill(null))];
+        const initialDone = initialSolved.filter(Boolean).length;
 
         el('examStatus').textContent = `Stage 2/3 · Solving ${exercises.length} exercise${exercises.length === 1 ? '' : 's'} in parallel…`;
-        job?.progress?.(`Solving ${doneCount}/${exercises.length} exercises`);
+        job?.progress?.(`Solving ${initialDone}/${exercises.length} exercises`);
 
-        const solveWorker = async () => {
-          while (!ac.signal.aborted && nextCursor < pendingIndices.length) {
-            const idx = pendingIndices[nextCursor++];
-            const ex = exercises[idx];
-            let workerStream = '';
+        const solved = await orch.runSubagents({
+          items: exercises,
+          concurrency: PARALLEL_WORKERS,
+          initialResults: initialSolved,
+          small: model.small,
+          buildRequest: (ex, idx, { caps: wCaps }) => {
             const exImages = [];
-            if (caps.vision !== false && ex.visual?.type === 'cutout' && ex.visual.dataUrl) {
+            if (wCaps.vision !== false && ex.visual?.type === 'cutout' && ex.visual.dataUrl) {
               const dec = dataUrlToBytes(ex.visual.dataUrl);
               if (dec?.bytes?.length) {
                 exImages.push({ bytes: dec.bytes, type: dec.type, label: ex.visual.caption || `exercise-${ex.number || idx + 1}` });
@@ -660,37 +667,28 @@ export function examController({
               language: checkpoint.language || prefs.language,
               instructions: extraInstructions,
             });
-            const res = await runAI(
-              ai,
-              {
-                provider,
-                model: m,
-                prompt,
-                images: exImages,
-                tag: 'solve-chunk',
-                label: `Solver · Ex ${ex.number || idx + 1}`,
-                peek: () => workerStream,
-                signal: ac.signal,
-              },
-              (chunk) => { workerStream += chunk; },
-              { small: model.small, vision: exImages.length > 0 && caps.vision !== false },
-            );
-            if (ac.signal.aborted) return;
-            const cleanedEx = cleanSolvedExercise(jsonFrom(res.text), ex, idx);
-            solved[idx] = resolved.length
+            return {
+              prompt,
+              images: exImages,
+              tag: 'solve-chunk',
+              label: `Solver · Ex ${ex.number || idx + 1}`,
+            };
+          },
+          parseResult: async (text, ex, idx) => {
+            const cleanedEx = cleanSolvedExercise(jsonFrom(text), ex, idx);
+            return resolved.length
               ? (await resolveExamVisualCutouts({ exercises: [cleanedEx] }, resolved)).exercises[0]
               : cleanedEx;
-            doneCount++;
-            checkpoint.solved = solved;
+          },
+          onItemDone: (idx, parsed, { done, total, provider: p, providerLabel: pLabel }) => {
+            initialSolved[idx] = parsed;
+            checkpoint.solved = [...initialSolved];
+            checkpoint.provider = p;
             saveAiDraft(store, DRAFT_KEY, checkpoint);
-            el('examStatus').textContent = `Stage 2/3 · Solved ${doneCount}/${exercises.length} exercises (${providerName})…`;
-            job?.progress?.(`Solved ${doneCount}/${exercises.length} exercises`);
-          }
-        };
-
-        await Promise.all(
-          Array.from({ length: Math.min(PARALLEL_WORKERS, Math.max(1, pendingIndices.length)) }, solveWorker),
-        );
+            el('examStatus').textContent = `Stage 2/3 · Solved ${done}/${total} exercises (${pLabel})…`;
+            job?.progress?.(`Solved ${done}/${total} exercises`);
+          },
+        });
         if (ac.signal.aborted) throw Error('Cancelled.');
 
         // Stage 3: Deterministic Composer (Exercise N + Steps -> NEW PAGE -> Solution N)
@@ -812,33 +810,26 @@ export function examController({
 
           let plan;
           if (resolved.length >= 3) {
-            let planStream = '';
             el('examStatus').textContent = `Stage 1/3 · Planning parallel blocks across ${resolved.length} sources…`;
             job?.progress?.('Stage 1/3 · Planning blocks');
             const catalogText = buildSourceCatalog(resolved);
-            const planRes = await runAI(
-              ai,
-              {
-                provider,
-                model: m,
-                prompt: examPlanPrompt({
-                  title: defaultTitle,
-                  catalogText,
-                  docCount: resolved.length,
-                  countMode: prefs.countMode,
-                  count: prefs.count,
-                  focus: prefs.focus,
-                  language: prefs.language,
-                }),
-                images: [],
-                tag: 'exam-plan',
-                label: 'Planner · organize blocks',
-                peek: () => planStream,
-                signal: ac.signal,
-              },
-              (chunk) => { planStream += chunk; },
-              { small: model.small, vision: false },
-            );
+            const planRes = await orch.runStage({
+              prompt: examPlanPrompt({
+                title: defaultTitle,
+                catalogText,
+                docCount: resolved.length,
+                countMode: prefs.countMode,
+                count: prefs.count,
+                focus: prefs.focus,
+                language: prefs.language,
+              }),
+              images: [],
+              tag: 'exam-plan',
+              label: 'Planner · organize blocks',
+              kind: 'exam',
+              small: model.small,
+              vision: false,
+            });
             if (ac.signal.aborted) throw Error('Cancelled.');
             let parsedPlan = null;
             try { parsedPlan = jsonFrom(planRes.text); } catch { parsedPlan = null; }
@@ -903,54 +894,42 @@ export function examController({
         }
 
         const chunkTasks = checkpoint.chunkTasks;
-        const completed = [...(checkpoint.completed || Array(chunkTasks.length).fill(null))];
+        const initialCompleted = [...(checkpoint.completed || Array(chunkTasks.length).fill(null))];
         const runtimeImages = checkpoint._runtimeImages || [];
         const runtimeDocs = checkpoint._runtimeDocs || [];
-        const pendingIdx = chunkTasks.map((_, i) => i).filter((i) => !completed[i]);
-        let cursor = 0;
-        let finished = chunkTasks.length - pendingIdx.length;
+        const initialFinished = initialCompleted.filter(Boolean).length;
 
         el('examStatus').textContent = `Stage 2/3 · Running ${chunkTasks.length} parallel exam subagents…`;
-        job?.progress?.(`Blocks ${finished}/${chunkTasks.length}`);
+        job?.progress?.(`Blocks ${initialFinished}/${chunkTasks.length}`);
 
-        const runWorker = async () => {
-          while (!ac.signal.aborted && cursor < pendingIdx.length) {
-            const ci = pendingIdx[cursor++];
-            const task = chunkTasks[ci];
-            let chunkStream = '';
-            const res = await runAI(
-              ai,
-              {
-                provider,
-                model: m,
-                prompt: task.prompt,
-                images: runtimeImages[ci] || [],
-                tag: 'exam',
-                label: `Block ${ci + 1}/${chunkTasks.length} · ${task.heading}`,
-                peek: () => chunkStream,
-                signal: ac.signal,
-              },
-              (chunk) => { chunkStream += chunk; },
-              { small: model.small, vision: caps.vision !== false },
-            );
-            if (ac.signal.aborted) return;
-            const cleanedChunk = cleanExamData(jsonFrom(res.text));
-            completed[ci] = await resolveExamVisualCutouts(
+        const completed = await orch.runSubagents({
+          items: chunkTasks,
+          concurrency: PARALLEL_WORKERS,
+          initialResults: initialCompleted,
+          small: model.small,
+          buildRequest: (task, ci) => ({
+            prompt: task.prompt,
+            images: runtimeImages[ci] || [],
+            tag: 'exam',
+            label: `Block ${ci + 1}/${chunkTasks.length} · ${task.heading}`,
+          }),
+          parseResult: async (text, _task, ci) => {
+            const cleanedChunk = cleanExamData(jsonFrom(text));
+            return resolveExamVisualCutouts(
               cleanedChunk,
               runtimeDocs[ci] || resolved,
               { preloadedImages: runtimeImages[ci] || [] },
             );
-            finished++;
-            checkpoint.completed = completed;
+          },
+          onItemDone: (ci, parsed, { done, total, provider: p, providerLabel: pLabel }) => {
+            initialCompleted[ci] = parsed;
+            checkpoint.completed = [...initialCompleted];
+            checkpoint.provider = p;
             saveAiDraft(store, DRAFT_KEY, { ...checkpoint, _runtimeImages: undefined, _runtimeDocs: undefined });
-            el('examStatus').textContent = `Stage 2/3 · Finished ${finished}/${chunkTasks.length} exam blocks…`;
-            job?.progress?.(`Blocks ${finished}/${chunkTasks.length}`);
-          }
-        };
-
-        await Promise.all(
-          Array.from({ length: Math.min(PARALLEL_WORKERS, Math.max(1, pendingIdx.length)) }, runWorker),
-        );
+            el('examStatus').textContent = `Stage 2/3 · Finished ${done}/${total} exam blocks (${pLabel})…`;
+            job?.progress?.(`Blocks ${done}/${total}`);
+          },
+        });
         if (ac.signal.aborted) throw Error('Cancelled.');
 
         el('examStatus').textContent = 'Stage 3/3 · Composing exam blocks & laying out PDF…';
@@ -1003,32 +982,28 @@ export function examController({
         el('examStatus').textContent = draft ? 'Continuing exam generation with AI…' : 'Generating exam problems with AI…';
         job?.progress?.('Writing exam questions…');
         let lastSavedAt = 0;
-        const res = await runAI(
-          ai,
-          {
-            provider,
-            model: m,
-            prompt: finalPrompt,
-            images: caps.vision === false ? [] : images,
-            tag: 'exam',
-            label: 'Exam generator',
-            peek: () => streamed,
-            signal: ac.signal,
-          },
-          (chunk) => {
+        const res = await orch.runStage({
+          prompt: finalPrompt,
+          images: caps.vision === false ? [] : images,
+          tag: 'exam',
+          label: 'Exam generator',
+          kind: 'exam',
+          initialPartialText: draft?.partialText || '',
+          small: model.small,
+          vision: caps.vision !== false,
+          onDelta: (chunk, { totalStreamed }) => {
             streamed += chunk;
-            const totalCharsStreamed = (draft?.partialText || '').length + streamed.length;
-            el('examStatus').textContent = `Generating exam… (${totalCharsStreamed} chars received)`;
+            el('examStatus').textContent = `Generating exam… (${totalStreamed} chars received)`;
             if (checkpoint && Date.now() - lastSavedAt > 4000) {
               lastSavedAt = Date.now();
-              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, partialText: `${draft?.partialText || ''}${streamed}` });
+              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, provider: orch.provider, partialText: `${draft?.partialText || ''}${streamed}` });
             }
           },
-          { small: model.small, vision: caps.vision !== false },
-        );
+        });
         if (ac.signal.aborted) throw Error('Cancelled.');
-        const parsed = draft?.partialText
-          ? mergePartialExamJson(draft.partialText, res.text)
+        const priorPartial = res.partialText || draft?.partialText || '';
+        const parsed = priorPartial
+          ? mergePartialExamJson(priorPartial, res.text)
           : jsonFrom(res.text);
         exam = await resolveExamVisualCutouts(
           cleanExamData(parsed),

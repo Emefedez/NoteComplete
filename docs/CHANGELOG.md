@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.12
+
+- **Open with for R scripts (`.R`, `.Rmd`, `.qmd`), matching Euro-Office.** Creating or opening an R script no longer forces R Commander Studio every time. You can now choose **Text view (code editor)**, **R Commander Studio**, or **Ask each time** (with the same **Open with** picker popup, `1`/`2` shortcuts, and *Remember for R scripts* checkbox) in **Setup wizard → Modules → Math & R → R Commander Studio**, **Math Mode & R Bridge settings**, and right-click **Open with ▸** menus.
+
 ## 2.0.11
 
 - **Bundled skills in desktop installers & Modules card.** Fixed `apps/desktop/package.json` so `skills/notecomplete-*` and `noteful` share a single `extraResources` array in every desktop installer, and added one-click **Install skills** support to the Setup Wizard → Modules **AI tools connection** card when harnesses are already connected.

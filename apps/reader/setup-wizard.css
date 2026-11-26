@@ -172,6 +172,14 @@
 .wizard-provider.unavailable { cursor: default; }
 .wizard-provider.unavailable .wizard-provider-name { color: var(--muted); }
 .wizard-provider-tag { margin-left: auto; font-size: 11.5px; color: var(--muted); text-align: right; }
+.wizard-succession-list { display: grid; gap: 5px; }
+.wizard-succession-row { cursor: default; padding: 6px 10px; }
+.wizard-succession-row.is-off { opacity: 0.58; }
+.wizard-succession-rank { width: 18px; text-align: center; font-size: 11.5px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; flex: none; }
+.wizard-succession-controls { display: inline-flex; gap: 4px; flex: none; }
+.wizard-succession-move { min-width: 24px; height: 24px; min-height: 0; padding: 0 5px; font-size: 12px; background: var(--fill); border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.wizard-succession-move:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.wizard-succession-move:disabled { opacity: 0.35; cursor: default; }
 /* Modules: one card each; its settings and smaller cards inside it. */
 .wizard-modules { display: grid; gap: 10px; }
 .wizard-module-head { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; }

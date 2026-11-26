@@ -20,6 +20,7 @@ import { groupStore, groupPanel, localMember, webMember } from "./groups.js";
 import { webViewer, normalizeLink, linkTitle } from "./web-view.js";
 import { driveBrowser } from "./drive-browser.js";
 import { dropboxBrowser } from "./dropbox-browser.js";
+import { moodleBrowser } from "./moodle-browser.js";
 import { githubBrowser, webdavBrowser, setupCloudGuideDialog } from "./cloud-collab.js";
 import { Library, entryTitle } from "./library.js";
 import { homeScreen, shouldSkipCoverFile, isTinyCoverSize } from "./home.js";
@@ -6567,10 +6568,19 @@ const webdav = webdavBrowser({
   status,
   exportOpenNote: exportOpenNoteFile,
 });
+const moodle = moodleBrowser({
+  library,
+  queue: downloadQueue,
+  ai: sharedAI(),
+  status,
+  onCards: () => home?.applyFilters(),
+  open: async (file) => openChosen(file),
+});
 var home = homeScreen({
   library,
   drive,
   dropbox,
+  moodle,
   github,
   webdav,
   archive,

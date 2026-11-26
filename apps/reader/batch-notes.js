@@ -4,7 +4,8 @@
 import { icon } from './icons.js';
 import { LOOK_FIELDS, aiPrompt, titleOf, optionsFrom } from './convert.js';
 import { modelPicker } from './model-picker.js';
-import { compactDialect, runAI } from './small-model.js';
+import { compactDialect } from './small-model.js';
+import { createDocOrchestrator } from './ai-failover.js';
 import { createSourcePicker } from './source-picker.js';
 import { resolveSources, formatSourceBundle } from './source-extract.js';
 import { safeFileBase } from './exam.js';
@@ -248,7 +249,21 @@ export function batchNotesController({
 
       const rawDialect = await call('dialect');
       const m = model.value;
-      const caps = ai.capabilities?.(provider, m) || {};
+      const orch = await createDocOrchestrator({
+        ai,
+        primaryProvider: provider,
+        primaryModel: m,
+        store,
+        signal: ac.signal,
+        onStatus: (msg) => {
+          el('bnStatus').textContent = msg;
+          job?.progress?.(msg);
+        },
+        onSwitch: (info) => {
+          status?.(`${info.fromLabel} failed — handing off to ${info.toLabel}.`);
+        },
+      });
+      const caps = orch.capabilities();
       const dialect = (model.small || caps.small) ? compactDialect(rawDialect) : rawDialect;
 
       const tasks = prefs.mode === 'combined'
@@ -279,30 +294,28 @@ export function batchNotesController({
           language: prefs.language,
           instructions,
         });
-        let streamed = '';
-        const res = await runAI(
-          ai,
-          {
-            provider,
-            model: m,
-            prompt,
-            images: caps.vision === false ? [] : task.images,
-            tag: 'batch-notes',
-            label: `Notes · ${task.title}`,
-            peek: () => streamed,
-            signal: ac.signal,
+        const res = await orch.runStage({
+          prompt,
+          images: caps.vision === false ? [] : task.images,
+          tag: 'batch-notes',
+          label: `Notes · ${task.title}`,
+          kind: 'note',
+          small: model.small,
+          vision: caps.vision !== false,
+          onDelta: (_chunk, { totalStreamed }) => {
+            el('bnStatus').textContent = `Writing "${task.title}" (${i + 1}/${tasks.length})… ${totalStreamed} chars`;
           },
-          (chunk) => {
-            streamed += chunk;
-            el('bnStatus').textContent = `Writing "${task.title}" (${i + 1}/${tasks.length})… ${streamed.length} chars`;
-          },
-          { vision: caps.vision !== false },
-        );
+        });
         if (ac.signal.aborted) break;
 
-        let md = String(res.text || '').trim();
-        const fence = md.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i);
-        if (fence) md = fence[1].trim();
+        const stripFence = (s) => {
+          const t = String(s || '').trim();
+          const f = t.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i);
+          return f ? f[1].trim() : t;
+        };
+        const md = res.partialText
+          ? `${stripFence(res.partialText)}\n\n${stripFence(res.text)}`.trim()
+          : stripFence(res.text);
         const noteTitle = titleOf(md) || task.title;
 
         const composed = await call('composeNoteFile', { title: noteTitle, markdown: md, options: composeOpts });

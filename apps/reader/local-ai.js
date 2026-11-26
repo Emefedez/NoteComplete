@@ -681,6 +681,10 @@ export function withLocalAI(native = null, { gpu = globalThis.navigator?.gpu, na
       native?.cancel?.(tag);
       local.cancel(typeof tag === 'string' ? tag : '');
     },
+    t3Status: native?.t3Status ? () => native.t3Status() : null,
+    t3Start: native?.t3Start ? () => native.t3Start() : null,
+    t3Stop: native?.t3Stop ? () => native.t3Stop() : null,
+    t3Install: native?.t3Install ? (opts, onProgress) => native.t3Install(opts, onProgress) : null,
     canManage: provider => provider === LOCAL_ID,
     manage: () => local.manage(),
     // Whether a model reads images and its window (0: large, the desktop tools).

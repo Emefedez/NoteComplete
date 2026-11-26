@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -39,6 +39,7 @@
       "open-with.js",
       "linux-integration.js",
       "ai-runner.js",
+      "t3code-service.js",
       "transcriber.js",
       "terminate-process.js",
       "tabs.js",
@@ -58,6 +59,7 @@
       "preload.cjs",
       "google-auth.js",
       "dropbox-auth.js",
+      "moodle-service.js",
       "google-desktop-client.json"
     ],
     "asarUnpack": [

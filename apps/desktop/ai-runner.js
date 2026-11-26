@@ -18,7 +18,19 @@ export const PROVIDERS = {
   antigravity: { label: 'Antigravity', names: ['agy', 'antigravity'] },
   codex: { label: 'Codex', names: ['codex'] },
   opencode: { label: 'OpenCode', names: ['opencode'] },
+  t3code: { label: 'T3 Code', names: ['t3code', 't3-code'] },
 };
+
+export const DOC_GEN_TAGS = new Set([
+  'exam',
+  'exam-plan',
+  'solve-split',
+  'solve-chunk',
+  'expand-exam',
+  'expand-note',
+  'batch-notes',
+  'handwriting',
+]);
 
 // Desktop launchers often lack the shell's PATH (mise, npm, ~/.local/bin), so
 // ask the user's login shell once where the tools are.
@@ -76,7 +88,7 @@ export function streamLine(provider, line) {
   }
   return {};
 }
-export const STREAMS = new Set(['claude', 'antigravity', 'opencode']);
+export const STREAMS = new Set(['claude', 'antigravity', 'opencode', 't3code']);
 
 // OpenCode's answer: the text written after its last tool call.
 export function openCodeAnswer(out) {
@@ -179,20 +191,32 @@ async function listModels(provider, binary, home = homedir()) {
 const lastFinal = (provider, out) => out.split('\n').map(l => streamLine(provider, l).final).filter(f => typeof f === 'string').at(-1);
 const tail = text => text.trim().split('\n').slice(-4).join(' ').slice(0, 400);
 
-export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
+export function aiRunner({ tools = findTools, mcpBinary = null, t3 = null } = {}) {
   let found;
   // Several requests per window may run at once (study batches, chat); each
   // carries a tag so Stop cancels only its own.
   const running = new Map();
   const children = owner => running.get(owner) || running.set(owner, new Set()).get(owner);
   const models = new Map(), asking = new Set();
+  const t3Available = async () => {
+    if (found?.t3code) return true;
+    if (!t3) return false;
+    if (t3.findT3Installation?.()) return true;
+    const probe = await t3.probeHttpBackend?.().catch(() => ({ running: false }));
+    return !!probe?.running;
+  };
   return {
     tools: async () => (found ||= await tools()),
     // Windows with requests in flight (a window's entry is dropped when its last one ends).
     owners: () => running.size,
     async providers() {
       found ||= await tools();
-      return Object.entries(PROVIDERS).map(([id, p]) => ({ id, label: p.label, available: !!found[id] }));
+      const hasT3 = await t3Available();
+      return Object.entries(PROVIDERS).map(([id, p]) => ({
+        id,
+        label: p.label,
+        available: id === 't3code' ? hasT3 : !!found[id],
+      }));
     },
     // The models a tool offers; an empty list when it is missing or says nothing.
     // `fresh` asks the tool again (the reader shows its kept list meanwhile); several
@@ -200,6 +224,18 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
     async models(provider, { fresh = false } = {}) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       found ||= await tools();
+      if (provider === 't3code') {
+        if (!t3 || !(await t3Available())) return [];
+        if (!models.has(provider) || (fresh && !asking.has(provider))) {
+          const request = t3.listModels().catch(() => []);
+          models.set(provider, request);
+          asking.add(provider);
+          request.finally(() => asking.delete(provider));
+        }
+        const list = await models.get(provider);
+        if (!list.length) models.delete(provider);
+        return list;
+      }
       if (!found[provider]) return [];
       if (!models.has(provider) || (fresh && !asking.has(provider))) {
         const request = listModels(provider, found[provider]);
@@ -214,27 +250,56 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
     cancel(owner, tag = '') {
       for (const r of running.get(owner) || []) if (!tag || r.tag === tag) {
         r.cancelled = true;
-        terminateProcess(r.child);
+        r.abort?.abort();
+        if (r.child) terminateProcess(r.child);
       }
     },
     // One request: write images, run the tool in the temporary folder, return its answer.
     // `onDelta` receives the answer's text pieces while it is written (tools that stream).
     // `onActivity` gets short notes ("Thinking…", "Reading x.png…") while no answer text comes.
-    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '' }, onDelta = null, onActivity = null) {
+    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '', docGen = false }, onDelta = null, onActivity = null) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
       if (typeof model !== 'string' || (model && !MODEL.test(model))) throw Error('Invalid model name.');
       if (typeof tag !== 'string' || !/^[\w-]{0,40}$/.test(tag)) throw Error('Invalid request tag.');
       found ||= await tools();
+      const isDocGen = docGen === true || DOC_GEN_TAGS.has(tag);
+
+      if (provider === 't3code') {
+        if (!t3) throw Error('T3 Code service is not available in this environment.');
+        if (children(owner).size >= MAX_PARALLEL) throw Error('Too many AI requests are running.');
+        const abort = new AbortController();
+        const entry = { child: null, abort, tag, cancelled: false };
+        children(owner).add(entry);
+        try {
+          const fullPrompt = notePath ? `${prompt}\n\nThe note file is ${notePath}.` : prompt;
+          const res = await t3.runChat({ prompt: fullPrompt, images, model, onDelta, onActivity, signal: abort.signal });
+          if (entry.cancelled) throw Error('The AI request was stopped.');
+          if (typeof res?.text !== 'string' || !res.text.trim()) throw Error('T3 Code returned no answer.');
+          return { text: res.text };
+        } finally {
+          children(owner).delete(entry);
+          if (!children(owner).size) running.delete(owner);
+        }
+      }
+
       const binary = found[provider];
       if (!binary) throw Error(`${PROVIDERS[provider].label} was not found. Install it and sign in, then restart NoteComplete.`);
       if (children(owner).size >= MAX_PARALLEL) throw Error('Too many AI requests are running.');
       // Hold the slot while images are written, so a cancel then still applies.
-      const entry = { child: null, tag, cancelled: false };
+      const entry = { child: null, abort: null, tag, cancelled: false };
       children(owner).add(entry);
       let dir = '';
+      let t3Acquired = false;
       try {
+        // AI document generation always passes through T3 Code when installed/available,
+        // starting T3 on demand and releasing it automatically when generation finishes.
+        if (isDocGen && t3) {
+          onActivity?.('Preparing T3 Code session…');
+          await t3.acquire().catch(() => {});
+          t3Acquired = true;
+        }
         dir = await mkdtemp(path.join(tmpdir(), 'notecomplete-ai-'));
         const files = [];
         // Page images, and PDFs (the source PDF of a page) up to 60 MB.
@@ -252,9 +317,10 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
           await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
           await writeFile(path.join(dir, name), content);
         }
+        const t3Env = t3Acquired && t3?.baseUrl ? { NOTECOMPLETE_T3_URL: t3.baseUrl } : {};
         const output = await new Promise((resolve, reject) => {
           if (entry.cancelled) return reject(Error('The AI request was stopped.'));
-          const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...call.env }, stdio: ['pipe', 'pipe', 'pipe'] });
+          const child = spawn(binary, call.args, { cwd: dir, env: { ...process.env, NO_COLOR: '1', ...t3Env, ...call.env }, stdio: ['pipe', 'pipe', 'pipe'] });
           entry.child = child;
           let out = '', err = '', pending = '';
           let timedOut = false;
@@ -314,6 +380,7 @@ export function aiRunner({ tools = findTools, mcpBinary = null } = {}) {
         if (typeof text !== 'string' || !text.trim()) throw Error(`${PROVIDERS[provider].label} returned no answer.`);
         return { text };
       } finally {
+        if (t3Acquired) t3?.release?.();
         children(owner).delete(entry);
         if (!children(owner).size) running.delete(owner);
         if (dir) await rm(dir, { recursive: true, force: true });

@@ -1,5 +1,6 @@
 import { modelPicker } from "./model-picker.js";
-import { compactDialect, runAI } from "./small-model.js";
+import { compactDialect } from "./small-model.js";
+import { createDocOrchestrator } from "./ai-failover.js";
 import { icon } from "./icons.js";
 import { createSourcePicker } from "./source-picker.js";
 import { resolveSources, formatSourceBundle } from "./source-extract.js";
@@ -531,19 +532,38 @@ export function handwritingConverter({
       }
       const verb = kind === "enrich" ? "Making it richer" : kind === "continue" ? "Continuing the note" : "Writing";
       el("hwAiStatus").textContent = `${verb}… (your AI tool can take a minute)`;
-      const { text } = await runAI(ai, {
-        provider, model: m, prompt, images, tag: "handwriting", label: kind === "enrich" ? "Note · richer" : "New note with AI",
-        peek: () => streamed, signal: run.ac.signal,
-      }, (delta) => {
-        if (run.stopped) return;
-        streamed += delta;
-        el("hwMarkdown").value = shown();
-        el("hwAiStatus").textContent = `${verb}… ${streamed.length.toLocaleString()} characters`;
-        schedule();
-      }, { small: model.small, vision: caps.vision !== false });
+      const orch = await createDocOrchestrator({
+        ai,
+        primaryProvider: provider,
+        primaryModel: m,
+        store,
+        signal: run.ac.signal,
+        onStatus: (msg) => { if (!run.stopped) el("hwAiStatus").textContent = msg; },
+        onSwitch: (info) => { status?.(`${info.fromLabel} failed — handing off to ${info.toLabel}.`); },
+      });
+      const res = await orch.runStage({
+        prompt,
+        images,
+        tag: "handwriting",
+        label: kind === "enrich" ? "Note · richer" : "New note with AI",
+        kind: "note",
+        initialPartialText: kept,
+        small: model.small,
+        vision: caps.vision !== false,
+        onDelta: (delta, { totalStreamed }) => {
+          if (run.stopped) return;
+          streamed += delta;
+          el("hwMarkdown").value = shown();
+          el("hwAiStatus").textContent = `${verb}… ${totalStreamed.toLocaleString()} characters`;
+          schedule();
+        },
+      });
       if (run.stopped) return;
-      streamed = text || streamed;
-      const markdown = shown();
+      const mergedPartial = res.partialText ? answerMarkdown(res.partialText) : kept;
+      const finalChunk = answerMarkdown(res.text || streamed);
+      const markdown = mergedPartial && res.handedOff
+        ? `${mergedPartial}\n\n${finalChunk}`.trim()
+        : (kept ? `${kept}\n\n${finalChunk}`.trim() : finalChunk);
       if (!markdown) throw Error("The AI tool gave no answer.");
       el("hwMarkdown").value = markdown;
       const name = el("hwName").value.trim();

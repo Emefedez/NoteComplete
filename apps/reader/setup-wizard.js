@@ -10,6 +10,7 @@ import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
 import { describe as describeAgentTool, readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
+import { renderSuccessionEditor, renderT3StatusCard } from './ai-failover.js';
 import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
 import { PRESETS } from './themes.js';
 
@@ -268,7 +269,24 @@ export function buildSteps(env) {
         if (preferMdInput && agentsApi?.settings) {
           syncPreferMarkdown({ api: agentsApi, store: storage }).then((v) => { preferMdInput.checked = v; }, () => {});
         }
+        const t3Mount = make('div', { className: 'wizard-t3-mount' });
+        renderT3StatusCard(t3Mount, {
+          ai: env.ai,
+          onInstalled: async () => {
+            draft.ai = null;
+            refresh('ai');
+          },
+        });
+        const successionMount = make('div', { className: 'wizard-succession-mount' });
+        renderSuccessionEditor(successionMount, {
+          providers: draft.ai.choices.filter((c) => c.id !== 'none'),
+          store: storage,
+        });
         body.append(label('Default assistant'), list,
+          ...(t3Mount.childNodes.length ? [label('T3 Code for AI documents'), t3Mount] : []),
+          label('Harness failover priority'),
+          make('p', { className: 'wizard-hint', textContent: 'If a harness errors out or hits usage limits while generating AI documents, NoteComplete hands off the orchestrator and remaining subagents to the next harness in this order without losing completed work.' }),
+          successionMount,
           label('AI-generated documents'), preferMd);
 
         if (agentsApi?.status) {
@@ -331,6 +349,47 @@ export function buildSteps(env) {
           }
         }
         body.append(make('p', { className: 'wizard-hint', textContent: 'Connecting registers the NoteComplete MCP server and installs the bundled workflow skills (audio-synced notes, Markdown/Euro-Office prefabs, handwriting study).' }));
+        const moodleApi = env.moodle ?? globalThis.notecompleteMoodle;
+        if (moodleApi?.signIn) {
+          body.append(label('Moodle (Moovi / University LMS)'));
+          const mCard = make('div', { className: 'wizard-status-card' });
+          const mRow = make('div', { className: 'wizard-inline-row' });
+          const presetSel = make('select', { 'aria-label': 'Moodle server' });
+          presetSel.setAttribute('data-native', '');
+          presetSel.add(new Option('Moovi — Universidade de Vigo (UVIGO)', 'moovi-uvigo'));
+          presetSel.add(new Option('Custom Moodle server…', 'custom'));
+          const customUrl = make('input', { type: 'url', placeholder: 'https://moodle.example.edu', hidden: true });
+          presetSel.onchange = () => { customUrl.hidden = presetSel.value !== 'custom'; };
+          const signInBtn = make('button', { type: 'button', className: 'primary', textContent: 'Sign in with SSO' });
+          const mNote = make('p', { className: 'wizard-hint', textContent: 'Browse courses, bulk-download PDFs/notes, view deadlines & grades, or open any course in your browser.' });
+          moodleApi.session?.().then((s) => {
+            if (s?.connected) {
+              mCard.classList.add('ok');
+              mNote.textContent = `Connected to ${s.label}${s.userName ? ` (${s.userName})` : ''}. Manage courses in Home ▸ Cloud ▸ Moodle.`;
+              signInBtn.textContent = 'Reconnect';
+            }
+          }).catch(() => {});
+          signInBtn.onclick = async () => {
+            signInBtn.disabled = true;
+            mNote.textContent = 'Opening Moodle SSO login…';
+            try {
+              const s = await moodleApi.signIn({
+                presetId: presetSel.value,
+                baseUrl: presetSel.value === 'custom' ? customUrl.value.trim() : '',
+              });
+              mCard.classList.add('ok');
+              mNote.textContent = `Connected to ${s.label}${s.userName ? ` (${s.userName})` : ''}.`;
+              signInBtn.textContent = 'Reconnect';
+            } catch (e) {
+              mNote.textContent = e?.message || 'Could not sign in to Moodle.';
+            } finally {
+              signInBtn.disabled = false;
+            }
+          };
+          mRow.append(presetSel, customUrl, signInBtn);
+          mCard.append(mRow, mNote);
+          body.append(mCard);
+        }
       },
     },
     {

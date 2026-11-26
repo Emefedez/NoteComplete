@@ -2,6 +2,7 @@
 // Antigravity, OpenCode) read and write these notes through the note server the
 // desktop app ships, with one click per tool or with the command shown. Opened
 // once by itself when a tool is installed but not connected.
+import { renderSuccessionEditor, renderT3StatusCard } from "./ai-failover.js";
 
 const ASKED = "notecomplete-agents-asked";
 export const PREFER_MD_KEY = "notecomplete-ai-prefer-markdown";
@@ -66,6 +67,12 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
         <input id="agentsPreferMarkdown" type="checkbox" />
         <span><strong>Prefer Markdown (.md) for AI-generated documents</strong><span class="wizard-check-hint">Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.</span></span>
       </label>
+      <div id="agentsT3Mount" style="margin: 0 0 12px;"></div>
+      <details class="agents-manual" style="margin: 0 0 12px;">
+        <summary><strong>AI document failover priority</strong> — hand off orchestrator &amp; subagents on error / usage limit</summary>
+        <p class="muted" style="margin: 6px 0 8px;">Order the harnesses NoteComplete tries next if the active harness errors out or hits usage limits during AI document generation. Already-completed work is preserved.</p>
+        <div id="agentsSuccessionMount"></div>
+      </details>
       <ul id="agentsList" class="agents-list"></ul>
       <p id="agentsStatus" class="muted" role="status" aria-live="polite"></p>
       <div class="ocr-actions"><button id="agentsClose" type="button" class="primary">Done</button></div>`;
@@ -86,6 +93,13 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
     const list = dialog.querySelector("#agentsList"), note = dialog.querySelector("#agentsStatus");
     const prefBox = dialog.querySelector("#agentsPreferMarkdown");
     if (prefBox) syncPreferMarkdown({ api, store }).then((v) => { prefBox.checked = v; }, () => {});
+    const t3Mount = dialog.querySelector("#agentsT3Mount");
+    if (t3Mount) renderT3StatusCard(t3Mount, { ai: globalThis.notecompleteAI, onInstalled: () => render() });
+    const succMount = dialog.querySelector("#agentsSuccessionMount");
+    if (succMount) {
+      const provs = (await globalThis.notecompleteAI?.providers?.().catch(() => [])) || [];
+      renderSuccessionEditor(succMount, { providers: provs, store });
+    }
     note.textContent = "Looking for your AI tools…";
     let result;
     try { result = await api.status(); } catch (e) { note.textContent = e.message; return; }

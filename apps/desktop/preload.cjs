@@ -269,6 +269,21 @@ contextBridge.exposeInMainWorld('notecompleteAgents', {
   settings: () => ipcRenderer.invoke('agents:settings'),
   setSettings: patch => ipcRenderer.invoke('agents:set-settings', patch),
 });
+contextBridge.exposeInMainWorld('notecompleteMoodle', {
+  presets: () => ipcRenderer.invoke('moodle:presets'),
+  session: () => ipcRenderer.invoke('moodle:session'),
+  signIn: options => ipcRenderer.invoke('moodle:sign-in', options),
+  disconnect: () => ipcRenderer.invoke('moodle:disconnect'),
+  courses: () => ipcRenderer.invoke('moodle:courses'),
+  courseContents: courseId => ipcRenderer.invoke('moodle:course-contents', courseId),
+  folderFiles: url => ipcRenderer.invoke('moodle:folder-files', url),
+  download: (url, name) => ipcRenderer.invoke('moodle:download', url, name),
+  deadlines: options => ipcRenderer.invoke('moodle:deadlines', options),
+  grades: courseId => ipcRenderer.invoke('moodle:grades', courseId),
+  announcements: courseId => ipcRenderer.invoke('moodle:announcements', courseId),
+  mcpConfig: () => ipcRenderer.invoke('moodle:mcp-config'),
+  openExternal: url => ipcRenderer.invoke('moodle:open-external', url),
+});
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),
   open: () => ipcRenderer.invoke('windows:new'),
@@ -318,6 +333,15 @@ contextBridge.exposeInMainWorld('notecompleteAI', {
     return ipcRenderer.invoke('ai:run', { ...request, stream }).finally(() => { ipcRenderer.removeListener('ai:delta', listener); ipcRenderer.removeListener('ai:activity', activity); });
   },
   cancel: tag => ipcRenderer.send('ai:cancel', typeof tag === 'string' ? tag : ''),
+  t3Status: () => ipcRenderer.invoke('t3:status'),
+  t3Start: () => ipcRenderer.invoke('t3:start'),
+  t3Stop: () => ipcRenderer.invoke('t3:stop'),
+  t3Install: (opts = {}, onProgress = null) => {
+    if (typeof onProgress !== 'function') return ipcRenderer.invoke('t3:install', opts);
+    const listener = (_event, p) => onProgress(p);
+    ipcRenderer.on('t3:install-progress', listener);
+    return ipcRenderer.invoke('t3:install', opts).finally(() => ipcRenderer.removeListener('t3:install-progress', listener));
+  },
 });
 // Help → Keep a diagnostic log, Open the log.
 contextBridge.exposeInMainWorld('notecompleteLog', {

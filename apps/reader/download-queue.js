@@ -112,7 +112,7 @@ export function createDownloadQueue({ library = null, onUpdate = () => {}, onIte
 
       if (next.source === 'archive' && next.client) {
         downloadedBlob = await next.client.download(next.sourceId, next.doc, controller.signal, onProgress);
-      } else if ((next.source === 'drive' || next.source === 'dropbox') && next.client) {
+      } else if ((next.source === 'drive' || next.source === 'dropbox' || next.source === 'moodle') && next.client) {
         downloadedBlob = await next.client.download(next.doc, controller.signal, onProgress);
       } else if (typeof next.downloadFn === 'function') {
         downloadedBlob = await next.downloadFn(controller.signal, onProgress);

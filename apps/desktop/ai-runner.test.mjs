@@ -31,7 +31,7 @@ test('runs a provider in a temporary folder, passes images and cleans up', async
   await writeFile(fake, '#!/bin/sh\nprompt=$(cat)\nprintf \'{"result":"%s"}\' "$(printf %s "$prompt" | grep -c png) images in $(pwd | grep -c notecomplete-ai)"\n');
   await chmod(fake, 0o755);
   const runner = aiRunner({ tools: async () => ({ claude: fake, antigravity: null, codex: null }) });
-  assert.deepEqual((await runner.providers()).map(p => [p.id, p.available]), [['claude', true], ['antigravity', false], ['codex', false], ['opencode', false]]);
+  assert.deepEqual((await runner.providers()).map(p => [p.id, p.available]), [['claude', true], ['antigravity', false], ['codex', false], ['opencode', false], ['t3code', false]]);
   const png = new Uint8Array([137, 80, 78, 71]);
   const { text } = await runner.run('w1', { provider: 'claude', prompt: 'Cards please', images: [{ bytes: png, type: 'image/png', label: 'p1' }, { bytes: png, type: 'image/png', label: 'p2' }] });
   assert.equal(text, '2 images in 1');

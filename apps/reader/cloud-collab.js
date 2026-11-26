@@ -16,6 +16,7 @@ import { fileCoverSvg } from './file-covers.js';
 // Dropbox and archive keys are dropbox-browser.js's and archive-browser.js's own.
 export const CLOUD_CONFIG_KEYS = {
   dropbox: ['notecomplete-dropbox-session-v1', 'notecomplete-dropbox-config-v1'],
+  moodle: ['notecomplete-moodle-config-v1'],
   github: ['notecomplete-github-config-v1'],
   webdav: ['notecomplete-webdav-config-v1'],
   archive: ['notecomplete-archive-sources-v1'],
@@ -37,6 +38,14 @@ export const CLOUD_PROVIDERS = [
     searchId: 'dropboxSearch',
     findId: 'dropboxFind',
     svg: '<svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg>',
+  },
+  {
+    id: 'moodle',
+    label: 'Moodle (Moovi / LMS)',
+    sectionId: 'moodleSection',
+    searchId: 'moodleSearch',
+    findId: 'moodleFind',
+    svg: '<svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3zm-7 9.18V16l7 3.82L19 16v-3.82L12 16l-7-3.82z"/></svg>',
   },
   {
     id: 'github',

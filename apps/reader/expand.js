@@ -7,7 +7,8 @@ import { icon } from './icons.js';
 import { LOOK_FIELDS, titleOf } from './convert.js';
 import { jsonFrom, saveAiDraft, loadAiDraft, clearAiDraft, buildContinuationPrompt, mergePartialExamJson } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
-import { compactDialect, runAI } from './small-model.js';
+import { compactDialect } from './small-model.js';
+import { createDocOrchestrator } from './ai-failover.js';
 import { createSourcePicker } from './source-picker.js';
 import { resolveSources, formatSourceBundle, collectVisualCandidates } from './source-extract.js';
 import { PROBLEM_TYPES, FOCUS_MODES, ensureExamMathRenderer, examPrompt, cleanExamData, buildPaginatedExamHtml } from './exam-html.js';
@@ -659,7 +660,21 @@ export function expandController({
     let streamed = '';
     try {
       const m = model.value;
-      const caps = ai.capabilities?.(provider, m) || {};
+      const orch = await createDocOrchestrator({
+        ai,
+        primaryProvider: provider,
+        primaryModel: m,
+        store,
+        signal: ac.signal,
+        onStatus: (msg) => {
+          el('expStatus').textContent = msg;
+          job?.progress?.(msg);
+        },
+        onSwitch: (info) => {
+          status?.(`${info.fromLabel} failed — handing off to ${info.toLabel}.`);
+        },
+      });
+      const caps = orch.capabilities();
       let existingSummary = draft?.existingSummary ?? '';
       let basePrompt = draft?.prompt || '';
       let headingFallback = draft?.headingFallback || openDocTitle();
@@ -771,33 +786,29 @@ export function expandController({
       if (mode === 'exam') {
         el('expStatus').textContent = complete ? 'Using the questions generated before…' : draft ? 'Continuing new exam problems with AI…' : 'Generating new exam problems with AI…';
         job?.progress?.('Writing expansion problems…');
-        const res = complete ? { text: complete } : await runAI(
-          ai,
-          {
-            provider,
-            model: m,
-            prompt: finalPrompt,
-            images: caps.vision === false ? [] : images,
-            tag: 'expand-exam',
-            label: `Expand exam · ${openDocTitle()}`,
-            peek: () => streamed,
-            signal: ac.signal,
-          },
-          (chunk) => {
+        const res = complete ? { text: complete, partialText: '' } : await orch.runStage({
+          prompt: finalPrompt,
+          images: caps.vision === false ? [] : images,
+          tag: 'expand-exam',
+          label: `Expand exam · ${openDocTitle()}`,
+          kind: 'exam',
+          initialPartialText: draft?.partialText || '',
+          small: model.small,
+          vision: caps.vision !== false,
+          onDelta: (chunk, { totalStreamed }) => {
             streamed += chunk;
-            const totalChars = (draft?.partialText || '').length + streamed.length;
-            el('expStatus').textContent = `Generating exam questions… (${totalChars} chars received)`;
+            el('expStatus').textContent = `Generating exam questions… (${totalStreamed} chars received)`;
             if (checkpoint && Date.now() - lastSavedAt > 4000) {
               lastSavedAt = Date.now();
-              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, partialText: `${draft?.partialText || ''}${streamed}` });
+              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, provider: orch.provider, partialText: `${draft?.partialText || ''}${streamed}` });
             }
           },
-          { vision: caps.vision !== false },
-        );
+        });
         if (ac.signal.aborted) throw Error('Cancelled.');
 
-        const parsed = complete ? jsonFrom(complete) : draft?.partialText
-          ? mergePartialExamJson(draft.partialText, res.text)
+        const priorPartial = res.partialText || draft?.partialText || '';
+        const parsed = complete ? jsonFrom(complete) : priorPartial
+          ? mergePartialExamJson(priorPartial, res.text)
           : jsonFrom(res.text);
         const rawExam = cleanExamData(parsed);
         const { exam, removed: dupRemoved } = dedupeNewExamProblems(rawExam, existingSummary);
@@ -870,29 +881,24 @@ export function expandController({
       } else {
         el('expStatus').textContent = draft ? 'Continuing handwritten pages with AI…' : 'Generating handwritten pages with AI…';
         job?.progress?.('Writing Markdown for MCP ink…');
-        const res = await runAI(
-          ai,
-          {
-            provider,
-            model: m,
-            prompt: finalPrompt,
-            images: caps.vision === false ? [] : images,
-            tag: 'expand-note',
-            label: `Expand notes · ${openDocTitle()}`,
-            peek: () => streamed,
-            signal: ac.signal,
-          },
-          (chunk) => {
+        const res = await orch.runStage({
+          prompt: finalPrompt,
+          images: caps.vision === false ? [] : images,
+          tag: 'expand-note',
+          label: `Expand notes · ${openDocTitle()}`,
+          kind: 'note',
+          initialPartialText: draft?.partialText || '',
+          small: model.small,
+          vision: caps.vision !== false,
+          onDelta: (chunk, { totalStreamed }) => {
             streamed += chunk;
-            const totalChars = (draft?.partialText || '').length + streamed.length;
-            el('expStatus').textContent = `Writing handwritten content… (${totalChars} chars received)`;
+            el('expStatus').textContent = `Writing handwritten content… (${totalStreamed} chars received)`;
             if (checkpoint && Date.now() - lastSavedAt > 4000) {
               lastSavedAt = Date.now();
-              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, partialText: `${draft?.partialText || ''}${streamed}` });
+              saveAiDraft(store, DRAFT_KEY, { ...checkpoint, provider: orch.provider, partialText: `${draft?.partialText || ''}${streamed}` });
             }
           },
-          { vision: caps.vision !== false },
-        );
+        });
         if (ac.signal.aborted) throw Error('Cancelled.');
 
         const extractMd = (s) => {
@@ -900,8 +906,9 @@ export function expandController({
           const fence = text.match(/```(?:markdown|md)?\s*([\s\S]*?)```/i);
           return fence ? fence[1].trim() : text;
         };
-        const rawCombined = draft?.partialText
-          ? `${extractMd(draft.partialText)}\n\n${extractMd(res.text)}`.trim()
+        const priorPartial = res.partialText || draft?.partialText || '';
+        const rawCombined = priorPartial
+          ? `${extractMd(priorPartial)}\n\n${extractMd(res.text)}`.trim()
           : extractMd(res.text);
         const { markdown: uniqueMd, removed: dupSecRemoved } = dedupeNewMarkdownSections(rawCombined, existingSummary);
         const md = uniqueMd || rawCombined;

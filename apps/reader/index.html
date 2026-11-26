@@ -371,7 +371,7 @@
       <div class="home-head">
         <div>
           <h2 id="homeTitle">Your notes</h2>
-          <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive or Dropbox.</p>
+          <p class="muted">Drop a file here, open one from this device, or pick a note from Google Drive, Dropbox or Moodle.</p>
         </div>
         <div class="home-actions">
           <button id="homeBack" data-icon="back" title="Back to the open document" hidden>Back to document</button>
@@ -390,6 +390,18 @@
               <button id="emptyOpenFolder" type="button" class="filter-option" role="menuitem" data-icon="folder" hidden><span>Open folder…</span></button>
             </div>
           </div>
+        </div>
+      </div>
+      <div id="homeGlobalSearchBar" class="home-global-search" role="search" aria-label="Search all enabled sources">
+        <div class="home-global-search-row">
+          <span class="home-global-search-icon" data-icon="search" aria-hidden="true"></span>
+          <input id="homeGlobalSearch" type="search" placeholder="Search everywhere (Recent, enabled clouds &amp; current Moodle course)…" aria-label="Search everywhere across Recent, enabled clouds and current Moodle course" autocomplete="off" spellcheck="false" />
+          <span id="homeGlobalSearchScope" class="muted home-global-scope"></span>
+          <button id="homeGlobalSearchClear" type="button" class="icon-button" data-icon="close" aria-label="Clear global search" title="Clear global search" hidden></button>
+        </div>
+        <div id="homeGlobalResults" class="home-global-results" hidden>
+          <div class="home-global-results-head"><strong id="homeGlobalResultsSummary"></strong></div>
+          <ul id="homeGlobalResultsList" class="home-global-results-list"></ul>
         </div>
       </div>
       <div id="homeFilters" class="home-filters" role="toolbar" aria-label="Filter notes">
@@ -570,6 +582,53 @@
               <progress id="dropboxProgress" class="drive-progress" max="1" value="0" hidden></progress>
               <ul id="dropboxList" class="note-grid" aria-label="Dropbox files"></ul>
               <button id="dropboxMore" type="button" hidden>Load more</button>
+            </div>
+          </div>
+
+          <div id="moodleSection" class="cloud-panel" role="region" aria-labelledby="moodleTitle" hidden>
+            <div class="drive-heading">
+              <button id="moodlePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="moodlePanelBody"><h4 id="moodleTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3zm-7 9.18V16l7 3.82L19 16v-3.82L12 16l-7-3.82z"/></svg><span>Moodle</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <div class="drive-actions">
+                <button id="moodleBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
+                <button id="moodleRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh Moodle" disabled hidden></button>
+                <button id="moodleOpenBrowser" type="button" class="chip" data-icon="open" title="Open the current Moodle course/page in your browser" hidden>Open in browser</button>
+                <button id="moodleSidebarBtn" type="button" class="chip" data-icon="spark" title="Open Moodle Assistant sidebar (Deadlines, Grades, Forums, Ask AI, MCP)" hidden>Moodle tools</button>
+                <button id="moodleDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Moodle on this device" disabled hidden></button>
+              </div>
+            </div>
+            <div id="moodlePanelBody" class="cloud-panel-body">
+              <div id="moodleSignin" class="drive-signin drive-signin-compact">
+                <div class="drive-signin-icon" data-icon="cloud" aria-hidden="true"></div>
+                <div class="drive-signin-body">
+                  <div class="cloud-inline-form">
+                    <select id="moodlePreset" data-native aria-label="Moodle server preset"></select>
+                    <button id="moodleConnect" type="button" class="primary">Sign in with SSO</button>
+                  </div>
+                  <div class="cloud-details-row">
+                    <details class="drive-setup">
+                      <summary>Server &amp; SAML2 / token setup</summary>
+                      <label>Moodle base URL<input id="moodleUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://moovi.uvigo.gal" /></label>
+                      <label>SAML2 / SSO login URL (optional)<input id="moodleSsoUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://moovi.uvigo.gal/auth/saml2/login.php?…" /></label>
+                      <label>Web Service token (optional, skips browser SSO)<input id="moodleToken" type="password" autocomplete="off" spellcheck="false" placeholder="Optional Moodle mobile token" /></label>
+                    </details>
+                  </div>
+                </div>
+              </div>
+              <div id="moodleBrowse" hidden>
+                <div class="drive-search">
+                  <strong id="moodlePath">Moodle</strong>
+                  <label class="drive-filter"><span class="sr-only">Filter courses or resources</span><input id="moodleSearch" type="search" placeholder="Filter courses, sections or files…" /></label>
+                  <button id="moodleFind" type="button">Filter</button>
+                  <div class="cloud-queue-controls">
+                    <button id="moodleQueueMode" type="button" class="chip" title="Select resources for bulk download" hidden>Queue</button>
+                    <button id="moodleQueueDownload" type="button" class="primary chip" title="Download selected resources" hidden>Download (0)</button>
+                    <button id="moodleQueueCancel" type="button" class="chip" title="Cancel selection" hidden>Done</button>
+                    <button id="moodleQueueAll" type="button" class="chip" title="Bulk download all resources in this view" hidden>Download all</button>
+                  </div>
+                </div>
+              </div>
+              <p id="moodleStatus" role="status" aria-live="polite"></p>
+              <ul id="moodleList" class="note-grid" aria-label="Moodle courses and resources"></ul>
             </div>
           </div>
 

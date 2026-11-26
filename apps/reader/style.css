@@ -5904,3 +5904,106 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
 .open-with-dialog .ocr-actions { align-items: center; }
 /* The text view's "Open in Euro-Office" while the module is not installed: shown, dimmed. */
 #textOpenOffice[aria-disabled="true"] { opacity: .55; }
+
+/* Moodle Cloud browser & Student Assistant sidebar (moodle-browser.js) */
+.moodle-section-head {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  padding: 8px 4px 2px;
+  border-bottom: 1px solid var(--line);
+  list-style: none;
+}
+.moodle-ext-btn { position: absolute; top: 6px; right: 6px; opacity: 0.72; }
+.moodle-ext-btn:hover { opacity: 1; }
+.moodle-sidebar-dialog {
+  width: min(440px, calc(100vw - 24px));
+  height: min(560px, calc(100dvh - 48px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow-dialog);
+}
+.moodle-sidebar-dialog[open] { display: flex; flex-direction: column; }
+.moodle-sb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--chrome); }
+.moodle-sb-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.moodle-sb-head-actions { display: inline-flex; align-items: center; gap: 6px; }
+.moodle-sb-tabs { display: flex; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--chrome); flex-wrap: wrap; }
+.moodle-sb-tabs button { min-height: 26px; padding: 2px 10px; font-size: 12px; border-radius: var(--radius); background: transparent; border: 1px solid transparent; }
+.moodle-sb-tabs button[aria-selected="true"] { background: var(--surface); border-color: var(--line); color: var(--accent); font-weight: 600; }
+.moodle-sb-body { flex: 1; overflow: auto; padding: 12px; display: grid; gap: 10px; align-content: start; }
+.moodle-sb-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.moodle-sb-item { width: 100%; display: grid; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
+.moodle-sb-item:hover { border-color: var(--accent); background: var(--accent-soft); }
+.moodle-sb-ask { display: grid; gap: 8px; }
+.moodle-sb-ask textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); resize: vertical; }
+.moodle-sb-answer { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 12.5px; line-height: 1.5; }
+.moodle-mcp-card { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--chrome); }
+.moodle-mcp-card pre { margin: 0; padding: 8px; border-radius: var(--radius); background: var(--surface); font-size: 11px; overflow: auto; }
+
+/* Global search bar across Recent, enabled clouds & current Moodle course */
+.home-global-search { display: grid; gap: 8px; margin-bottom: 12px; }
+.home-global-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--surface);
+}
+.home-global-search-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.home-global-search-icon { display: inline-flex; color: var(--muted); flex: none; }
+.home-global-search-row input[type="search"] {
+  flex: 1;
+  min-width: 140px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13.5px;
+  outline: none;
+}
+.home-global-scope { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; }
+.home-global-results {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--chrome);
+  max-height: 300px;
+  overflow: auto;
+}
+.home-global-results-head { font-size: 12px; color: var(--muted); }
+.home-global-results-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.home-global-hit { display: flex; align-items: center; gap: 6px; }
+.home-global-hit-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+}
+.home-global-hit-open:hover { border-color: var(--accent); background: var(--accent-soft); }
+.home-global-hit-open strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.home-global-hit-open .muted { margin-left: auto; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+.home-global-hit-badge {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
