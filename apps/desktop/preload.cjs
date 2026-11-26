@@ -278,6 +278,7 @@ contextBridge.exposeInMainWorld('notecompleteMoodle', {
   courseContents: courseId => ipcRenderer.invoke('moodle:course-contents', courseId),
   folderFiles: url => ipcRenderer.invoke('moodle:folder-files', url),
   download: (url, name) => ipcRenderer.invoke('moodle:download', url, name),
+  image: url => ipcRenderer.invoke('moodle:image', url),
   deadlines: options => ipcRenderer.invoke('moodle:deadlines', options),
   grades: courseId => ipcRenderer.invoke('moodle:grades', courseId),
   announcements: courseId => ipcRenderer.invoke('moodle:announcements', courseId),

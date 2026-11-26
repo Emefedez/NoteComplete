@@ -55,6 +55,8 @@ export function moodleBrowser({
   let search = '';
   let selectingQueue = false;
   const selectedIds = new Set();
+  let showImages = cfg.showImages === true;
+  const imageCache = new Map();
   let sidebarDialog = null;
   let sidebarTab = 'deadlines';
 
@@ -151,6 +153,11 @@ export function moodleBrowser({
       $('moodleRefresh').hidden = !connected;
       $('moodleRefresh').disabled = loading;
     }
+    if ($('moodleImagesToggle')) {
+      $('moodleImagesToggle').hidden = !connected;
+      $('moodleImagesToggle').setAttribute('aria-pressed', String(showImages));
+      $('moodleImagesToggle').classList.toggle('active', showImages);
+    }
     if ($('moodleOpenBrowser')) {
       $('moodleOpenBrowser').hidden = !connected;
       $('moodleOpenBrowser').disabled = loading;
@@ -195,6 +202,41 @@ export function moodleBrowser({
     }
   }
 
+  const IMAGE_NAME_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+  const MOD_META = {
+    folder: { glyph: 'folder', label: 'Folder', tone: 'folder' },
+    resource: { glyph: 'note', label: 'File', tone: 'file' },
+    file: { glyph: 'note', label: 'File', tone: 'file' },
+    assign: { glyph: 'edit', label: 'Assignment', tone: 'assign' },
+    quiz: { glyph: 'exam', label: 'Quiz', tone: 'quiz' },
+    forum: { glyph: 'chat', label: 'Forum', tone: 'forum' },
+    url: { glyph: 'open', label: 'Link', tone: 'link' },
+    page: { glyph: 'text', label: 'Page', tone: 'page' },
+  };
+
+  function attachCoverImage(holder, url) {
+    if (!showImages || !url || !api?.image) return;
+    const apply = (dataUrl) => {
+      if (!dataUrl || !holder.isConnected) return;
+      const img = document.createElement('img');
+      img.className = 'moodle-card-thumb';
+      img.alt = '';
+      img.loading = 'lazy';
+      img.src = dataUrl;
+      holder.replaceChildren(img);
+      holder.classList.add('has-thumb');
+    };
+    if (imageCache.has(url)) {
+      const cached = imageCache.get(url);
+      if (cached) apply(cached);
+      return;
+    }
+    api.image(url).then((dataUrl) => {
+      imageCache.set(url, dataUrl || '');
+      if (dataUrl) apply(dataUrl);
+    }, () => {});
+  }
+
   function renderList() {
     const list = $('moodleList');
     if (!list) return;
@@ -210,16 +252,26 @@ export function moodleBrowser({
       msg(`${shown.length} course${shown.length === 1 ? '' : 's'}`);
       for (const course of shown) {
         const li = document.createElement('li');
-        li.className = 'note-card';
+        li.className = 'note-card moodle-card';
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'note-open';
+        btn.className = 'moodle-card-open';
+
+        const badge = document.createElement('span');
+        badge.className = 'moodle-card-icon tone-course';
+        badge.append(icon('folder'));
+        if (showImages && course.courseimage) attachCoverImage(badge, course.courseimage);
+
+        const body = document.createElement('span');
+        body.className = 'moodle-card-text';
         const title = document.createElement('strong');
         title.textContent = course.fullname;
         const meta = document.createElement('span');
-        meta.className = 'muted';
+        meta.className = 'moodle-card-meta';
         meta.textContent = course.shortname || 'Moodle course';
-        btn.append(icon('folder'), title, meta);
+        body.append(title, meta);
+
+        btn.append(badge, body);
         btn.onclick = () => openCourse(course);
 
         const ext = document.createElement('button');
@@ -256,23 +308,37 @@ export function moodleBrowser({
       for (const item of filtered) {
         shownCount += 1;
         const li = document.createElement('li');
-        li.className = 'note-card';
+        li.className = 'note-card moodle-card';
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'note-open';
+        btn.className = 'moodle-card-open';
         if (selectedIds.has(item.id)) btn.classList.add('is-selected');
 
-        const glyph = item.isFolder ? 'folder' : item.isDownloadable ? 'note' : 'open';
+        const kindInfo = MOD_META[item.modname] || (item.isFolder ? MOD_META.folder : item.isDownloadable ? MOD_META.resource : MOD_META.url);
+        const badge = document.createElement('span');
+        badge.className = `moodle-card-icon tone-${kindInfo.tone}`;
+        badge.append(icon(kindInfo.glyph));
+        if (showImages && item.isDownloadable && IMAGE_NAME_RE.test(item.fileName || item.name || '')) {
+          attachCoverImage(badge, item.downloadUrl || item.url);
+        }
+
+        const body = document.createElement('span');
+        body.className = 'moodle-card-text';
         const title = document.createElement('strong');
         title.textContent = item.name;
         const meta = document.createElement('span');
-        meta.className = 'muted';
-        meta.textContent = item.isFolder ? 'Folder · click to browse' : item.isDownloadable ? `${item.modname} · click to open` : `${item.modname} · opens in browser`;
-        btn.append(icon(glyph), title, meta);
+        meta.className = 'moodle-card-meta';
+        meta.textContent = item.isFolder
+          ? 'Folder · click to browse'
+          : item.isDownloadable
+            ? `${kindInfo.label} · click to open`
+            : `${kindInfo.label} · opens in browser`;
+        body.append(title, meta);
 
         if (selectingQueue && item.isDownloadable) {
-          btn.prepend(selectionCheck(selectedIds.has(item.id)));
+          btn.append(selectionCheck(selectedIds.has(item.id)));
         }
+        btn.append(badge, body);
 
         btn.onclick = () => {
           if (selectingQueue && item.isDownloadable) {
@@ -287,9 +353,10 @@ export function moodleBrowser({
           else openExternalUrl(item.url);
         };
 
-        li.append(btn);
+        const actions = document.createElement('span');
+        actions.className = 'moodle-card-actions';
         if (queue && item.isDownloadable && !selectingQueue) {
-          li.append(queueButton(item.name, () => queue.enqueue([queueItemOf(item)])));
+          actions.append(queueButton(item.name, () => queue.enqueue([queueItemOf(item)])));
         }
         const ext = document.createElement('button');
         ext.type = 'button';
@@ -298,7 +365,9 @@ export function moodleBrowser({
         ext.setAttribute('aria-label', `Open ${item.name} in browser`);
         ext.append(icon('open'));
         ext.onclick = (e) => { e.stopPropagation(); openExternalUrl(item.url); };
-        li.append(ext);
+        actions.append(ext);
+
+        li.append(btn, actions);
         list.append(li);
       }
     }
@@ -681,6 +750,20 @@ export function moodleBrowser({
       if (cfg.ssoUrl && presetSel.value === 'custom' && $('moodleSsoUrl')) $('moodleSsoUrl').value = cfg.ssoUrl;
     }
     if ($('moodleConnect')) $('moodleConnect').onclick = connect;
+    if ($('moodleOpenSystemBrowser')) {
+      $('moodleOpenSystemBrowser').onclick = () => {
+        const sso = $('moodleSsoUrl')?.value?.trim() || currentBrowserUrl();
+        openExternalUrl(sso);
+      };
+    }
+    if ($('moodleImagesToggle')) {
+      $('moodleImagesToggle').onclick = () => {
+        showImages = !showImages;
+        saveCfg({ ...readCfg(), showImages });
+        controls();
+        renderList();
+      };
+    }
     if ($('moodleDisconnect')) $('moodleDisconnect').onclick = disconnect;
     if ($('moodleOpenBrowser')) $('moodleOpenBrowser').onclick = () => openExternalUrl(currentBrowserUrl());
     if ($('moodleSidebarBtn')) $('moodleSidebarBtn').onclick = () => openSidebar('deadlines');

@@ -1220,6 +1220,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('moodle:course-contents', guarded((_event, courseId) => moodle.getCourseContents(courseId)));
   ipcMain.handle('moodle:folder-files', guarded((_event, folderUrl) => moodle.getFolderFiles(String(folderUrl || ''))));
   ipcMain.handle('moodle:download', guarded((_event, url, name) => moodle.downloadFile(String(url || ''), String(name || 'document'))));
+  ipcMain.handle('moodle:image', guarded((_event, url) => moodle.fetchImageDataUrl(String(url || ''))));
   ipcMain.handle('moodle:deadlines', guarded((_event, opts) => moodle.getUpcomingDeadlines(opts || {})));
   ipcMain.handle('moodle:grades', guarded((_event, courseId) => moodle.getGrades(courseId)));
   ipcMain.handle('moodle:announcements', guarded((_event, courseId) => moodle.getAnnouncements(courseId)));

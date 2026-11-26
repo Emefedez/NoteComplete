@@ -397,6 +397,7 @@ export function createMoodleService({
               fullname: decodeHtmlEntities(c.fullname || c.fullnamedisplay || `Course ${c.id}`),
               shortname: decodeHtmlEntities(c.shortname || ''),
               viewurl: c.viewurl || new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
+              courseimage: c.courseimage || '',
             }));
           }
         } catch { /* Fall back to HTML parsing below. */ }
@@ -515,6 +516,28 @@ export function createMoodleService({
       const buf = new Uint8Array(await res.arrayBuffer());
       const name = extractFilenameFromResponse(res, target, fallbackName);
       return { bytes: buf, name, mimeType: ct.split(';')[0].trim() || 'application/octet-stream' };
+    },
+
+    async fetchImageDataUrl(imageUrl) {
+      const s = await loadSession();
+      if (!s?.baseUrl) return '';
+      const raw = String(imageUrl || '').trim();
+      if (!raw) return '';
+      if (raw.startsWith('data:image/')) return raw;
+      let target = raw;
+      try { target = new URL(raw, s.baseUrl).href; } catch { return ''; }
+      if (s.token && /\/pluginfile\.php\//i.test(target) && !target.includes('token=')) {
+        const u = new URL(target);
+        u.searchParams.set('token', s.token);
+        target = u.href;
+      }
+      const res = await authedFetch(target);
+      if (!res.ok) return '';
+      const ct = String(res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      if (!ct.startsWith('image/')) return '';
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (!buf.length || buf.length > 6 * 1024 * 1024) return '';
+      return `data:${ct};base64,${buf.toString('base64')}`;
     },
 
     // ---- Student Bridge tools (deadlines, grades, announcements, assignments, MCP config) ----

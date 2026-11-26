@@ -5917,8 +5917,64 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
   border-bottom: 1px solid var(--line);
   list-style: none;
 }
-.moodle-ext-btn { position: absolute; top: 6px; right: 6px; opacity: 0.72; }
+.moodle-ext-btn { opacity: 0.65; flex: none; }
 .moodle-ext-btn:hover { opacity: 1; }
+.note-card.moodle-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  min-height: 64px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--surface);
+  transition: border-color 0.14s, background 0.14s;
+}
+.note-card.moodle-card:hover { border-color: var(--accent); background: var(--chrome); }
+.moodle-card-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+}
+.moodle-card-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  overflow: hidden;
+}
+.moodle-card-icon.has-thumb { width: 52px; height: 42px; padding: 0; background: var(--chrome); }
+.moodle-card-thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
+.moodle-card-icon.tone-course, .moodle-card-icon.tone-folder { background: rgba(245, 158, 11, 0.16); color: #f59e0b; }
+.moodle-card-icon.tone-file { background: rgba(56, 189, 248, 0.16); color: #38bdf8; }
+.moodle-card-icon.tone-quiz { background: rgba(168, 85, 247, 0.16); color: #a855f7; }
+.moodle-card-icon.tone-forum { background: rgba(20, 184, 166, 0.16); color: #14b8a6; }
+.moodle-card-icon.tone-assign { background: rgba(244, 63, 94, 0.16); color: #f43f5e; }
+.moodle-card-icon.tone-link, .moodle-card-icon.tone-page { background: rgba(99, 102, 241, 0.16); color: #818cf8; }
+.moodle-card-text { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.moodle-card-text strong {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.moodle-card-meta { font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.moodle-card-actions { display: inline-flex; align-items: center; gap: 4px; flex: none; }
 .moodle-sidebar-dialog {
   width: min(440px, calc(100vw - 24px));
   height: min(560px, calc(100dvh - 48px));
