@@ -243,7 +243,7 @@ if (window.notecompleteTabs) {
   $("newTab").onclick = () => window.notecompleteTabs.open();
 }
 const theme = themeController({ toggle: $("themeToggle"), light: $("themeLight"), system: $("themeSystem"), more: $("themeMore"), status });
-{ const themes = themeDialog({ get: () => theme.choice, set: (v) => theme.set(v) }); $("themeMore").onclick = () => themes.open(); }
+{ const themes = themeDialog({ theme, status }); $("themeMore").onclick = () => themes.open(); }
 const chromeState = new ChromeState();
 let panels = [],
   observer = null,

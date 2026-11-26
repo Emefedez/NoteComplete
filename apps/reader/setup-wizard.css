@@ -1,8 +1,8 @@
 /* Setup wizard (setup-wizard.js), shaped like R Commander Studio's. Colours come only from the
    app's variables, which switch for dark mode, so no dark rules are needed here. */
 .setup-wizard {
-  width: min(760px, calc(100vw - 24px));
-  height: min(640px, calc(100dvh / var(--ui-zoom, 1) - 24px));
+  width: min(880px, calc(100vw - 24px));
+  height: min(760px, calc(100dvh / var(--ui-zoom, 1) - 24px));
   padding: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-box);
@@ -91,8 +91,25 @@
 .wizard-theme-grid .wizard-choice { padding: 10px 12px; }
 .wizard-theme-grid .wizard-swatch { height: 46px; }
 /* View ▸ More themes…: the same cards in a dialog. */
-.theme-dialog { width: min(720px, calc(100vw - 32px)); }
-.theme-dialog .wizard-theme-grid { max-height: min(60vh, 520px); overflow: auto; padding: 2px; }
+.theme-dialog { width: min(820px, calc(100vw - 32px)); }
+.theme-dialog { max-height: calc(100dvh - 32px); overflow: auto; }
+.theme-dialog .wizard-theme-grid { padding: 2px; }
+/* The theme editor (as in R Commander Studio): a colour picker and hex code per colour. */
+.theme-editor { margin-top: 14px; }
+.theme-editor > summary { justify-content: flex-start; width: 100%; font-weight: 600; }
+.theme-editor[open] > summary { margin-bottom: 8px; }
+.theme-token-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; margin-bottom: 10px; }
+.theme-token-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; font-size: 13px; }
+.theme-token-row label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theme-token-row.edited label { font-weight: 600; }
+.theme-token-row.edited label::after { content: " •"; color: var(--accent); }
+.theme-token-controls { display: flex; align-items: center; gap: 6px; flex: none; }
+.theme-token-controls input[type="color"] { width: 32px; height: 26px; padding: 1px 2px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); cursor: pointer; }
+.theme-hex-input { width: 76px; height: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+.theme-editor-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.theme-json-box { display: grid; gap: 8px; margin-top: 10px; }
+.theme-json-box textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; resize: vertical; }
+.theme-json-error { color: var(--danger); margin: 0; }
 .wizard-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; cursor: pointer; }
 .wizard-check input { margin: 3px 0 0; flex: none; }
 .wizard-check > span { display: grid; gap: 1px; }
@@ -227,6 +244,7 @@
 @media (max-width: 640px) {
   .wizard-choice-grid { grid-template-columns: 1fr; }
   .wizard-theme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .theme-token-grid { grid-template-columns: 1fr; }
   .wizard-head { padding: 14px 16px 0; }
   .wizard-body { padding: 16px; }
   .wizard-module-settings, .wizard-module-children { padding-left: 0; }

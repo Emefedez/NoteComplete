@@ -67,3 +67,72 @@ export function themeVars(preset) {
     '--tk-anno': s.error,
   };
 }
+
+// ---- Theme editor (View ▸ More themes… ▸ Edit colours), as in R Commander Studio ----
+// The colours it edits, by the app's own variable; each change lies over the chosen theme.
+export const EDITABLE = [
+  { name: '--surface', label: 'Panels and dialogs' },
+  { name: '--chrome', label: 'Bars' },
+  { name: '--menu', label: 'Menus' },
+  { name: '--canvas', label: 'Behind the pages' },
+  { name: '--fill', label: 'Buttons and fields' },
+  { name: '--ink', label: 'Text' },
+  { name: '--muted', label: 'Secondary text' },
+  { name: '--accent', label: 'Accent' },
+  { name: '--accent-soft', label: 'Chosen items' },
+  { name: '--accent-hover', label: 'Pointed-at items' },
+  { name: '--line', label: 'Lines and borders' },
+];
+const EDITABLE_NAMES = new Set(EDITABLE.map((e) => e.name));
+const HEX = /^#[0-9a-f]{6}$/i;
+
+// Any CSS colour this app writes (#rgb, #rrggbb, #rrggbbaa, rgb()) as #rrggbb, else ''.
+export function toHex(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (/^#[0-9a-f]{3,4}$/.test(v)) return `#${[1, 2, 3].map((i) => v[i] + v[i]).join('')}`;
+  if (/^#[0-9a-f]{6}([0-9a-f]{2})?$/.test(v)) return v.slice(0, 7);
+  const m = v.match(/^rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/);
+  return m ? `#${m.slice(1, 4).map((n) => Math.min(255, +n).toString(16).padStart(2, '0')).join('')}` : '';
+}
+// Only editable variables with a #rrggbb value are kept.
+export function cleanColors(colors) {
+  const out = {};
+  if (colors && typeof colors === 'object') for (const [k, v] of Object.entries(colors)) if (EDITABLE_NAMES.has(k) && HEX.test(v)) out[k] = v.toLowerCase();
+  return out;
+}
+
+// R Commander Studio's token for each variable, for its exported JSON ({ preset, overrides }).
+const FROM_STUDIO = { bgEditor: '--surface', bgSidebar: '--chrome', fg: '--ink', fgMuted: '--muted', accent: '--accent', border: '--line', selection: '--accent-hover' };
+
+// A theme file: NoteComplete's own ({ theme, colors }) or R Commander Studio's ({ preset,
+// overrides }). Returns { theme, colors } or null. `known(id)` says whether a theme id exists.
+export function parseThemeJson(text, known = (id) => !!getPreset(id) || ['light', 'dark', 'system'].includes(id)) {
+  let data; try { data = JSON.parse(text); } catch { return null; }
+  if (!data || typeof data !== 'object') return null;
+  if (typeof data.theme === 'string' || data.colors) {
+    const theme = known(data.theme) ? data.theme : 'system';
+    return { theme, colors: cleanColors(data.colors) };
+  }
+  if (typeof data.preset === 'string') {
+    const overrides = data.overrides && typeof data.overrides === 'object' ? data.overrides : {};
+    const preset = getPreset(data.preset);
+    if (preset) {
+      // The theme's own colours with the overrides in, kept where they differ from the theme.
+      const tokens = { ...preset.tokens };
+      for (const [k, v] of Object.entries(overrides)) if (k in tokens && HEX.test(v)) tokens[k] = v.toLowerCase();
+      const before = themeVars(preset), after = themeVars({ ...preset, tokens });
+      const colors = {};
+      for (const name of EDITABLE_NAMES) if (after[name] !== before[name]) colors[name] = after[name];
+      return { theme: preset.id, colors };
+    }
+    // A theme NoteComplete does not have (R Commander Studio's NoteComplete Light is Light).
+    const light = /light/i.test(data.preset);
+    const colors = {};
+    for (const [k, v] of Object.entries(overrides)) if (FROM_STUDIO[k] && HEX.test(v)) colors[FROM_STUDIO[k]] = v.toLowerCase();
+    if (HEX.test(overrides.bgChrome || '')) colors[light ? '--fill' : '--canvas'] = overrides.bgChrome.toLowerCase();
+    if (HEX.test(overrides.bgActivity || '')) colors[light ? '--canvas' : '--fill'] = overrides.bgActivity.toLowerCase();
+    return { theme: light ? 'light' : 'dark', colors };
+  }
+  return null;
+}
+export const themeJson = (theme, colors) => JSON.stringify({ app: 'NoteComplete', theme, colors: cleanColors(colors) }, null, 2);

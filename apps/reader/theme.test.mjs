@@ -34,3 +34,29 @@ test('every colour theme gives every variable a #rrggbb colour', () => {
   }
   assert.equal(mix('#000000', '#ffffff', 0.5), '#808080');
 });
+import { parseThemeJson, themeJson, toHex, cleanColors } from './themes.js';
+import { savedColors } from './theme.js';
+test('theme JSON goes out and comes back', () => {
+  const json = themeJson('nord', { '--accent': '#AABBCC', '--nope': '#000000', '--ink': 'red' });
+  assert.deepEqual(parseThemeJson(json), { theme: 'nord', colors: { '--accent': '#aabbcc' } });
+  assert.equal(parseThemeJson('not json'), null);
+  assert.equal(parseThemeJson('[1]'), null);
+  assert.deepEqual(parseThemeJson('{"theme":"gone","colors":{}}'), { theme: 'system', colors: {} });
+});
+test("R Commander Studio's theme JSON is read", () => {
+  const dracula = parseThemeJson(JSON.stringify({ preset: 'dracula', overrides: { accent: '#00FF00' } }));
+  assert.equal(dracula.theme, 'dracula');
+  assert.equal(dracula.colors['--accent'], '#00ff00');
+  assert.ok(dracula.colors['--accent-soft'], 'the colours made from the accent follow it');
+  assert.deepEqual(parseThemeJson(JSON.stringify({ preset: 'notecomplete-light', overrides: { bgEditor: '#FAFAFA', bgActivity: '#E0E0E0' } })),
+    { theme: 'light', colors: { '--surface': '#fafafa', '--canvas': '#e0e0e0' } });
+});
+test('colours are kept only for the theme they were made for', () => {
+  const store = { getItem: () => JSON.stringify({ theme: 'nord', colors: { '--ink': '#ffffff' } }) };
+  assert.deepEqual(savedColors('nord', store), { '--ink': '#ffffff' });
+  assert.deepEqual(savedColors('dracula', store), {});
+  assert.equal(toHex('#fff'), '#ffffff');
+  assert.equal(toHex(' #0002'), '#000000');
+  assert.equal(toHex('rgb(1, 2, 255)'), '#0102ff');
+  assert.deepEqual(cleanColors(null), {});
+});

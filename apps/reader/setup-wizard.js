@@ -170,7 +170,7 @@ export function buildSteps(env) {
       render(sec) {
         const body = section(sec, 'How NoteComplete looks', 'Changes show at once. They are also in the View menu.');
         if (s.theme) {
-          const grid = choiceGrid(themeOptions(), s.theme.get(), (v) => s.theme.set(v), 4);
+          const grid = choiceGrid(themeOptions(), s.theme.get(), (v) => s.theme.set(v), 5);
           grid.classList.add('wizard-theme-grid');
           body.append(label('Theme'), grid);
         }
