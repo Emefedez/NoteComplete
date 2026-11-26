@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -62,15 +62,6 @@
     ],
     "asarUnpack": [
       "office-runner/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "../../skills",
-        "to": "skills",
-        "filter": [
-          "notecomplete-*/**"
-        ]
-      }
     ],
     "fileAssociations": [
       {
@@ -533,6 +524,13 @@
         "filter": [
           "noteful",
           "noteful.exe"
+        ]
+      },
+      {
+        "from": "../../skills",
+        "to": "skills",
+        "filter": [
+          "notecomplete-*/**"
         ]
       }
     ]

@@ -4387,7 +4387,8 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .zh-settings { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 28px); box-sizing: border-box; }
 .zh-settings[open] { height: min(520px, calc(100dvh - 28px)); display: grid; grid-template-rows: auto 1fr auto; gap: 12px; overflow: hidden; }
 .zh-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
-.zh-settings-head h2 { margin: 0; font-size: 16px; }
+.zh-settings-head h2 { margin: 0; font-size: 16px; display: inline-flex; align-items: center; gap: 7px; }
+.zh-settings-head h2 svg { width: 18px; height: 18px; flex: 0 0 auto; color: var(--accent); }
 .zh-settings-stage { min-height: 0; overflow-y: auto; align-content: start; }
 .zh-settings-panel { display: grid; gap: 12px; align-content: start; }
 .zh-settings-panel[hidden] { display: none !important; }

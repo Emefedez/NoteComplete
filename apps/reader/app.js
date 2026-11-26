@@ -1457,19 +1457,36 @@ if ($("zhSettingsOpen")) $("zhSettingsOpen").onclick = openZhSettings;
 // Math Mode toolbar & R Statistics Bridge (math/math-bar.js).
 const mathBar = createMathBar({
   container: $("mathModeBar"),
+  canShow: () => Boolean(doc) && !home?.visible,
   status,
   onInsertMathBox: async (tex) => {
-    const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
-    if (!p || !ensureEditableLayer()) return;
-    await textBox.placeMath(p, tex);
+    try {
+      const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
+      if (!p || !ensureEditableLayer()) return;
+      await textBox.placeMath(p, tex);
+    } catch (e) {
+      status(`Could not insert math box: ${e?.message || e}`, true);
+    }
   },
   onPlotFunction: async (expr) => {
-    const cleaned = String(expr || "").replace(/^\s*(?:y|f\(x\))\s*=\s*/i, "").trim();
-    await insertCompound(panels[page], "graph", null, { functions: [cleaned || "x^2"] });
+    try {
+      const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
+      if (!p) return;
+      const cleaned = String(expr || "").replace(/^\s*(?:y|f\(x\))\s*=\s*/i, "").trim();
+      await insertCompound(p, "graph", null, { functions: [cleaned || "x^2"] });
+    } catch (e) {
+      status(`Could not plot function: ${e?.message || e}`, true);
+    }
   },
   onInsertRPrefab: async () => {
-    const rCard = PREFABS.find((c) => c.id === "r-normal") || { id: "r-normal", kind: "prefab", module: "r-math", label: "Normal distribution (R)", spec: { type: "r_figure", schemaVersion: 1, preset: "normal", title: "Normal(0, 1) — 95% Interval", params: { mean: 0, sd: 1, from: -1.96, to: 1.96, region: "between", color: "#245dc4" }, width: 480, height: 300 } };
-    await insertPrefab(panels[page], null, rCard);
+    try {
+      const p = panels[page] || (await openBlankNoteForPrefab("Math Notes"));
+      if (!p) return;
+      const rCard = PREFABS.find((c) => c.id === "r-normal") || { id: "r-normal", kind: "prefab", module: "r-math", label: "Normal distribution (R)", spec: { type: "r_figure", schemaVersion: 1, preset: "normal", title: "Normal(0, 1) — 95% Interval", params: { mean: 0, sd: 1, from: -1.96, to: 1.96, region: "between", color: "#245dc4" }, width: 480, height: 300 } };
+      await insertPrefab(p, null, rCard);
+    } catch (e) {
+      status(`Could not insert R figure: ${e?.message || e}`, true);
+    }
   },
 });
 if ($("mathModePill")) $("mathModePill").onclick = () => mathBar.toggle();
@@ -6927,6 +6944,7 @@ function showDocument() {
     $("editor").hidden = false;
     if (panels[page]) resize();
   }
+  mathBar.sync();
 }
 function showHome() {
   saveReadingPosition();
@@ -6935,6 +6953,7 @@ function showHome() {
   if (!$("editor").hidden && doc) $("editor").hidden = true;
   sideView()?.hide();
   home.show(Boolean(doc || sideView()));
+  mathBar.sync();
 }
 $("homeButton").onclick = () => (home.visible && (doc || sideView()) ? showDocument() : showHome());
 $("homeBack").onclick = () => (doc || sideView()) && showDocument();

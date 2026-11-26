@@ -259,10 +259,12 @@ export function agentsState(result, { bridge = true } = {}) {
   if (!result) return { state: 'error', detail: 'Could not look for your AI tools.' };
   if (!result.server) return { state: 'unavailable', detail: 'This build has no note server' };
   const tools = result.tools || [];
-  const connected = tools.filter((t) => t.connected).map((t) => t.label);
+  const connected = tools.filter((t) => t.connected);
   const waiting = toolsToConnect(tools).map((t) => t.label);
-  if (waiting.length) return { state: connected.length ? 'installed' : 'missing', detail: connected.length ? `Connected: ${connected.join(', ')} · not yet: ${waiting.join(', ')}` : `Found: ${waiting.join(', ')}`, action: 'Connect' };
-  if (connected.length) return { state: 'installed', detail: `Connected: ${connected.join(', ')}` };
+  const needsSkills = connected.filter((t) => t.bundledSkills?.length && t.skillsInstalled === false);
+  if (waiting.length) return { state: connected.length ? 'installed' : 'missing', detail: connected.length ? `Connected: ${connected.map((t) => t.label).join(', ')} · not yet: ${waiting.join(', ')}` : `Found: ${waiting.join(', ')}`, action: 'Connect' };
+  if (needsSkills.length) return { state: 'installed', detail: `Connected: ${connected.map((t) => t.label).join(', ')} · skills ready to install`, action: 'Install skills' };
+  if (connected.length) return { state: 'installed', detail: `Connected: ${connected.map((t) => t.label).join(', ')}` };
   return { state: 'unavailable', detail: 'No AI tools found (Claude Code, Codex, Antigravity, OpenCode)' };
 }
 
@@ -291,16 +293,29 @@ export function agentsModule(api = globalThis.notecompleteAgents) {
       try { return agentsState(await api.status()); } catch (e) { return { state: 'error', detail: e.message }; }
     },
     async install(onProgress = () => {}) {
-      const tools = toolsToConnect((await api.status())?.tools);
+      const all = (await api.status())?.tools || [];
+      const tools = toolsToConnect(all);
       const failed = [];
-      for (const [i, tool] of tools.entries()) {
-        onProgress({ text: `Connecting ${tool.label}`, fraction: i / tools.length });
-        try { await api.connect(tool.id); } catch (e) { failed.push(`${tool.label}: ${e.message}`); }
+      if (tools.length) {
+        for (const [i, tool] of tools.entries()) {
+          onProgress({ text: `Connecting ${tool.label}`, fraction: i / tools.length });
+          try { await api.connect(tool.id); } catch (e) { failed.push(`${tool.label}: ${e.message}`); }
+        }
+        if (failed.length) throw Error(failed.join('\n'));
+        // The dialog that offers this by itself (agents.js) need not ask again.
+        try { globalThis.localStorage?.setItem('notecomplete-agents-asked', '1'); } catch { /* Optional. */ }
+        return { ok: true, text: 'Connected: restart the tools to see NoteComplete' };
       }
-      if (failed.length) throw Error(failed.join('\n'));
-      // The dialog that offers this by itself (agents.js) need not ask again.
-      try { globalThis.localStorage?.setItem('notecomplete-agents-asked', '1'); } catch { /* Optional. */ }
-      return { ok: true, text: 'Connected: restart the tools to see NoteComplete' };
+      const needsSkills = all.filter((t) => t.connected && t.bundledSkills?.length && t.skillsInstalled === false);
+      if (needsSkills.length && typeof api.installSkills === 'function') {
+        for (const [i, tool] of needsSkills.entries()) {
+          onProgress({ text: `Installing skills for ${tool.label}`, fraction: i / needsSkills.length });
+          try { await api.installSkills(tool.id); } catch (e) { failed.push(`${tool.label}: ${e.message}`); }
+        }
+        if (failed.length) throw Error(failed.join('\n'));
+        return { ok: true, text: 'Skills installed: restart the tools to load them' };
+      }
+      return { ok: true, text: 'Already connected' };
     },
   };
 }

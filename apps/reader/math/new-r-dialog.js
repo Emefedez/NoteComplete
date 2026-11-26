@@ -54,13 +54,6 @@ function buildDialog() {
           <button type="button" class="math-mini-btn" data-nr-browse>Folder…</button>
         </div>
       </div>
-      <label class="zh-set-row">
-        <span>Open in</span>
-        <select data-nr-open-mode>
-          <option value="window">R Commander Studio (own window)</option>
-          <option value="embedded">Inside NoteComplete (zero-bloat embedded)</option>
-        </select>
-      </label>
       <p class="muted" data-nr-hint style="margin:6px 0 0;font-size:12px;">
         Single file creates a starter .R or .Rmd file. Workspace creates a project folder with analysis.R, report.Rmd, data/, and .Rproj and adds it to NoteComplete's Folders.
       </p>
@@ -147,8 +140,6 @@ function buildDialog() {
     const name = d.querySelector('[data-nr-name]').value.trim();
     const kind = d.querySelector('[data-nr-kind]').value;
     const parentDir = d.querySelector('[data-nr-dir]').value.trim();
-    const openMode = d.querySelector('[data-nr-open-mode]').value;
-    mathSettings({ studioOpenMode: openMode });
     if (!parentDir) return d._handlers?.status?.('Choose a target folder first.', true);
     const btn = d.querySelector('[data-nr-create]');
     btn.disabled = true;
@@ -164,7 +155,7 @@ function buildDialog() {
       await d._handlers?.onOpenStudio?.({
         filePath: created.filePath,
         folderPath: created.mode === 'workspace' ? created.folderPath : '',
-        embed: openMode === 'embedded',
+        embed: false,
       });
     } catch (e) {
       d._handlers?.status?.(e.message, true);
@@ -182,8 +173,6 @@ async function refreshDialogState(d) {
   if (!dirInput.value && window.notecompleteFiles?.folder) {
     try { dirInput.value = await window.notecompleteFiles.folder(); } catch {}
   }
-  const openSel = d.querySelector('[data-nr-open-mode]');
-  if (openSel) openSel.value = mathSettings().studioOpenMode === 'embedded' ? 'embedded' : 'window';
 
   const installBox = d.querySelector('[data-nr-install-box]');
   const installBtn = d.querySelector('[data-nr-install-btn]');

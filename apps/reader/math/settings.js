@@ -96,7 +96,6 @@ function build({ status, onInsertRPrefab }) {
       <progress data-rb-install-prog max="1" value="0" hidden style="width:100%;margin-top:8px;"></progress>
       <div class="math-bridge-preview" data-rb-preview hidden></div>
     </div>
-    <label class="zh-set-row" style="margin-top:10px;"><span>Open R files &amp; workspaces in</span><select data-ms="studioOpenMode"><option value="window">R Commander Studio (own window)</option><option value="embedded">Inside NoteComplete (zero-bloat embedded)</option></select></label>
     <label class="zh-set-row zh-set-check" style="margin-top:8px;"><input type="checkbox" data-ms="rAutoFallback"> <span>Use local Rscript fallback when R Commander Studio is not running</span></label>
     <p class="muted math-rc-footnote">Security: NoteComplete never executes R code automatically when opening a note. Cached vector SVGs render offline on every device; R runs only when you explicitly click Run / Update.</p>
   </div>

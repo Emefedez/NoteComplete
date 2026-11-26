@@ -10,6 +10,7 @@ import { mathSettings, openMathSettings } from './settings.js';
 
 export function createMathBar({
   container,
+  canShow = () => true,
   onInsertMathBox,
   onPlotFunction,
   onInsertRPrefab,
@@ -232,14 +233,21 @@ export function createMathBar({
 
   function sync() {
     const s = mathSettings();
-    container.hidden = !s.enabled;
+    const allowed = Boolean(canShow());
+    const visible = Boolean(s.enabled) && allowed;
+    container.hidden = !visible;
     const pill = document.getElementById('mathModePill');
     const menuItem = document.getElementById('viewMathMode');
-    if (pill) pill.setAttribute('aria-pressed', String(s.enabled));
-    if (menuItem) menuItem.setAttribute('aria-checked', String(s.enabled));
+    if (pill) pill.setAttribute('aria-pressed', String(visible));
+    if (menuItem) menuItem.setAttribute('aria-checked', String(visible));
   }
 
   function toggle() {
+    if (!canShow()) {
+      status('Open a note to use Math Mode.');
+      sync();
+      return;
+    }
     const next = !mathSettings().enabled;
     mathSettings({ enabled: next });
     if (next) requestAnimationFrame(() => input.focus());
