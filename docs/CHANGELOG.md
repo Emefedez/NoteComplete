@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.26
+
+- **Fixed Moodle Grades (`moodle:grades` `TypeError: fetch failed`)** via `gradereport_overview_get_course_grades` REST API + graceful HTML fallback.
+- **Interactive Moodle MCP tab** (live connection status, **Test Moodle API**, **Copy live Moodle context (MD)**, and MCP JSON + Docs cards).
+- **Optional Cloud Providers card in the Setup Wizard** (Google Drive, Dropbox, Moodle, GitHub, Nextcloud/WebDAV).
+
 ## 2.0.25
 
 - **Fixed Moodle toolbar buttons** (`Open in browser`, `Moodle tools`, `Queue`, `Back`, `Sign in again`, `Refresh`, `Disconnect`, search).

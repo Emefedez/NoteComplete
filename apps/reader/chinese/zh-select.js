@@ -242,7 +242,50 @@ export function installZhSelection(h = {}) {
   document.addEventListener('keyup', (e) => { if (e.shiftKey || e.key === 'Shift' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a')) { pointer = null; check(); } }, true);
   document.addEventListener('pointerdown', (e) => { if (bar && !bar.hidden && !e.target.closest?.('.zh-select-bar')) hideBar(); }, true);
   document.addEventListener('selectionchange', () => { if (bar && !bar.hidden && fromSelection && !String(currentSelection(pointer)?.text || '').trim()) hideBar(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bar && !bar.hidden) hideBar(); }, true);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && bar && !bar.hidden) { hideBar(); return; }
+    // Alt + Left/Right (with or without Shift): jump / select to line start or end in editable fields
+    // (complements native Ctrl + Left/Right for word-by-word movement & selection).
+    if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      const active = document.activeElement;
+      if (isTextField(active) && !active.closest(SKIP)) {
+        e.preventDefault();
+        e.stopPropagation();
+        const a = active.selectionStart ?? 0;
+        const b = active.selectionEnd ?? 0;
+        const dir = active.selectionDirection || 'forward';
+        const head = dir === 'backward' ? a : b;
+        const anchor = dir === 'backward' ? b : a;
+        let next = head;
+        if (e.key === 'ArrowLeft') {
+          const nl = head > 0 ? active.value.lastIndexOf('\n', head - 1) : -1;
+          next = nl === -1 ? 0 : nl + 1;
+        } else {
+          const nl = active.value.indexOf('\n', head);
+          next = nl === -1 ? active.value.length : nl;
+        }
+        if (e.shiftKey) {
+          if (next < anchor) active.setSelectionRange(next, anchor, 'backward');
+          else active.setSelectionRange(anchor, next, 'forward');
+          pointer = null;
+          check();
+        } else {
+          active.setSelectionRange(next, next, 'none');
+        }
+        return;
+      }
+      const editable = active?.closest?.('[contenteditable="true"], [contenteditable=""]');
+      if (editable && !editable.closest(SKIP)) {
+        const sel = getSelection();
+        if (sel?.modify) {
+          e.preventDefault();
+          e.stopPropagation();
+          sel.modify(e.shiftKey ? 'extend' : 'move', e.key === 'ArrowLeft' ? 'backward' : 'forward', 'lineboundary');
+          if (e.shiftKey) { pointer = null; check(); }
+        }
+      }
+    }
+  }, true);
   document.addEventListener('contextmenu', (e) => {
     if (e.defaultPrevented) return;
     const target = e.target;
