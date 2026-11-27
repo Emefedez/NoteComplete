@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <code>.nfedit</code> · <code>.notecomp / .notepart</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>.rnote</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>Office / ODF</code> · <code>EPUB / IPYNB</code> · <code>PlantUML</code> · <code>R / Rmd / qmd</code> · <code>Audio / Video</code>
+  <code>.nfedit</code> · <code>.notecomp / .notepart</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>.rnote</code> · <code>Apple Notes</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>Office / ODF</code> · <code>EPUB / IPYNB</code> · <code>PlantUML</code> · <code>R / Rmd / qmd</code> · <code>Audio / Video</code>
 </p>
 
 # NoteComplete
@@ -31,7 +31,7 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Ink & annotation tools:** Pressure-sensitive Pen, smart Highlighter, Eraser, auto-snap Shapes, Tape, Grab, Lock, and z-order stacking.
 - **Flexible pages & canvases:** Mix fixed pages and multiple infinite canvases per note, 2-up spread, Dark pages (`D`), and configurable PDF preloading.
-- **Other apps' notebooks:** Open **Noteful**, **Goodnotes** (`.goodnotes`), **Notability** (`.ntb`), and **Rnote** (`.rnote`) notebooks as editable notes.
+- **Other apps' notebooks:** Open **Noteful**, **Goodnotes** (`.goodnotes`), **Notability** (`.ntb`), and **Rnote** (`.rnote`) notebooks as editable notes, or import **Apple Notes** directly from `NoteStore.sqlite` (protobuf + CRDT tables, headings, checklists, highlights, hashtags, folders) and iCloud/Markdown/HTML `.zip` exports.
 - **Quick menu & export:** Pen side-button / `Shift+S` radial menu, dockable toolbar, automatic recovery, and export to PDF, SVG, images, `.odt`, or Anki.
 
 </details>
@@ -40,7 +40,7 @@ Everything runs on your device with no account required. Try it in the browser a
 <summary><b>Text, Markdown &amp; Math Adaptation</b></summary>
 
 - **Split Markdown editor & Side Notes (`N`):** Live KaTeX math, PlantUML, `==highlighting==`, clickable prefab pills, independent Edit/View zoom, and page-linked side notes.
-- **Math Adaptation & bilingual cheat sheet:** Highlight math shorthand anywhere to convert it into LaTeX (`-^x` → `\bar{x}`, `(8 sobre 5)` → `\binom{8}{5}`, annotated `=(como y=7)=`), with a searchable EN/ES cheat sheet (`?`) showing notation, LaTeX, and live KaTeX previews.
+- **Math Adaptation & bilingual cheat sheet:** Highlight math shorthand anywhere — or press **`Shift+Right-click`** for instant conversion — to turn it into LaTeX (`-^x` → `\bar{x}`, `(8 sobre 5)` → `\binom{8}{5}`, annotated `=(como y=7)=`), with a searchable EN/ES cheat sheet (`?`) showing notation, LaTeX, and live KaTeX previews.
 - **Math Mode (`∑ Math`) & R Commander Studio:** Live formula bar with built-in CAS (`=`, `d/dx`, `∫`, `Solve`), function plotting, one-click R Commander Studio install, and live `.R` / `.Rmd` / `.qmd` workspaces.
 - **Documents, slides, spreadsheets & e-books:** Open Word, Excel, PowerPoint, ODF, RTF, CSV, EPUB, and Jupyter notebooks as editable Markdown — or edit Office files natively with **Euro-Office**.
 
@@ -89,7 +89,7 @@ Everything runs on your device with no account required. Try it in the browser a
 ### Library, Cloud, Moodle & Search
 
 - **Local folders & Recent:** Open disk folders as collapsible sidebar groups, browse folder-by-folder on Home, star/tag/filter files, and switch between cover cards and list view.
-- **Cloud & Moodle:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, **GitHub**, and **Moodle** courses (deadlines, grades, announcements, batch downloads) — all searchable from one box on Home.
+- **Cloud & Moodle:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, **GitHub**, and **Moodle** courses (deadlines, grades, announcements, interactive MCP tools, batch downloads) — configurable from Home or the Setup wizard and searchable from one box on Home.
 - **Formula Find & Batch OCR (`Ctrl+F`):** Formula-aware search with **Aa** (case), **ab** (whole word), and **.\*** (regex) toggles across typed text, PDFs, transcripts, and on-device handwriting OCR.
 
 <p align="center"><img src="docs/images/home.png" alt="NoteComplete Home screen with Cloud provider dropdown" width="100%"></p>
