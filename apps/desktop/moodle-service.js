@@ -751,12 +751,34 @@ export function createMoodleService({
       if (!s?.baseUrl) throw Error('Not connected to Moodle.');
 
       if (s.token && s.userId) {
+        // Prefer timeline classification REST API because it includes `courseimage` and `hidden`.
+        try {
+          const data = await restCall('core_course_get_enrolled_courses_by_timeline_classification', {
+            offset: 0,
+            limit: 100,
+            classification: 'allincludinghidden',
+            sort: 'fullname',
+          });
+          const courses = Array.isArray(data?.courses) ? data.courses : [];
+          if (courses.length) {
+            return courses.map((c) => ({
+              id: Number(c.id),
+              fullname: decodeHtmlEntities(c.fullname || c.fullnamedisplay || `Course ${c.id}`),
+              shortname: decodeHtmlEntities(c.shortname || ''),
+              viewurl: c.viewurl || new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
+              courseimage: c.courseimage || '',
+              hidden: Boolean(c.hidden),
+            }));
+          }
+        } catch { /* Fall back to core_enrol_get_users_courses below. */ }
         const list = await restCall('core_enrol_get_users_courses', { userid: s.userId });
         return (Array.isArray(list) ? list : []).map((c) => ({
           id: Number(c.id),
-          fullname: c.fullname || c.displayname || `Course ${c.id}`,
-          shortname: c.shortname || '',
+          fullname: decodeHtmlEntities(c.fullname || c.displayname || `Course ${c.id}`),
+          shortname: decodeHtmlEntities(c.shortname || ''),
           viewurl: new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
+          courseimage: c.courseimage || c.overviewfiles?.[0]?.fileurl || '',
+          hidden: Boolean(c.hidden),
         }));
       }
 
@@ -775,6 +797,7 @@ export function createMoodleService({
           shortname: decodeHtmlEntities(c.shortname || ''),
           viewurl: c.viewurl || new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
           courseimage: c.courseimage || '',
+          hidden: Boolean(c.hidden),
         }));
       };
 
@@ -1009,8 +1032,12 @@ export function createMoodleService({
       if (raw.startsWith('data:image/')) return raw;
       let target = raw;
       try { target = new URL(raw, s.baseUrl).href; } catch { return ''; }
-      if (s.token && /\/pluginfile\.php\//i.test(target) && !target.includes('token=')) {
-        target = appendTokenIfSameOrigin(target, s.baseUrl, s.token);
+      if (s.token && !target.includes('token=')) {
+        // Moodle's /pluginfile.php/ requires /webservice/pluginfile.php/ when authenticating via wstoken.
+        const wsTarget = /\/pluginfile\.php\//i.test(target) && !/\/webservice\/pluginfile\.php\//i.test(target)
+          ? target.replace(/\/pluginfile\.php\//i, '/webservice/pluginfile.php/')
+          : target;
+        target = appendTokenIfSameOrigin(wsTarget, s.baseUrl, s.token);
       }
       const res = await authedFetch(target);
       if (!res.ok) return '';

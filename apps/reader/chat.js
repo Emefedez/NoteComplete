@@ -230,18 +230,28 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         const picked = await selectionImage(page);
         if (picked) { images.push(picked.image); context.push(`The student selected a ${picked.kind} on page ${page + 1}; its crop is the image labelled "selection". Focus on it.`); }
       }
+      const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
+      const targetNotePath = useNote ? notePath() : '';
+      const totalPages = documentInfo().pages;
+      const nearStart = Math.max(1, page);
+      const nearEnd = Math.min(totalPages, page + 2);
+      const lookupGuidance = targetNotePath
+        ? (sections
+          ? `Start by focusing on section ${page + 1}. If the answer, definition, or context is not fully there, proactively check nearby sections (sections ${nearStart}–${nearEnd}) first, then search or read the rest of the document, and if still needed consult related files or outside/web knowledge — briefly noting which section or source you used.`
+          : `Start by focusing on the content on page ${page + 1}. If the answer, definition, formula, or context is not fully on this page, proactively inspect nearby pages (pages ${nearStart}–${nearEnd}) first, then search or read the rest of the note using the notecomplete MCP tools, and if still needed consult related files or outside/web knowledge — briefly noting which page or source you used.`)
+        : (sections
+          ? 'Focus on this section first; if something is not in the text, say so briefly and still help using general knowledge when useful.'
+          : 'Focus on the content on this page first; if something is not on this page, say so briefly and still help using general knowledge when useful.');
       // Small model: a shorter memory of the conversation.
       const transcript = history.slice(model?.small ? -4 : -10).map(m => `${m.role === 'user' ? 'Student' : 'You'}: ${m.content}`).join('\n\n');
       const prompt = [
         sections
-          ? `You are a patient tutor helping a student understand their own text document, "${title}" (split into ${documentInfo().pages} sections; they are reading section ${page + 1}). Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not in the text.`
-          : `You are a patient tutor helping a student understand their own notes, "${title}" (currently on page ${page + 1} of ${documentInfo().pages}). Handwriting, highlights and text under tape are the student's own. Answer in the student's language, clearly and briefly; use short examples or steps when they help. Say so when something is not on the page.`,
+          ? `You are a patient tutor helping a student understand their own text document, "${title}" (split into ${totalPages} sections; they are reading section ${page + 1}). Answer in the student's language, clearly and briefly; use short examples or steps when they help. ${lookupGuidance}`
+          : `You are a patient tutor helping a student understand their own notes, "${title}" (currently on page ${page + 1} of ${totalPages}). Handwriting, highlights and text under tape are the student's own. Answer in the student's language, clearly and briefly; use short examples or steps when they help. ${lookupGuidance}`,
         context.join('\n\n'),
         transcript && `Conversation so far:\n${transcript}`,
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
-      const useNote = $('chatNote').checked && !$('chatNoteLabel').hidden;
-      const targetNotePath = useNote ? notePath() : '';
       const beforeStat = targetNotePath ? await globalThis.notecompleteFiles?.statLocalNote?.(targetNotePath).catch(() => null) : null;
       // The answer appears while it is written; Markdown is re-rendered at most
       // every 120 ms so long answers stay cheap.

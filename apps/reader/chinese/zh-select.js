@@ -8,6 +8,9 @@
 //                              openTracePrefab(text), status(msg, bad) }
 //   openTranslation(text, { near })
 import { icon } from '../icons.js';
+import { openContextMenu } from '../context-menu.js';
+import { adaptMath, adaptMathToLatex } from '../math/math-adapt.js';
+import { openMathAdaptSheet } from '../math/math-adapt-sheet.js';
 import { HAN, hasHan, lookUp, listen, lookupable, editableReplacer } from './zh-menu.js';
 import {
   translate, translateMany, isPinyin, pinyinToHanzi, alignWords, zhLang, ALIGN_COLOURS,
@@ -16,8 +19,11 @@ import {
 
 let host = {};
 const MAX = 2000;
-const SKIP = '.context-menu, .zh-select-bar, .zh-ime, .pk-window-head, input, select, [data-no-zh-bar]';
+const SKIP = 'select, input[type="checkbox"], input[type="radio"], input[type="search"], input[type="number"], .context-menu, .zh-select-bar, .zh-ime, .math-adapt-sheet, .pk-window-head, [data-no-zh-bar]';
 const el = (tag, cls = '', text = '') => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+const isTextField = (node) =>
+  node instanceof HTMLTextAreaElement ||
+  (node instanceof HTMLInputElement && (!node.type || node.type === 'text' || node.classList.contains('math-bar-input')));
 
 // The text of a DOM selection without the pinyin over characters (<rt>, <rp>, the page's .zh-ruby).
 export function selectionText(sel) {
@@ -37,37 +43,120 @@ export function selectionText(sel) {
 
 // ---- The bar ----
 // fromSelection: the bar is for the selection (it goes when the selection does).
-let bar = null, barFor = '', fromSelection = false;
-function hideBar() { if (bar) bar.hidden = true; barFor = ''; }
-function iconButton(name, title, run) {
-  const b = el('button', 'icon-button');
+let bar = null, barFor = '', barNear = null, fromSelection = false;
+function hideBar() { if (bar) bar.hidden = true; barFor = ''; barNear = null; }
+function iconButton(name, title, run, { keepBarUntilRun = false } = {}) {
+  const b = el('button', 'sel-bar-icon');
   b.type = 'button';
   b.title = title;
   b.setAttribute('aria-label', title);
   b.append(icon(name));
   // The selection stays while a button is pressed.
   b.addEventListener('pointerdown', (e) => e.preventDefault());
+  b.onclick = (e) => {
+    e.stopPropagation();
+    const t = barFor;
+    if (keepBarUntilRun) { run(t); hideBar(); }
+    else { hideBar(); run(t); }
+  };
+  return b;
+}
+function textButton(label, title, run, iconName = '') {
+  const b = el('button', 'sel-bar-btn');
+  b.type = 'button';
+  b.title = title;
+  b.setAttribute('aria-label', title);
+  if (iconName) b.append(icon(iconName));
+  b.append(el('span', '', label));
+  b.addEventListener('pointerdown', (e) => e.preventDefault());
   b.onclick = (e) => { e.stopPropagation(); const t = barFor; hideBar(); run(t); };
   return b;
+}
+function buildRow(tag, controls) {
+  const items = controls.filter(Boolean);
+  if (!items.length) return null;
+  const row = el('div', 'sel-bar-row');
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', tag);
+  row.append(el('span', 'sel-bar-tag', tag), ...items);
+  return row;
 }
 // Also for text found another way (the grab tool's region): `rect` in client pixels.
 export function showBar(text, rect, near = null, selection = false, replace = null) {
   fromSelection = selection;
+  const isEditable = typeof replace === 'function';
+  const inMathBar = Boolean(near?.closest?.('.math-bar-input'));
+  const inTinyMde = Boolean(near?.closest?.('.TinyMDE'));
+  const isZh = hasHan(text) || isPinyin(text);
+  const rows = [];
+
+  if (isEditable) {
+    rows.push(buildRow('Math', [
+      textButton(
+        'Adapt math',
+        inMathBar ? 'Adapt shorthand notation to LaTeX' : 'Adapt shorthand math to inline LaTeX ($…$)',
+        async (t) => {
+          const out = inMathBar ? adaptMathToLatex(t) : adaptMath(t, { wrap: 'inline' });
+          await replace(out);
+          host.status?.('Adapted math to LaTeX.');
+        },
+        'math',
+      ),
+      !inMathBar && textButton(
+        'Adapt block',
+        'Adapt shorthand math to block LaTeX ($$…$$)',
+        async (t) => {
+          const out = adaptMath(t, { wrap: 'block' });
+          await replace(out);
+          host.status?.('Adapted math as block LaTeX.');
+        },
+      ),
+      iconButton(
+        'help',
+        'Math notation & LaTeX cheat sheet',
+        () => openMathAdaptSheet({ anchor: bar, onInsert: replace, status: host.status }),
+        { keepBarUntilRun: true },
+      ),
+    ]));
+
+    if (inTinyMde) {
+      rows.push(buildRow('Format', [
+        iconButton('bold', 'Bold (**…**)', (t) => replace(`**${t}**`)),
+        iconButton('italic', 'Italic (*…*)', (t) => replace(`*${t}*`)),
+        iconButton('highlight', 'Highlight (==…==)', (t) => replace(`==${t}==`)),
+        iconButton('code', 'Inline code (`…`)', (t) => replace(`\`${t}\``)),
+      ]));
+    }
+  }
+
+  if (isZh) {
+    const han = [...text].filter((c) => HAN.test(c)).join('');
+    const shortText = [...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text;
+    rows.push(buildRow('中文', [
+      iconButton('translate', `Translate “${shortText}”`, (t) => openTranslation(t, { near, replace })),
+      lookupable(text) && iconButton('search', `Look up ${text.trim()}`, (t) => lookUp(t.trim(), {}, near)),
+      han && [...han].length <= 12 && host.openTracePrefab && iconButton('draw', `Stroke order of ${[...han].slice(0, 12).join('')}`, () => host.openTracePrefab([...han].slice(0, 12).join(''))),
+      han && iconButton('speaker', `Listen to ${shortText}`, (t) => listen(t.trim())),
+    ]));
+  }
+
+  const validRows = rows.filter(Boolean);
+  if (!validRows.length) {
+    hideBar();
+    return;
+  }
+
   if (!bar) {
-    bar = el('div', 'grab-menu grab-icons zh-select-bar');
+    bar = el('div', 'grab-menu zh-select-bar');
     bar.setAttribute('role', 'toolbar');
-    bar.setAttribute('aria-label', 'Chinese selection');
+    bar.setAttribute('aria-label', 'Selection actions');
     document.body.append(bar);
   }
-  const han = [...text].filter((c) => HAN.test(c)).join('');
-  const shortText = [...text].length > 12 ? `${[...text].slice(0, 12).join('')}…` : text;
-  bar.replaceChildren(...[
-    iconButton('translate', `Translate “${shortText}”`, (t) => openTranslation(t, { near, replace })),
-    lookupable(text) && iconButton('search', `Look up ${text.trim()}`, (t) => lookUp(t.trim(), {}, near)),
-    han && [...han].length <= 12 && host.openTracePrefab && iconButton('draw', `Stroke order of ${[...han].slice(0, 12).join('')}`, () => host.openTracePrefab([...han].slice(0, 12).join(''))),
-    han && iconButton('speaker', `Listen to ${shortText}`, (t) => listen(t.trim())),
-  ].filter(Boolean));
+  const wrap = el('div', 'sel-bar-rows');
+  wrap.append(...validRows);
+  bar.replaceChildren(wrap);
   barFor = text;
+  barNear = near;
   // In the open modal dialog the selection is in, so it shows over it.
   const dialog = near?.closest?.('dialog[open]');
   if (dialog && bar.parentElement !== dialog) dialog.append(bar);
@@ -76,7 +165,7 @@ export function showBar(text, rect, near = null, selection = false, replace = nu
   const zRaw = parseFloat(document.documentElement.style.zoom);
   const z = Number.isFinite(zRaw) && zRaw > 0 ? zRaw : 1;
   const vw = innerWidth / z, vh = innerHeight / z;
-  const w = bar.offsetWidth || 140, h = bar.offsetHeight || 36;
+  const w = bar.offsetWidth || 200, h = bar.offsetHeight || 38;
   const rTop = rect.top / z, rBot = rect.bottom / z, rRight = rect.right / z;
   const below = rBot + 8 + h < vh;
   Object.assign(bar.style, {
@@ -86,10 +175,10 @@ export function showBar(text, rect, near = null, selection = false, replace = nu
   });
 }
 
-// The selection worth a bar at the end of a gesture: { text, rect, near } or null.
+// The selection worth a bar at the end of a gesture: { text, rect, near, replace } or null.
 function currentSelection(lastPointer) {
   const active = document.activeElement;
-  if (active instanceof HTMLTextAreaElement && !active.closest(SKIP)) {
+  if (isTextField(active) && !active.closest(SKIP)) {
     const { selectionStart: a, selectionEnd: b } = active;
     if (a == null || a === b) return null;
     const r = active.getBoundingClientRect();
@@ -127,8 +216,10 @@ export function installZhSelection(h = {}) {
     timer = setTimeout(() => {
       const s = currentSelection(pointer);
       const text = String(s?.text || '').trim();
-      if (!s || !text || text.length > MAX || !(hasHan(text) || isPinyin(text))) return fromSelection && hideBar();
-      if (text === barFor && !bar?.hidden) return;
+      const isZh = hasHan(text) || isPinyin(text);
+      const isEditable = Boolean(s?.replace);
+      if (!s || !text || text.length > MAX || (!isZh && !isEditable)) return fromSelection && hideBar();
+      if (text === barFor && s.near === barNear && !bar?.hidden) return;
       showBar(text, s.rect, s.near, true, s.replace);
     }, 30);
   };
@@ -137,6 +228,53 @@ export function installZhSelection(h = {}) {
   document.addEventListener('pointerdown', (e) => { if (bar && !bar.hidden && !e.target.closest?.('.zh-select-bar')) hideBar(); }, true);
   document.addEventListener('selectionchange', () => { if (bar && !bar.hidden && fromSelection && !String(currentSelection(pointer)?.text || '').trim()) hideBar(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bar && !bar.hidden) hideBar(); }, true);
+  document.addEventListener('contextmenu', (e) => {
+    if (e.defaultPrevented || e.shiftKey) return;
+    const target = e.target;
+    if (!(target instanceof Element) || target.closest(SKIP)) return;
+    const s = currentSelection([e.clientX, e.clientY]);
+    const text = String(s?.text || '').trim();
+    if (!s || !s.replace || !text || text.length > MAX || hasHan(text)) return;
+    const inMathBar = Boolean(s.near?.closest?.('.math-bar-input'));
+    e.preventDefault();
+    hideBar();
+    const entries = [
+      {
+        label: inMathBar ? 'Adapt math to LaTeX' : 'Adapt math to LaTeX ($…$)',
+        icon: 'math',
+        run: async () => {
+          const out = inMathBar ? adaptMathToLatex(text) : adaptMath(text, { wrap: 'inline' });
+          await s.replace(out);
+          host.status?.('Adapted math to LaTeX.');
+        },
+      },
+      !inMathBar && {
+        label: 'Adapt math as block ($$…$$)',
+        icon: 'mathBox',
+        run: async () => {
+          const out = adaptMath(text, { wrap: 'block' });
+          await s.replace(out);
+          host.status?.('Adapted math as block LaTeX.');
+        },
+      },
+      {
+        label: 'Math notation cheat sheet…',
+        icon: 'help',
+        run: () => openMathAdaptSheet({ anchor: s.near, onInsert: s.replace, status: host.status }),
+      },
+      '-',
+      {
+        label: 'Copy',
+        icon: 'copy',
+        key: 'Ctrl C',
+        run: () => navigator.clipboard?.writeText(s.text),
+      },
+    ].filter(Boolean);
+    openContextMenu(e.clientX, e.clientY, entries, {
+      title: 'Math',
+      host: s.near?.closest?.('dialog[open]') || null,
+    });
+  }, true);
   addEventListener('scroll', () => hideBar(), { capture: true, passive: true });
 }
 

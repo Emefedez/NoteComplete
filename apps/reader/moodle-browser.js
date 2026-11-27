@@ -56,7 +56,24 @@ export function moodleBrowser({
   let activeTypeFilter = 'all';
   let selectingQueue = false;
   const selectedIds = new Set();
-  let showImages = cfg.showImages === true;
+  let showImages = cfg.showImages !== false;
+  let showHiddenCourses = false;
+  const hiddenCourses = new Set(Array.isArray(cfg.hiddenCourses) ? cfg.hiddenCourses.map(Number) : []);
+  const unhiddenCourses = new Set(Array.isArray(cfg.unhiddenCourses) ? cfg.unhiddenCourses.map(Number) : []);
+  const isCourseHidden = (c) => !unhiddenCourses.has(Number(c.id)) && (Boolean(c.hidden) || hiddenCourses.has(Number(c.id)));
+  const toggleCourseHidden = (course) => {
+    const id = Number(course.id);
+    if (isCourseHidden(course)) {
+      hiddenCourses.delete(id);
+      if (course.hidden) unhiddenCourses.add(id);
+    } else {
+      unhiddenCourses.delete(id);
+      hiddenCourses.add(id);
+    }
+    saveCfg({ ...readCfg(), hiddenCourses: [...hiddenCourses], unhiddenCourses: [...unhiddenCourses] });
+    controls();
+    renderList();
+  };
   const imageCache = new Map();
   let sidebarDialog = null;
   let sidebarTab = 'deadlines';
@@ -159,6 +176,13 @@ export function moodleBrowser({
     if ($('moodleReconnect')) {
       $('moodleReconnect').hidden = !connected;
       $('moodleReconnect').disabled = loading || !api;
+    }
+    if ($('moodleHiddenToggle')) {
+      const hiddenCount = courses.filter(isCourseHidden).length;
+      $('moodleHiddenToggle').hidden = !connected || view !== 'courses' || (!hiddenCount && !showHiddenCourses);
+      $('moodleHiddenToggle').setAttribute('aria-pressed', String(showHiddenCourses));
+      $('moodleHiddenToggle').classList.toggle('active', showHiddenCourses);
+      $('moodleHiddenToggle').textContent = showHiddenCourses ? `Showing hidden (${hiddenCount})` : `Hidden (${hiddenCount})`;
     }
     if ($('moodleImagesToggle')) {
       $('moodleImagesToggle').hidden = !connected;
@@ -403,15 +427,22 @@ export function moodleBrowser({
 
     if (view === 'courses') {
       renderTypeFilters([]);
-      const shown = courses.filter((c) => !q || `${c.fullname} ${c.shortname}`.toLowerCase().includes(q));
+      const hiddenCount = courses.filter(isCourseHidden).length;
+      const pool = showHiddenCourses ? courses : courses.filter((c) => !isCourseHidden(c));
+      const shown = pool.filter((c) => !q || `${c.fullname} ${c.shortname}`.toLowerCase().includes(q));
       if (!shown.length) {
-        msg(courses.length ? 'No courses match your search.' : 'No enrolled courses found.');
+        if (!q && courses.length && hiddenCount === courses.length && !showHiddenCourses) {
+          msg(`All ${hiddenCount} courses are hidden. Click "Hidden (${hiddenCount})" to view or restore them.`);
+        } else {
+          msg(courses.length ? 'No courses match your search.' : 'No enrolled courses found.');
+        }
         return;
       }
-      msg(`${shown.length} course${shown.length === 1 ? '' : 's'}`);
+      msg(`${shown.length} course${shown.length === 1 ? '' : 's'}${hiddenCount && !showHiddenCourses ? ` (${hiddenCount} hidden)` : ''}`);
       for (const course of shown) {
+        const courseHidden = isCourseHidden(course);
         const li = document.createElement('li');
-        li.className = 'note-card moodle-card';
+        li.className = `note-card moodle-card${courseHidden ? ' is-archived' : ''}`;
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'moodle-card-open';
@@ -434,6 +465,17 @@ export function moodleBrowser({
         bindTitleMarquee(btn, title);
         btn.onclick = () => openCourse(course);
 
+        const actions = document.createElement('span');
+        actions.className = 'moodle-card-actions';
+
+        const eyeBtn = document.createElement('button');
+        eyeBtn.type = 'button';
+        eyeBtn.className = 'icon-button moodle-ext-btn';
+        eyeBtn.title = courseHidden ? 'Restore course to main list' : 'Hide / archive this course';
+        eyeBtn.setAttribute('aria-label', `${courseHidden ? 'Restore' : 'Hide'} ${course.fullname}`);
+        eyeBtn.append(icon(courseHidden ? 'eye' : 'eyeOff'));
+        eyeBtn.onclick = (e) => { e.stopPropagation(); toggleCourseHidden(course); };
+
         const ext = document.createElement('button');
         ext.type = 'button';
         ext.className = 'icon-button moodle-ext-btn';
@@ -442,7 +484,8 @@ export function moodleBrowser({
         ext.append(icon('open'));
         ext.onclick = (e) => { e.stopPropagation(); openExternalUrl(course.viewurl); };
 
-        li.append(btn, ext);
+        actions.append(eyeBtn, ext);
+        li.append(btn, actions);
         list.append(li);
       }
       onCards();
@@ -1046,6 +1089,20 @@ export function moodleBrowser({
       $('moodleOpenSystemBrowser').onclick = () => {
         const sso = $('moodleSsoUrl')?.value?.trim() || currentBrowserUrl();
         openExternalUrl(sso);
+      };
+    }
+    if ($('moodleHiddenToggle')) {
+      const hiddenCount = courses.filter(isCourseHidden).length;
+      $('moodleHiddenToggle').hidden = !connected || view !== 'courses' || (!hiddenCount && !showHiddenCourses);
+      $('moodleHiddenToggle').setAttribute('aria-pressed', String(showHiddenCourses));
+      $('moodleHiddenToggle').classList.toggle('active', showHiddenCourses);
+      $('moodleHiddenToggle').textContent = showHiddenCourses ? `Showing hidden (${hiddenCount})` : `Hidden (${hiddenCount})`;
+    }
+    if ($('moodleHiddenToggle')) {
+      $('moodleHiddenToggle').onclick = () => {
+        showHiddenCourses = !showHiddenCourses;
+        controls();
+        renderList();
       };
     }
     if ($('moodleImagesToggle')) {

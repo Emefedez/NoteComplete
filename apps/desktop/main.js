@@ -1146,8 +1146,10 @@ app.whenReady().then(async () => {
         return true;
       };
       // Capture form credentials submitted inside the SSO window (only when user keeps "Remember" checked).
-      win.webContents.on('console-message', (_e, _level, message) => {
-        if (typeof message !== 'string') return;
+      // Electron 35+ passes an Event object with `.message`; older versions pass `(event, level, message)`.
+      win.webContents.on('console-message', (e, _level, legacyMessage) => {
+        const message = typeof legacyMessage === 'string' ? legacyMessage : (typeof e?.message === 'string' ? e.message : '');
+        if (!message) return;
         if (message === '__NC_SSO_FORGET__') {
           pendingCred = { forget: true };
           readMoodleCreds().then((m) => { delete m[baseOrigin]; return writeMoodleCreds(m); }).catch(() => {});

@@ -7,6 +7,8 @@ import { icon } from '../icons.js';
 import { loadKatex } from '../rich-text.js';
 import { evaluateMath, symbolicDerivative, numericIntegral, solveEquation, isPlottable } from './cas.js';
 import { mathSettings, openMathSettings } from './settings.js';
+import { adaptMathToLatex } from './math-adapt.js';
+import { openMathAdaptSheet } from './math-adapt-sheet.js';
 
 export function createMathBar({
   container,
@@ -25,6 +27,9 @@ export function createMathBar({
       <input type="text" class="math-bar-input" placeholder="Formula or LaTeX: x^3 - 3x, \\sin(\\pi/6), 2x^2 - 8 = 0…" spellcheck="false" autocomplete="off" aria-label="Math expression" />
       <div class="math-bar-preview" aria-live="polite" role="button" tabindex="0" title="Click to copy formula to clipboard"></div>
       <div class="math-bar-actions" role="group" aria-label="Math actions">
+        <button type="button" data-ma="adapt" title="Adapt shorthand notation to LaTeX">Adapt</button>
+        <button type="button" data-ma="cheatsheet" class="math-icon-btn" aria-label="Math notation &amp; LaTeX cheat sheet" title="Math notation &amp; LaTeX cheat sheet"></button>
+        <span class="math-bar-sep"></span>
         <button type="button" data-ma="eval" title="Evaluate numeric expression"><b>=</b></button>
         <button type="button" data-ma="diff" title="Symbolic derivative d/dx">d/dx</button>
         <button type="button" data-ma="int" title="Definite integral ∫ₐᵇ f(x) dx">∫</button>
@@ -54,6 +59,7 @@ export function createMathBar({
   const intRow = container.querySelector('.math-bar-int');
   const intA = container.querySelector('.math-int-a');
   const intB = container.querySelector('.math-int-b');
+  container.querySelector('[data-ma="cheatsheet"]').append(icon('help'));
   container.querySelector('[data-ma="insert"]').append(icon('mathBox'));
   container.querySelector('[data-ma="r-prefab"]').append(icon('rplot'));
   container.querySelector('[data-ma="r-studio"]').append(icon('rstudio'));
@@ -128,6 +134,52 @@ export function createMathBar({
       container.querySelector('[data-ma="eval"]').click();
     }
   });
+
+  container.querySelector('[data-ma="adapt"]').onclick = () => {
+    const a = input.selectionStart;
+    const b = input.selectionEnd;
+    if (a != null && b != null && a !== b) {
+      const slice = input.value.slice(a, b);
+      if (!slice.trim()) return;
+      const adapted = adaptMathToLatex(slice);
+      input.focus();
+      input.setSelectionRange(a, b);
+      if (!document.execCommand('insertText', false, adapted)) {
+        input.setRangeText(adapted, a, b, 'end');
+      }
+      liveUpdate();
+      status('Adapted selection to LaTeX.');
+      return;
+    }
+    const raw = input.value.trim();
+    if (!raw) {
+      status('Type shorthand math in the Math bar first.');
+      input.focus();
+      return;
+    }
+    const adapted = adaptMathToLatex(raw);
+    input.value = adapted;
+    liveUpdate();
+    status('Adapted notation to LaTeX.');
+  };
+
+  container.querySelector('[data-ma="cheatsheet"]').onclick = () => {
+    const btn = container.querySelector('[data-ma="cheatsheet"]');
+    const selStart = input.selectionStart ?? input.value.length;
+    const selEnd = input.selectionEnd ?? input.value.length;
+    openMathAdaptSheet({
+      anchor: btn,
+      onInsert: (snippet) => {
+        input.focus();
+        input.setSelectionRange(selStart, selEnd);
+        if (!document.execCommand('insertText', false, snippet)) {
+          input.setRangeText(snippet, selStart, selEnd, 'end');
+        }
+        liveUpdate();
+      },
+      status,
+    });
+  };
 
   container.querySelector('[data-ma="eval"]').onclick = () => {
     const raw = input.value.trim();

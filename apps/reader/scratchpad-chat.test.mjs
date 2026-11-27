@@ -472,10 +472,11 @@ test('chatController keeps sent images visible in user bubbles until cleared and
         blob: async () => ({ type: 'image/png', arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }),
       });
 
+      let lastPrompt = '';
       try {
         const chat = chatController({
           ai: {
-            async run(_req, onDelta) { onDelta?.('It is a diagram.'); return { text: 'It is a diagram.' }; },
+            async run(req, onDelta) { lastPrompt = req.prompt; onDelta?.('It is a diagram.'); return { text: 'It is a diagram.' }; },
             models: async () => [],
             cancel() {},
           },
@@ -506,6 +507,7 @@ test('chatController keeps sent images visible in user bubbles until cleared and
         await byId.get('chatForm').onsubmit({ preventDefault() {} });
         // Wait a tick for async ask() to finish.
         await new Promise((r) => setTimeout(r, 20));
+        assert.match(lastPrompt, /Focus on the content on this page first/i);
 
         // Pending tray is cleared after sending, while the sent user bubble keeps the image.
         assert.equal(byId.get('chatAttachments').hidden, true);

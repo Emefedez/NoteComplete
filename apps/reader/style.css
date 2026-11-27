@@ -3786,6 +3786,8 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 :is(.recent-heading, .drive-heading) > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0; border-radius: 99px; background: var(--fill); color: var(--ink); }
 :is(.recent-heading, .drive-heading) > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
 :is(.recent-heading, .drive-heading) > .folder-back[hidden] { display: none; }
+.cloud-panel:has(.cloud-panel-toggle[aria-expanded="false"]) .folder-back { display: none; }
+.moodle-card.is-archived { opacity: .62; border-style: dashed; }
 :is(.recent-heading, .drive-heading) > .folder-back svg { width: 16px; height: 16px; }
 .collab-dialog .check { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
 .collab-dialog .check .muted { font-size: 12px; }
@@ -4723,8 +4725,260 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
 .zh-lang > button:last-child { border-radius: 0 4px 4px 0; }
 .zh-lang > button:hover { background: var(--accent-hover); color: var(--ink); }
 .zh-lang > button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 0 1px 2px #0002; }
-/* Chinese selected: the bar beside it, and the translation window (chinese/zh-select.js). */
-.zh-select-bar { position: fixed; z-index: 60; }
+/* Floating selection toolbar (chinese/zh-select.js) & Math notation cheat sheet (math/math-adapt-sheet.js). */
+.zh-select-bar {
+  position: fixed;
+  z-index: 60;
+  display: block;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  background: var(--menu);
+  box-shadow: var(--shadow-pop);
+}
+.sel-bar-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sel-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+.sel-bar-row + .sel-bar-row {
+  padding-top: 3px;
+  border-top: 1px solid var(--line);
+}
+.sel-bar-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 5px 0 3px;
+  user-select: none;
+  white-space: nowrap;
+}
+.zh-select-bar .sel-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.zh-select-bar .sel-bar-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.zh-select-bar .sel-bar-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+.zh-select-bar .sel-bar-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+.zh-select-bar .sel-bar-icon:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.zh-select-bar .sel-bar-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Searchable Math Notation & LaTeX cheat sheet dropdown */
+.math-adapt-sheet {
+  position: fixed;
+  z-index: 80;
+  width: min(540px, calc(100vw - 20px));
+  max-height: min(520px, calc(100vh - 24px));
+  display: flex;
+  flex-direction: column;
+  background: var(--menu);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-box);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.math-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 6px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--chrome);
+}
+.math-sheet-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.math-sheet-close {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  flex: none;
+}
+.math-sheet-search {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.math-sheet-search input {
+  width: 100%;
+  height: 30px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--chrome);
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.math-sheet-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+}
+.math-sheet-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.math-sheet-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.math-sheet-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--muted);
+  padding: 2px 2px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.math-sheet-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.math-sheet-item:hover,
+.math-sheet-item:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.math-sheet-item-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+}
+.math-sheet-notation {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+.math-sheet-latex {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--fill);
+  color: var(--ink);
+  word-break: break-word;
+}
+.math-sheet-render {
+  margin-left: auto;
+  padding: 1px 6px;
+  font-size: 13.5px;
+  color: var(--ink);
+  max-width: 100%;
+  overflow-x: auto;
+}
+.math-sheet-item-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.math-sheet-desc {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+.math-sheet-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+.math-sheet-copy {
+  height: 22px;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.math-sheet-copy:hover {
+  border-color: var(--accent);
+  background: var(--accent-hover);
+  color: var(--accent);
+}
+.math-sheet-empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
 .grab-menu .zh-grab { font-size: 15px; font-weight: 600; }
 .zh-tr-head { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .zh-tr-from { margin: 0; font-size: 12px; }
