@@ -290,3 +290,10 @@ test('narrow screens: the global bar end keeps its icon-only buttons inside the 
   // The app never pans as a page.
   assert.match(styleCss, /html \{\s*overflow: hidden;\s*\}/);
 });
+
+test('inline toolOptionsMirror styles match data-mirror-id descendants so popping the panel does not expand the toolbar', () => {
+  // toolMirror strips descendant ids to data-mirror-id; inline rules must match both.
+  assert.match(styleCss, /:is\(#toolOptions, #toolOptionsMirror\)\.inline :is\(#drawingOptions, \[data-mirror-id="drawingOptions"\]\) \{ display: flex; flex-direction: row; align-items: center; flex-wrap: nowrap;/);
+  assert.match(styleCss, /:is\(#toolOptions, #toolOptionsMirror\)\.inline :is\(#selectionOptions, \[data-mirror-id="selectionOptions"\]\) fieldset \{ display: flex;/);
+  assert.doesNotMatch(styleCss, /:is\(#toolOptions, #toolOptionsMirror\)\.inline #(drawingOptions|selectionOptions)\b/);
+});
