@@ -31,8 +31,8 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock, and z-order stacking (**Bring to front / forward / backward / to back**, `Ctrl ]` / `Ctrl [`).
 - **Quick menu & gestures:** `Shift+S`, pen side button, or two-finger hold; two-finger pinch/scroll/undo, three-finger redo; drag tools to reorder; dockable toolbar (top, bottom, left, right).
-- **Pages & canvas:** Infinite canvas or fixed pages; insert blank/PDF pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
-- **Other apps' notebooks:** Goodnotes (`.goodnotes`), Notability (`.ntb`) and Rnote (`.rnote`) notebooks open as editable notes: ink stays ink, shapes, text and pictures come along, and imported PDF pages become page backgrounds. Rnote's infinite canvas is cut into pages, each PDF page with the notes written beside it.
+- **Pages & canvas:** Several infinite canvases per note (turned like pages) or fixed pages; insert blank/PDF/canvas pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
+- **Other apps' notebooks:** Goodnotes (`.goodnotes`), Notability (`.ntb`) and Rnote (`.rnote`) notebooks open as editable notes: ink stays ink, shapes, text and pictures come along, imported PDF pages stay vector backgrounds, and infinite Rnote canvases open whole (with covers on Home).
 - **Auto-save & export:** Automatic local recovery slots; reopening a file returns to where you were reading; export pages to PDF, SVG, PNG/JPEG, OpenDocument (`.odt`: editable text frames at their place on the page, or the pages as pictures), or Anki study decks.
 
 </details>
@@ -42,6 +42,7 @@ Everything runs on your device with no account required. Try it in the browser a
 
 - **Page text boxes:** Rich formatting, live KaTeX math (`∑` or `$...$`) with touch math keypad, direct move without leaving Text mode (hold/drag box, drag `⋮⋮` grip, or drag outside with no selection).
 - **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, extended `==highlighting==` (colours, underline, text colour), live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
+- **On-demand Math Adaptation (shorthand → LaTeX) & bilingual cheat sheet:** Highlight math shorthand in any editable field (Notes, Markdown, Math Bar, text boxes) and use the multi-row thematic hover bar or right-click menu to convert it to coherent LaTeX (`-^x` → `\bar{x}`, `~^=` → `\approx`, `5^(-5)` & Omarchy superscripts, `(8 sobre 5)` / `C(5 over 8)` → `\binom`, `sqrt()`, `intr()`, `lim(x->inf)`, `desv()`/`sd()`/`std()`, annotated `=(como y=7)=` / `=(propiedad)=>` / `<=(razón)=>`). Click `?` for a searchable English/Spanish cheat sheet showing custom notation, equivalent LaTeX, and live KaTeX previews side by side.
 - **Documents, slides, spreadsheets & e-books:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown — keeping merged cells, with a table filter/sort bar and **Put on page as table** (Save writes a `.md` copy and never modifies the original) — or edit Office files natively with the optional **Euro-Office** desktop module below.
 - **Side Notes (`N`):** Per-document Markdown notes linked to pages with `+ Page`.
 
@@ -88,7 +89,7 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Office Suite (Optional Euro-Office Module)</b></summary>
 
-- **Native Office editing on desktop:** Install the optional **Euro-Office** module from **Setup ▸ Modules** to edit Word, Excel, PowerPoint, and ODF files directly inside a NoteComplete tab with save-back, right-click **Open with ▸**, `1`/`2` chooser (`R` to remember), and **Open as text** switching. Runs locally on demand and stops when idle.
+- **Native Office editing on desktop:** Install the optional **Euro-Office** module from **Setup ▸ Modules** (with one-click prerequisite setup for `pasta` on Linux, **WSL2** on Windows, and **Podman** on macOS) to edit Word, Excel, PowerPoint, and ODF files directly inside a NoteComplete tab with save-back, right-click **Open with ▸**, `1`/`2` chooser (`R` to remember), and **Open as text** switching. Runs locally on demand and stops when idle.
 
 <p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab with Open as text and Save" width="100%"></p>
 
@@ -98,11 +99,11 @@ Everything runs on your device with no account required. Try it in the browser a
 
 ### Library, Cloud & Search
 
-- **Local folders & Recent:** Open any folder on disk as a sidebar document group and browse it on Home folder by folder, with every file listed (ones NoteComplete can't open go to your system's **Open with** app chooser); star files, rename/trash/show in folder, filter by type/date/source/size/audio/tags, and switch between cover cards and compact list view.
-- **Cloud & repositories:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, or **GitHub** note repositories directly from Home; check for newer versions, compare page-by-page, and migrate study material/notes across copies. **One of each** shows same-named Drive and Dropbox items (the copies Noteful backups leave) as one card and lets you pick the copy when you open it.
-- **Moodle courses:** Sign in to a Moodle site (built-in **Moovi — Universidade de Vigo** single sign-on, or any server with a token), browse courses, sections and folders grouped by file type, download one file or a whole queue, and use the **Moodle tools** sidebar for deadlines, grades, forums and Ask AI.
+- **Local folders & Recent:** Open any folder on disk as a collapsible sidebar document group (arrow toggle in Pages and side views) and browse it on Home folder by folder, with every file listed (ones NoteComplete can't open go to your system's **Open with** app chooser); star files, rename/trash/show in folder, filter by type/date/source/size/audio/tags, and switch between cover cards and compact list view.
+- **Cloud & repositories:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, or **GitHub** note repositories directly from Home (with left-aligned Back navigation matching Recent folders); check for newer versions, compare page-by-page, and migrate study material/notes across copies. **One of each** shows same-named Drive and Dropbox items (the copies Noteful backups leave) as one card and lets you pick the copy when you open it.
+- **Moodle courses:** Sign in via the official Moodle Mobile API token flow (`admin/tool/mobile/launch.php`, encrypted on device with autofill & **Sign in again**, built-in **Moovi — Universidade de Vigo** preset), browse courses with cover images and an eye icon to hide/archive & restore courses, browse sections/folders grouped by file type, download one file or a whole queue, and use **Moodle tools** for deadlines (with assignment/quiz submission status and optional encrypted `.ics` feed), grades, forum announcements with previews, and Ask AI.
 - **One search box on Home:** searches Recent, every connected cloud and the open Moodle course at once.
-- **Unified Search & Batch OCR (`Ctrl+F`):** Search across typed text, PDF text, audio transcripts, and on-device handwriting OCR (multi-language), or search text across your entire library from Home.
+- **Unified Search & Batch OCR (`Ctrl+F`):** Formula-aware search (`B(n,p)`, `P(X≤3)`) with **Aa** (case), **ab** (whole word), and **.\*** (regex) toggles across typed text, PDF text, audio transcripts, and on-device handwriting OCR (multi-language), or search text across your entire library from Home.
 
 <p align="center"><img src="docs/images/home.png" alt="NoteComplete Home screen with Cloud provider dropdown open" width="100%"></p>
 
@@ -115,7 +116,7 @@ All AI features run through **your own existing AI subscription** on desktop (Cl
 <details open>
 <summary><b>AI Study Tools, Handwriting Synthesis, Transcription &amp; MCP</b></summary>
 
-- **Ask AI (`Ctrl+J`) & Scratchpad:** Chat about the current page, a Grab region, pasted images (`Ctrl+V`), or dictated questions; save useful threads in the note's Scratchpad; clickable links jump straight to pages or open images.
+- **Ask AI (`Ctrl+J`) & Scratchpad:** Chat about the current page, a Grab region, pasted images (`Ctrl+V`, which stay visible in your sent message bubbles and Scratchpad until cleared, click to enlarge), or dictated questions; smart context escalation starts on the current page, then checks nearby pages, the full note via MCP, and related files/web; clickable links jump straight to pages or open images.
 - **Flashcards & Quizzes (background generation):** Resumable quizzes with page **Hints** (`H`), **Clarify** (`C`), **Dispute** (`X`), **Double check** (`V`), and wrong-answer retakes; floating flashcards with math rendering, per-card **Ask AI**, inline editing, and Anki export (`Shift+E`).
 - **Fact Check (`Shift+F`):** Check pages for calculation, date, or consistency errors.
 - **Handwriting from Markdown & New Note with AI:** Turn Markdown + math into real, editable, immediately searchable handwriting ink (`File → New note…`) with live preview, or have your AI tool draft full handwritten notebooks from a topic or folder.
