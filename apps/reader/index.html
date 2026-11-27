@@ -240,6 +240,7 @@
               <section aria-labelledby="exportImportHead">
                 <h3 id="exportImportHead">Import</h3>
                 <button id="importAny" class="export-item" data-icon="import"><b>Import…</b><small>Study material, quizzes (Markdown), flashcard decks, notes or any document</small></button>
+                <button id="importAppleNotes" type="button" class="export-item" data-icon="note" data-palette="Import Apple Notes…" title="Import notes from Apple Notes (NoteStore.sqlite, macOS Apple Notes, iCloud Takeout .zip, Exporter.app, or HTML/Markdown exports)"><b>Import Apple Notes…</b><small>NoteStore.sqlite, macOS Notes, iCloud .zip, or Markdown/HTML</small></button>
                 <button id="hubReceive" type="button" class="export-item" data-icon="qr" data-palette="Receive notes or study material…" title="Scan a QR code, connect with a P2P / Wi-Fi code, or import a file: notes, quizzes and flashcards are recognised on their own"><b>Receive notes or study…</b><small>QR, P2P, Wi-Fi PIN or file from another NoteComplete</small></button>
               </section>
             </div>
@@ -2056,6 +2057,24 @@
     <span class="spacer"></span>
     <button id="cloudGuideBack" type="button">Back</button>
     <button id="cloudGuideAction" type="button" class="primary">Continue</button>
+  </div>
+</dialog>
+
+<dialog id="appleNotesDialog" class="ocr-dialog" aria-labelledby="appleNotesTitle">
+  <h2 id="appleNotesTitle">Import Apple Notes</h2>
+  <p class="muted">Import your Apple Notes as editable NoteComplete Markdown notes, keeping headings, checklists, highlights, tables, links, and folder structure.</p>
+  <div style="display:grid;gap:8px;margin:10px 0 12px;">
+    <button id="appleNotesFromMac" type="button" class="export-item" data-icon="note" hidden><b>Import from Apple Notes on this Mac</b><small>Reads ~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite (read-only copy)</small></button>
+    <button id="appleNotesFromSqlite" type="button" class="export-item" data-icon="folder" hidden><b>Import NoteStore.sqlite database…</b><small>Pick a NoteStore.sqlite copied from a Mac or iOS backup (works on Linux, Windows &amp; macOS)</small></button>
+    <button id="appleNotesFromArchive" type="button" class="export-item" data-icon="import"><b>Import .zip or exported files (.md, .html, .txt)…</b><small>Works with iCloud Data &amp; Privacy Takeout, Exporter.app, or macOS Export as Markdown</small></button>
+    <input id="appleNotesFileInput" type="file" accept=".zip,.md,.markdown,.html,.htm,.txt" multiple hidden />
+    <label class="ocr-skip" style="margin:4px 0 0;"><input id="appleNotesKeepFolders" type="checkbox" checked /> Organize imported notes into matching NoteComplete folders</label>
+  </div>
+  <p id="appleNotesStatus" class="muted" style="min-height:1.4em;margin:4px 0 8px;"></p>
+  <div class="ocr-actions">
+    <button id="appleNotesOpenFirst" type="button" class="primary" hidden>Open first note</button>
+    <span class="spacer"></span>
+    <button id="appleNotesClose" type="button">Close</button>
   </div>
 </dialog>
 

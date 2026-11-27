@@ -5,6 +5,7 @@ import path from 'node:path';
 import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
 import { dropboxDesktopSignIn, refreshDropboxDesktopToken } from './dropbox-auth.js';
 import { createMoodleService, parseMobileTokenUrl } from './moodle-service.js';
+import { detectMacAppleNotesDb, readAppleNotesSqlite } from './apple-notes-db.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles, withExtension } from './library-files.js';
@@ -1304,6 +1305,23 @@ app.whenReady().then(async () => {
     const raw = String(url || '').trim();
     if (!/^https?:\/\//i.test(raw)) throw Error('Invalid Moodle URL.');
     return shell.openExternal(raw);
+  }));
+  // Apple Notes importer (macOS live NoteStore.sqlite detection + cross-platform NoteStore.sqlite file picker)
+  ipcMain.handle('apple-notes:detect-mac', guarded(() => detectMacAppleNotesDb()));
+  ipcMain.handle('apple-notes:import-mac', guarded(async () => {
+    const det = await detectMacAppleNotesDb();
+    if (!det.available) throw Error('Apple Notes database not found on this Mac (check Full Disk Access permissions).');
+    return readAppleNotesSqlite(det.path);
+  }));
+  ipcMain.handle('apple-notes:pick-sqlite', guarded(async (event) => {
+    const win = windowOf(event.sender);
+    const chosen = await dialog.showOpenDialog(win, {
+      title: 'Select Apple Notes NoteStore.sqlite',
+      properties: ['openFile'],
+      filters: [{ name: 'Apple Notes SQLite (NoteStore.sqlite)', extensions: ['sqlite', 'sqlite3', 'db'] }, { name: 'All files', extensions: ['*'] }],
+    });
+    if (chosen.canceled || !chosen.filePaths?.[0]) return null;
+    return readAppleNotesSqlite(chosen.filePaths[0]);
   }));
   started = true;
   const launchedEuroOffice = process.argv.includes('--euro-office');

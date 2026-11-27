@@ -8872,6 +8872,139 @@ $("importAnyFile").onchange = async () => {
   $("importAnyFile").value = "";
   if (file) await openImportedFile(file);
 };
+// Apple Notes importer dialog (NoteStore.sqlite on desktop, .zip / .md / .html / .txt everywhere)
+(() => {
+  const dlg = $("appleNotesDialog");
+  const openBtn = $("importAppleNotes");
+  if (!dlg || !openBtn) return;
+  const macBtn = $("appleNotesFromMac");
+  const sqliteBtn = $("appleNotesFromSqlite");
+  const archiveBtn = $("appleNotesFromArchive");
+  const fileInput = $("appleNotesFileInput");
+  const keepFoldersEl = $("appleNotesKeepFolders");
+  const stEl = $("appleNotesStatus");
+  const openFirstBtn = $("appleNotesOpenFirst");
+  const closeBtn = $("appleNotesClose");
+  let firstImported = null;
+
+  const setStatus = (t) => { if (stEl) stEl.textContent = t; };
+  const setBusy = (on) => {
+    if (macBtn) macBtn.disabled = on;
+    if (sqliteBtn) sqliteBtn.disabled = on;
+    if (archiveBtn) archiveBtn.disabled = on;
+  };
+
+  async function saveImportedAppleNotes(result) {
+    const notes = result?.notes || [];
+    if (!notes.length) {
+      setStatus(result?.lockedCount ? `Found ${result.lockedCount} locked note(s), which cannot be decrypted.` : "No Apple Notes found in that source.");
+      return;
+    }
+    const { sanitizeNoteFilename } = await import("./apple-notes-import.js");
+    const keepFolders = keepFoldersEl ? keepFoldersEl.checked : true;
+    const existingGroups = keepFolders && groups?.all ? await groups.all().catch(() => []) : [];
+    const groupByName = new Map(existingGroups.filter((g) => g.kind === "folder").map((g) => [String(g.name || "").toLowerCase(), g]));
+    const ensureGroup = async (folderName) => {
+      const name = String(folderName || "Apple Notes").trim() || "Apple Notes";
+      const key = name.toLowerCase();
+      if (groupByName.has(key)) return groupByName.get(key);
+      const created = await groups.create(name);
+      groupByName.set(key, created);
+      return created;
+    };
+
+    firstImported = null;
+    let savedCount = 0;
+    const folderNames = new Set();
+    for (let i = 0; i < notes.length; i++) {
+      const n = notes[i];
+      setStatus(`Importing ${i + 1} / ${notes.length}: ${n.title}…`);
+      const fileName = sanitizeNoteFilename(n.title, `Apple Note ${i + 1}`);
+      const mdFile = new File([n.markdown || ""], fileName, { type: "text/markdown" });
+      const entry = await library.rememberImported(mdFile, { origin: `Apple Notes · ${n.folder || "Notes"}` }).catch(() => null);
+      if (entry) {
+        savedCount++;
+        if (!firstImported) firstImported = { file: mdFile, entry };
+        if (keepFolders && groups?.create && groups?.move) {
+          const grp = await ensureGroup(n.folder || "Apple Notes");
+          folderNames.add(grp.name);
+          const diskPath = library?.pathOf ? await library.pathOf(entry).catch(() => "") : "";
+          await groups.move({ key: entry.key, name: entry.name, source: entry.source || "import", ...(diskPath ? { path: diskPath } : {}) }, grp).catch(() => {});
+        }
+      }
+    }
+    if (typeof home?.renderRecent === "function") home.renderRecent();
+    const lockedMsg = result?.lockedCount ? ` (${result.lockedCount} password-locked skipped)` : "";
+    const folderMsg = folderNames.size ? ` into ${folderNames.size} folder${folderNames.size === 1 ? "" : "s"}` : "";
+    setStatus(`Imported ${savedCount} Apple Note${savedCount === 1 ? "" : "s"}${folderMsg}${lockedMsg}.`);
+    status(`Imported ${savedCount} Apple Note${savedCount === 1 ? "" : "s"}.`);
+    if (openFirstBtn) openFirstBtn.hidden = !firstImported;
+  }
+
+  openBtn.onclick = async () => {
+    closeMenus();
+    if ($("exportDialog")?.open) $("exportDialog").close();
+    firstImported = null;
+    if (openFirstBtn) openFirstBtn.hidden = true;
+    setStatus("");
+    const bridge = window.notecompleteAppleNotes;
+    if (sqliteBtn) sqliteBtn.hidden = !bridge?.pickSqlite;
+    if (macBtn) {
+      macBtn.hidden = true;
+      if (bridge?.detectMac) {
+        bridge.detectMac().then((d) => { if (d?.available) macBtn.hidden = false; }).catch(() => {});
+      }
+    }
+    openModal(dlg);
+  };
+  if (closeBtn) closeBtn.onclick = () => dlg.close();
+  if (openFirstBtn) {
+    openFirstBtn.onclick = () => {
+      const target = firstImported;
+      dlg.close();
+      if (target?.file) void openFile(target.file, { entry: target.entry });
+    };
+  }
+  if (macBtn) {
+    macBtn.onclick = async () => {
+      setBusy(true);
+      setStatus("Reading Apple Notes database from this Mac…");
+      try {
+        const res = await window.notecompleteAppleNotes.importMac();
+        await saveImportedAppleNotes(res);
+      } catch (e) { setStatus(e?.message || String(e)); }
+      finally { setBusy(false); }
+    };
+  }
+  if (sqliteBtn) {
+    sqliteBtn.onclick = async () => {
+      setBusy(true);
+      setStatus("Choose NoteStore.sqlite…");
+      try {
+        const res = await window.notecompleteAppleNotes.pickSqlite();
+        if (!res) { setStatus(""); return; }
+        await saveImportedAppleNotes(res);
+      } catch (e) { setStatus(e?.message || String(e)); }
+      finally { setBusy(false); }
+    };
+  }
+  if (archiveBtn) archiveBtn.onclick = () => fileInput?.click();
+  if (fileInput) {
+    fileInput.onchange = async () => {
+      const files = [...(fileInput.files || [])];
+      fileInput.value = "";
+      if (!files.length) return;
+      setBusy(true);
+      setStatus(`Reading ${files.length} file${files.length === 1 ? "" : "s"}…`);
+      try {
+        const { parseAppleNotesFiles } = await import("./apple-notes-import.js");
+        const res = await parseAppleNotesFiles(files);
+        await saveImportedAppleNotes(res);
+      } catch (e) { setStatus(e?.message || String(e)); }
+      finally { setBusy(false); }
+    };
+  }
+})();
 $("shareSession").hidden = !window.notecompleteCollab;
 $("shareSession").onclick = () => startCollab("host");
 $("joinTablet").onclick = () => startCollab("join-tablet");

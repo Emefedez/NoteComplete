@@ -286,6 +286,11 @@ contextBridge.exposeInMainWorld('notecompleteMoodle', {
   mcpConfig: () => ipcRenderer.invoke('moodle:mcp-config'),
   openExternal: url => ipcRenderer.invoke('moodle:open-external', url),
 });
+contextBridge.exposeInMainWorld('notecompleteAppleNotes', {
+  detectMac: () => ipcRenderer.invoke('apple-notes:detect-mac'),
+  importMac: () => ipcRenderer.invoke('apple-notes:import-mac'),
+  pickSqlite: () => ipcRenderer.invoke('apple-notes:pick-sqlite'),
+});
 contextBridge.exposeInMainWorld('notecompleteWindows', {
   zoom: step => ipcRenderer.invoke('ui:zoom', step),
   open: () => ipcRenderer.invoke('windows:new'),
