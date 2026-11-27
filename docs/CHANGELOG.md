@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.20
+
+- **Collapsible folder sidebar.** The folder/group sidebar now has a collapse/expand arrow in its heading: collapse the folder list vertically inside the Pages panel or tuck the left sidebar into a slim rail beside HTML, text, and web documents, remembered across sessions.
+
 ## 2.0.19
 
 - **Sent images stay visible in AI chats.** Images attached or pasted into Ask AI, Quiz explanations, and Flashcard Ask AI now remain shown inside your sent message bubbles until you start a new conversation, click to enlarge in the image viewer, and are preserved when saving to or reopening from the Scratchpad.
