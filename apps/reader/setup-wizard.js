@@ -413,7 +413,7 @@ export function buildSteps(env) {
     },
     {
       id: 'prefs', label: 'Preferences', optional: false,
-      available: () => has(s, 'menuBarAutoHide', 'dock', 'spread', 'welcome', 'updateChecks'),
+      available: () => has(s, 'menuBarAutoHide', 'dock', 'spread', 'updateChecks'),
       render(sec) {
         const body = section(sec, 'Preferences', 'Sensible defaults are already set. All of these are also in the menus.');
         if (s.dock) {
@@ -424,7 +424,6 @@ export function buildSteps(env) {
         }
         if (s.menuBarAutoHide) body.append(toggle(s.menuBarAutoHide, 'Hide the menu bar', 'File, Edit, View… slide away and come back when the pointer reaches the top edge.'));
         if (s.spread) body.append(toggle(s.spread, 'Side-by-side pages', 'Two pages next to each other, like an open book.'));
-        if (s.welcome && (s.welcome.available?.() ?? true)) body.append(toggle(s.welcome, 'Open the welcome note at start', 'This site opens its welcome note in a tab each time it starts.'));
         if (s.updateChecks && (s.updateChecks.available?.() ?? true)) body.append(toggle(s.updateChecks, 'Check for updates on open', 'Looks for a new version when NoteComplete opens; it always asks before installing.'));
       },
     },

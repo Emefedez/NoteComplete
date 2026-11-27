@@ -1,7 +1,6 @@
 // The tabs page (tabs.html). In a file of its own: the page's Content-Security-Policy
 // (tools/reader-csp.mjs) is meant to refuse inline script.
 import { tabHost } from './tab-host.js';
-import { welcomeWanted } from './welcome-pref.js';
 const reader = document.querySelector('meta[name="notecomplete-reader"]').content;
 const host = tabHost({ container: document.getElementById('tabs'), reader });
 // Each reader frame finds its bridge here (app.js, before its tab strip starts).
@@ -15,13 +14,5 @@ host.install = async () => {
   await event.prompt();
   return (await event.userChoice).outcome;
 };
-// The website opens with its welcome notebook in front and Home beside it (site.json),
-// unless Help → "Open the welcome note at start" was turned off in this browser.
-const site = welcomeWanted() ? await fetch('./site.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
-if (site?.welcome) {
-  // Not on a phone, upright or on its side: the panel would take half of a small screen.
-  const showNotes = site.notes && window.innerWidth > 700 && window.innerHeight > 500;
-  host.open({ title: site.title || 'Welcome', open: site.welcome, notes: showNotes ? 1 : null });
-  host.open({}, { activate: false });
-} else host.open();
+host.open();
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => { /* Optional. */ });

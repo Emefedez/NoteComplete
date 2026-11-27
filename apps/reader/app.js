@@ -67,7 +67,6 @@ import { lagLog } from "./lag-log.js";
 import { imageReady } from "./image-ready.js";
 import { chooseNfeditExport } from "./nfedit-export.js";
 import { saveDocumentInPlace } from "./save-target.js";
-import { welcomeWanted, setWelcomeWanted } from "./welcome-pref.js";
 import { zipFiles } from "./zip.js";
 import { enhanceSelects, refreshSelects } from "./select.js";
 import { decorateIcons, icon } from "./icons.js";
@@ -599,23 +598,6 @@ if ($("installApp")) {
   $("installApp").hidden = !!(window.notecompleteUpdates || window.ReactNativeWebView);
   $("installApp").onclick = () => installApp();
 }
-// Help → Open the welcome note at start: only on the website, which has one (site.json).
-// Remembered in this browser (welcome-pref.js); tabs-main.js reads it at start.
-function welcomeChecked() { $("welcomeToggle").setAttribute("aria-checked", String(welcomeWanted())); }
-if ($("welcomeToggle") && !window.notecompleteUpdates && !window.ReactNativeWebView) {
-  fetch("./site.json", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((site) => {
-    if (!site?.welcome) return;
-    $("welcomeToggle").hidden = false;
-    welcomeChecked();
-  }).catch(() => { /* No website here. */ });
-  $("welcomeToggle").onclick = () => {
-    closeMenus();
-    const wanted = !welcomeWanted();
-    setWelcomeWanted(wanted);
-    welcomeChecked();
-    status(wanted ? "The welcome note opens each time this site starts." : "The welcome note will not open at start any more. Help → Open the welcome note at start brings it back.");
-  };
-}
 let deferredInstall = null;
 window.addEventListener("beforeinstallprompt", (event) => { event.preventDefault(); deferredInstall = event; });
 function installPrompt() {
@@ -637,12 +619,6 @@ async function openFromAddress() {
     const response = await fetch(url);
     if (!response.ok) throw Error(`Could not open ${url.pathname.split("/").pop()} (${response.status}).`);
     await load(new File([await response.blob()], decodeURIComponent(url.pathname.split("/").pop())));
-    // The website's welcome note, opened at start: say once how to stop that.
-    if (welcomeWanted() && window.parent !== window && /^welcome\./i.test(url.pathname.split("/").pop())) {
-      let told = false;
-      try { told = localStorage.getItem("notecomplete-welcome-told") === "1"; localStorage.setItem("notecomplete-welcome-told", "1"); } catch { told = true; }
-      if (!told) status("To stop this welcome note opening at start: Help → Open the welcome note at start.");
-    }
     // notes=1: the Notes panel open, formatted, so its links can be followed.
     if (tabParams.get("notes") === "1") {
       // Once the panel is open (its notes loaded), not after a guessed delay.
@@ -8542,7 +8518,6 @@ $("uiReset").onclick = () => applyUiSize(0);
       menuBarAutoHide: { get: () => checked("menuBarAutoHide"), set: (on) => setMenuBarAutoHide(on) },
       dock: { get: () => document.body.dataset.landscapeDock || "top", set: (side) => setLandscapeDock(side) },
       spread: { get: () => spread === 2, set: (on) => setPageSpread(on ? 2 : 1) },
-      welcome: { available: () => !!$("welcomeToggle") && !$("welcomeToggle").hidden, get: () => welcomeWanted(), set: (on) => { if (on !== welcomeWanted()) $("welcomeToggle").click(); } },
       updateChecks: { available: () => !$("updateItems").hidden, get: () => checked("updateOnOpen"), set: (on) => flip("updateOnOpen", on) },
     },
   });
