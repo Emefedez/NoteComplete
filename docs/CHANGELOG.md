@@ -4,6 +4,14 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.21
+
+- **Official Moodle Mobile API login (`admin/tool/mobile/launch.php`) & Sign in again button.** Moodle SSO sign-in now captures the long-lived Moodle Mobile Web Service token via `moodlemobile://token=…` (stored encrypted on device, with automatic fallback to SSO cookies) and no longer mistakes logged-out guest pages for a completed sign-in. Added a **Sign in again** button in the Moodle bar to clear stale cookies and force a fresh login.
+- **Richer Moodle tools (submission status, REST announcements & `.ics` calendar feed).** Upcoming deadlines now check whether assignments and quizzes are already submitted or completed (`mod_assign_get_submission_status` / `mod_quiz_get_user_attempts`), show countdowns and status badges, fetch full forum announcement discussions (`mod_forum_get_forums_by_courses` + `mod_forum_get_forum_discussions`) with course, author, date, and preview snippets, feed all of this into Moodle Ask AI, and optionally merge/cache a private Moodle `.ics` calendar export URL (with Galician/Spanish/English event classification).
+- **One-click Euro-Office prerequisite setup in the Setup Wizard.** Automatically install `pasta` (`passt` + `uidmap` / `subuid` / AppArmor fix) on Linux, enable **WSL2** on Windows, or install & start **Podman** via Homebrew on macOS directly from the Euro-Office module card.
+- **Cloud back buttons on the left, matching Recent folders.** Moved Back (and folder-up) buttons to the left beside the heading across Google Drive, Dropbox, Moodle, GitHub, Nextcloud/WebDAV, and Internet Archive, showing them only when inside a folder/course/repository.
+- **Fixed:** rotating a Moodle `sesskey` no longer caused courses to disappear as "No enrolled courses found"; download tokens are strictly restricted to same-origin `https:` Moodle URLs.
+
 ## 2.0.20
 
 - **Collapsible folder sidebar.** The folder/group sidebar now has a collapse/expand arrow in its heading: collapse the folder list vertically inside the Pages panel or tuck the left sidebar into a slim rail beside HTML, text, and web documents, remembered across sessions.
