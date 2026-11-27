@@ -11,50 +11,49 @@
 </p>
 
 <p align="center">
-  <code>.nfedit</code> · <code>.notecomp / .notepart</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>.rnote</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>DOCX / DOC / ODT / RTF</code> · <code>XLSX / XLS / ODS / CSV</code> · <code>PPTX / PPT / ODP</code> · <code>EPUB / IPYNB</code> · <code>PNG / JPG / WebP / GIF / AVIF</code> · <code>PlantUML</code> · <code>R / Rmd / qmd / RData</code> · <code>ZIP / TAR</code> · <code>MP3 / WAV / FLAC / MP4</code>
+  <code>.nfedit</code> · <code>.notecomp / .notepart</code> · <code>.noteful</code> · <code>.goodnotes</code> · <code>.ntb</code> · <code>.rnote</code> · <code>PDF</code> · <code>Markdown</code> · <code>HTML</code> · <code>Office / ODF</code> · <code>EPUB / IPYNB</code> · <code>PlantUML</code> · <code>R / Rmd / qmd</code> · <code>Audio / Video</code>
 </p>
 
 # NoteComplete
 
-**Handwritten notes, PDFs, text documents, Chinese tools, and AI study — local-first, on every screen.**
+**Handwritten notes, PDFs, Markdown, Chinese tools, and AI study — local-first, on every screen.**
 
-Everything runs on your device with no account required. Try it in the browser at **[emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/)**. Noteful, Goodnotes, Notability and Rnote notebooks open as editable notes; technical notes on that compatibility (`.noteful`, `.goodnotes`, `.ntb`) live in [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
+Everything runs on your device with no account required. Try it in the browser at **[emefedez.github.io/NoteComplete](https://emefedez.github.io/NoteComplete/)**. See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the full feature reference and [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md) for notebook format notes.
 
-<p align="center"><img src="docs/images/reader.png" alt="NoteComplete page editor with handwriting, moon Dark pages toggle, and global-bar MP3 player" width="100%"></p>
+<p align="center"><img src="docs/images/reader.png" alt="NoteComplete page editor with handwriting, Dark pages toggle, and global-bar audio player" width="100%"></p>
 
 ## Features
 
 ### Read & Annotate
 
 <details open>
-<summary><b>Drawing &amp; Pages</b></summary>
+<summary><b>Drawing, Pages &amp; Notebook Compatibility</b></summary>
 
-- **Ink & annotation tools:** Pen (pressure & smoothing), Highlighter (blends & snaps to PDF words), Eraser, Shapes (pen-hold auto-snap), Tape (tap to lift/cover), Grab (copy text, ask AI, keep for exercises, or erase region), Lock, and z-order stacking (**Bring to front / forward / backward / to back**, `Ctrl ]` / `Ctrl [`).
-- **Quick menu & gestures:** `Shift+S`, pen side button, or two-finger hold; two-finger pinch/scroll/undo, three-finger redo; drag tools to reorder; dockable toolbar (top, bottom, left, right).
-- **Pages & canvas:** Several infinite canvases per note (turned like pages) or fixed pages; insert blank/PDF/canvas pages; drag borders to resize; side-by-side 2-up spread; 3-way page alignment; Dark pages (`D`) & Light/Dark/System themes; configurable **Preloaded PDF pages** (`View → Display quality…`, with one-click reset to default) and zero-flicker cached PDF page attachment.
-- **Other apps' notebooks:** Goodnotes (`.goodnotes`), Notability (`.ntb`) and Rnote (`.rnote`) notebooks open as editable notes: ink stays ink, shapes, text and pictures come along, imported PDF pages stay vector backgrounds, and infinite Rnote canvases open whole (with covers on Home).
-- **Auto-save & export:** Automatic local recovery slots; reopening a file returns to where you were reading; export pages to PDF, SVG, PNG/JPEG, OpenDocument (`.odt`: editable text frames at their place on the page, or the pages as pictures), or Anki study decks.
+- **Ink & annotation tools:** Pressure-sensitive Pen, smart Highlighter, Eraser, auto-snap Shapes, Tape, Grab, Lock, and z-order stacking.
+- **Flexible pages & canvases:** Mix fixed pages and multiple infinite canvases per note, 2-up spread, Dark pages (`D`), and configurable PDF preloading.
+- **Other apps' notebooks:** Open **Noteful**, **Goodnotes** (`.goodnotes`), **Notability** (`.ntb`), and **Rnote** (`.rnote`) notebooks as editable notes.
+- **Quick menu & export:** Pen side-button / `Shift+S` radial menu, dockable toolbar, automatic recovery, and export to PDF, SVG, images, `.odt`, or Anki.
 
 </details>
 
 <details open>
-<summary><b>Text &amp; Markdown</b></summary>
+<summary><b>Text, Markdown &amp; Math Adaptation</b></summary>
 
-- **Page text boxes:** Rich formatting, live KaTeX math (`∑` or `$...$`) with touch math keypad, direct move without leaving Text mode (hold/drag box, drag `⋮⋮` grip, or drag outside with no selection).
-- **Standalone & split Markdown editor:** Resizable split panes, independent **Edit** and **View** zoom (`Ctrl/⌘ + wheel`), content width & 3-way snap alignment, extended `==highlighting==` (colours, underline, text colour), live LaTeX math, PlantUML diagrams, and clickable prefab medallions (double-click to edit).
-- **On-demand Math Adaptation (shorthand → LaTeX) & bilingual cheat sheet:** Highlight math shorthand in any editable field (Notes, Markdown, Math Bar, text boxes) and use the multi-row thematic hover bar or right-click menu to convert it to coherent LaTeX (`-^x` → `\bar{x}`, `~^=` → `\approx`, `5^(-5)` & Omarchy superscripts, `(8 sobre 5)` / `C(5 over 8)` → `\binom`, `sqrt()`, `intr()`, `lim(x->inf)`, `desv()`/`sd()`/`std()`, annotated `=(como y=7)=` / `=(propiedad)=>` / `<=(razón)=>`). Click `?` for a searchable English/Spanish cheat sheet showing custom notation, equivalent LaTeX, and live KaTeX previews side by side.
-- **Documents, slides, spreadsheets & e-books:** Open Word (`.docx`, `.doc`, `.docm`, `.dotx`), OpenDocument (`.odt`, `.fodt`, `.ods`, `.fods`, `.odp`), Rich Text (`.rtf`), Excel (`.xlsx`, `.xls`, `.xlsm`, `.xlsb`), PowerPoint (`.pptx`, `.ppt`, `.pptm`), CSV/TSV, EPUB e-books (`.epub`), and Jupyter notebooks (`.ipynb`) as editable Markdown — keeping merged cells, with a table filter/sort bar and **Put on page as table** (Save writes a `.md` copy and never modifies the original) — or edit Office files natively with the optional **Euro-Office** desktop module below.
-- **Side Notes (`N`):** Per-document Markdown notes linked to pages with `+ Page`.
+- **Split Markdown editor & Side Notes (`N`):** Live KaTeX math, PlantUML, `==highlighting==`, clickable prefab pills, independent Edit/View zoom, and page-linked side notes.
+- **Math Adaptation & bilingual cheat sheet:** Highlight math shorthand anywhere to convert it into LaTeX (`-^x` → `\bar{x}`, `(8 sobre 5)` → `\binom{8}{5}`, annotated `=(como y=7)=`), with a searchable EN/ES cheat sheet (`?`) showing notation, LaTeX, and live KaTeX previews.
+- **Math Mode (`∑ Math`) & R Commander Studio:** Live formula bar with built-in CAS (`=`, `d/dx`, `∫`, `Solve`), function plotting, one-click R Commander Studio install, and live `.R` / `.Rmd` / `.qmd` workspaces.
+- **Documents, slides, spreadsheets & e-books:** Open Word, Excel, PowerPoint, ODF, RTF, CSV, EPUB, and Jupyter notebooks as editable Markdown — or edit Office files natively with **Euro-Office**.
+
+<p align="center"><img src="docs/images/math-adapt.png" alt="Split Markdown editor with Math Mode bar and searchable bilingual Math Notation and LaTeX cheat sheet" width="100%"></p>
 
 </details>
 
 <details open>
 <summary><b>Chinese &amp; Translation</b></summary>
 
-- **Built-in Chinese IME (`中`):** Hanzi input with mid-syllable tone digits (`zho1ngwen`, `qi1n`), dead-key accents (`xué`), fuzzy typo suggestions (`≈`), 2D arrow-key candidate navigation, `Space` / `Enter` / `Shift+1–9` selection, and opt-in full-width punctuation.
-- **Pinyin over characters (`拼` / `View → Pinyin over characters`):** Live tone-colored ruby annotations on page text boxes, Markdown, and exports, with per-character reading overrides.
-- **Look up & Stroke order:** Right-click any Chinese character/word for meanings (`ES | EN`), radical & component meanings in **Structure**, audio pronunciation, animated stroke order & practice (with synced per-character/all repeat toggles), Favorites, and downloadable HSK or local CC-CEDICT/JSON/TSV dictionaries.
-- **Universal right-click Translate:** Highlight any text anywhere → right-click **Translate** with favorite target languages (**Español**, **English**, **中文 (简体)** by default), searchable 33+ language picker with ★ favorites, and one-click **Replace** in editable fields.
+- **Built-in Chinese IME (`中`):** Tone-digit and accent input with fuzzy suggestions and keyboard candidate navigation.
+- **Pinyin over characters (`拼`), Look up & Stroke order:** Tone-colored ruby annotations, right-click ES/EN dictionary with character decomposition, audio, and animated stroke practice.
+- **Universal right-click Translate:** Translate highlighted text anywhere across 33+ languages with ★ favorites and one-click Replace.
 
 <p align="center"><img src="docs/images/markdown-chinese.png" alt="Markdown split editor with Pinyin over characters, LaTeX math, and Chinese Look up panel" width="100%"></p>
 
@@ -63,109 +62,75 @@ Everything runs on your device with no account required. Try it in the browser a
 <details open>
 <summary><b>Prefabs &amp; Diagrams</b></summary>
 
-- **Editable exam figures, tables, sticky notes & R statistics plots (`Shift+X`):** Sticky notes (coloured cards with folded corner and click-top-strip peek/hide, also imported from Goodnotes), rich page tables (`Shift+Y`: merged cells, auto-fit rows, per-cell formatting, spreadsheet paste, sort, undo, live preview, up to 50 × 20), function graphs, histograms, bar charts, process states & CPU timelines, trees, node graphs, stroke-order sheets, **UML diagrams** (bold/italic/underline text, direction arrows, end labels, Visual Paradigm XML & XMI import/export), **Textual Analysis** (auto-highlighted candidates, candidate table, and one-click UML generation), and **R Math & Statistics prefabs** rendered via local `Rscript` or **R Commander Studio**.
-- **Model Explorer & project connectivity (`View → Model Explorer`):** Indexes UML elements and Textual Analysis candidates across the note with appearance counts, right-click **Show in…** jumping, and **Rename everywhere…** propagation.
-- **On-demand Prefab packs:** Download optional packs on demand (cloud badge), hide uninstalled packs (eye toggle), or remove packs while keeping existing figures drawn on pages.
-- **Math Mode (`∑ Math` / `Ctrl+Shift+M`) & R Commander Studio Integration:** Toggleable formula bar with live KaTeX preview, built-in numeric/symbolic CAS (`=` evaluate, `d/dx` derivative, `∫` definite integral, `Solve`), one-click **Plot** to Function Graph, **`+ Box`** Math Text Box insertion, and direct **R Plot** / **R Studio** launch (configured in **View → Math Mode & R Bridge…**). From **File → New note…** (or Home's **File** menu), create single `.R` / `.Rmd` files or full **R Workspace folders** (`analysis.R`, `report.Rmd`, `data/`, `.Rproj`), automatically download and install **R Commander Studio** for your platform (Linux x64/ARM64, Windows x64, macOS ARM64), and open `.R`, `.Rmd`, `.qmd`, and `.RData`/`.rds` files with live disk sync.
-- **Kept for exercises:** Keep Grab snippets in a floating viewer / top-bar `★ Kept` pill while building charts or solving problems.
+- **Editable figures (`Shift+X`):** Sticky notes, rich tables (`Shift+Y`), graphs, charts, CPU timelines, UML diagrams (Visual Paradigm XML/XMI), Textual Analysis, and R statistics plots.
+- **Model Explorer (`View → Model Explorer`):** Cross-note index of UML elements and candidates with **Show in…** jumping and global rename.
+- **On-demand packs & Kept snippets:** Download optional prefab packs as needed and pin Grab snippets to `★ Kept` while solving exercises.
 
 <p align="center"><img src="docs/images/prefabs-menu.png" alt="Prefabs picker menu with on-demand packs and Hide not installed toggle" width="100%"></p>
 <p align="center">
-  <img src="docs/images/model-explorer.png" alt="UML diagram editor with Model Explorer and Show in submenu" width="49%">
-  <img src="docs/images/setup-wizard.png" alt="Setup wizard with tri-state Prefab packs tree" width="49%">
+  <img src="docs/images/model-explorer.png" alt="UML diagram editor with Model Explorer" width="49%">
+  <img src="docs/images/setup-wizard.png" alt="Setup wizard with Prefab packs tree" width="49%">
 </p>
 
 </details>
 
 <details open>
-<summary><b>Audio &amp; Media</b></summary>
+<summary><b>Audio, Media &amp; Native Office Suite</b></summary>
 
-- **Global-bar audio player:** Opening any audio file (`.mp3`, `.m4a`, `.wav`, `.ogg`, `.flac`, `.aac`, `.opus` — from a folder, `File → Open…`, drag-and-drop, archive, or cloud) or closing an active note Audio window docks a compact accent-colored player onto the top bar (headset mute, back/play-pause/forward, scrub bar, speed `0.5×–2×`, close). Click `×` on the top bar—or `Shift+×` on the Audio window—to stop and close completely.
-- **Video handoff & media card icons:** Clicking any video (`.mp4`, `.mkv`, `.mov`, `.webm`, `.avi`, `.m4v`) opens it in your computer's default media player; audio, video, Office, EPUB, and notebook cards show color-coded icons on Home, Folders, and Cloud views.
-- **Synced note recordings:** Record or import audio into a note with timed ink playback (tap ink to seek), segment trimming, and audio enhancement.
+- **Synced note audio & global player:** Record or import audio with tap-ink-to-seek playback, or play standalone audio files from a compact top-bar player; videos hand off to your system player.
+- **Optional Euro-Office module:** Edit Word, Excel, PowerPoint, and ODF files directly in a NoteComplete tab with one-click prerequisite setup (`pasta` on Linux, WSL2 on Windows, Podman on macOS).
 
-</details>
-
-<details open>
-<summary><b>Office Suite (Optional Euro-Office Module)</b></summary>
-
-- **Native Office editing on desktop:** Install the optional **Euro-Office** module from **Setup ▸ Modules** (with one-click prerequisite setup for `pasta` on Linux, **WSL2** on Windows, and **Podman** on macOS) to edit Word, Excel, PowerPoint, and ODF files directly inside a NoteComplete tab with save-back, right-click **Open with ▸**, `1`/`2` chooser (`R` to remember), and **Open as text** switching. Runs locally on demand and stops when idle.
-
-<p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab with Open as text and Save" width="100%"></p>
+<p align="center"><img src="docs/images/euro-office.png" alt="Euro-Office document editor running inside a NoteComplete tab" width="100%"></p>
 
 </details>
 
 ---
 
-### Library, Cloud & Search
+### Library, Cloud, Moodle & Search
 
-- **Local folders & Recent:** Open any folder on disk as a collapsible sidebar document group (arrow toggle in Pages and side views) and browse it on Home folder by folder, with every file listed (ones NoteComplete can't open go to your system's **Open with** app chooser); star files, rename/trash/show in folder, filter by type/date/source/size/audio/tags, and switch between cover cards and compact list view.
-- **Cloud & repositories:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, or **GitHub** note repositories directly from Home (with left-aligned Back navigation matching Recent folders); check for newer versions, compare page-by-page, and migrate study material/notes across copies. **One of each** shows same-named Drive and Dropbox items (the copies Noteful backups leave) as one card and lets you pick the copy when you open it.
-- **Moodle courses:** Sign in via the official Moodle Mobile API token flow (`admin/tool/mobile/launch.php`, encrypted on device with autofill & **Sign in again**, built-in **Moovi — Universidade de Vigo** preset), browse courses with cover images and an eye icon to hide/archive & restore courses, browse sections/folders grouped by file type, download one file or a whole queue, and use **Moodle tools** for deadlines (with assignment/quiz submission status and optional encrypted `.ics` feed), grades, forum announcements with previews, and Ask AI.
-- **One search box on Home:** searches Recent, every connected cloud and the open Moodle course at once.
-- **Unified Search & Batch OCR (`Ctrl+F`):** Formula-aware search (`B(n,p)`, `P(X≤3)`) with **Aa** (case), **ab** (whole word), and **.\*** (regex) toggles across typed text, PDF text, audio transcripts, and on-device handwriting OCR (multi-language), or search text across your entire library from Home.
+- **Local folders & Recent:** Open disk folders as collapsible sidebar groups, browse folder-by-folder on Home, star/tag/filter files, and switch between cover cards and list view.
+- **Cloud & Moodle:** Connect **Google Drive**, **Dropbox**, **Nextcloud / WebDAV**, **Internet Archive**, **GitHub**, and **Moodle** courses (deadlines, grades, announcements, batch downloads) — all searchable from one box on Home.
+- **Formula Find & Batch OCR (`Ctrl+F`):** Formula-aware search with **Aa** (case), **ab** (whole word), and **.\*** (regex) toggles across typed text, PDFs, transcripts, and on-device handwriting OCR.
 
-<p align="center"><img src="docs/images/home.png" alt="NoteComplete Home screen with Cloud provider dropdown open" width="100%"></p>
+<p align="center"><img src="docs/images/home.png" alt="NoteComplete Home screen with Cloud provider dropdown" width="100%"></p>
+<p align="center"><img src="docs/images/find-formulas.png" alt="Find bar with Aa, ab, and regex toggles and active matches highlighted on page" width="100%"></p>
 
 ---
 
 ### Study & AI
 
-All AI features run through **your own existing AI subscription** on desktop (Claude Code, Codex, Antigravity, OpenCode, or **T3 Code**) or an optional local **WebLLM** model in the browser — sending only the page/selection you choose. When one tool fails or runs out of usage, document generation carries on with the next one in your **harness failover** order without losing finished work.
+All AI features run through **your own AI subscription** on desktop (Claude Code, Codex, Antigravity, OpenCode, or T3 Code, with automatic failover) or local **WebLLM** in the browser — sending only the page or snippet you choose.
 
 <details open>
-<summary><b>AI Study Tools, Handwriting Synthesis, Transcription &amp; MCP</b></summary>
+<summary><b>Ask AI, Flashcards, Quizzes, Handwriting Synthesis &amp; MCP</b></summary>
 
-- **Ask AI (`Ctrl+J`) & Scratchpad:** Chat about the current page, a Grab region, pasted images (`Ctrl+V`, which stay visible in your sent message bubbles and Scratchpad until cleared, click to enlarge), or dictated questions; smart context escalation starts on the current page, then checks nearby pages, the full note via MCP, and related files/web; clickable links jump straight to pages or open images.
-- **Flashcards & Quizzes (background generation):** Resumable quizzes with page **Hints** (`H`), **Clarify** (`C`), **Dispute** (`X`), **Double check** (`V`), and wrong-answer retakes; floating flashcards with math rendering, per-card **Ask AI**, inline editing, and Anki export (`Shift+E`).
-- **Fact Check (`Shift+F`):** Check pages for calculation, date, or consistency errors.
-- **Handwriting from Markdown & New Note with AI:** Turn Markdown + math into real, editable, immediately searchable handwriting ink (`File → New note…`) with live preview, or have your AI tool draft full handwritten notebooks from a topic or folder.
-- **Speech Transcription & AI Revision:** Local Whisper (browser/desktop) or Voxtype transcription with word-level timestamps, click-to-seek, SRT/VTT/JSON export, and AI transcript revision that preserves timings and flags classroom noise.
-- **Bundled MCP Server:** One-click *Help → Connect AI tools…* registers NoteComplete's MCP server so agents can read notes, edit Markdown, insert prefabs into notes, Markdown, HTML and Office files, and write editable handwriting. Its **Google Drive tools** let an agent search, move, upload and download files, find duplicates and merge backup folders (always a dry run first; removal is Drive's trash) ([docs/MCP.md](docs/MCP.md)).
+- **Ask AI (`Ctrl+J`) & Scratchpad:** Chat about the current page, Grab regions, or pasted images (`Ctrl+V` — images stay visible in sent bubbles and Scratchpad, click to enlarge) with clickable page links.
+- **Flashcards, Quizzes & Fact Check:** Background-generated resumable quizzes (Hints, Clarify, Dispute, Double check), math-rendered flashcards with Anki export, and page Fact Check (`Shift+F`).
+- **Handwriting synthesis & Transcription:** Convert Markdown + math into editable, searchable handwriting ink, and transcribe recordings locally with Whisper/Voxtype + word-level timestamps.
+- **Bundled MCP Server:** One-click *Help → Connect AI tools…* lets agents read notes, edit Markdown, insert prefabs, write handwriting, and manage Google Drive backups ([docs/MCP.md](docs/MCP.md)).
 
-<p align="center"><img src="docs/images/handwriting.png" alt="Handwritten pages generated from Markdown with live ink preview" width="100%"></p>
+<p align="center"><img src="docs/images/ai-chat-images.png" alt="Ask AI panel with persistent sent image in user bubble and KaTeX-rendered answer" width="100%"></p>
 
 </details>
 
 ---
 
-### Live Sharing & Drawing Tablet
+### Live Sharing, Desktop, Web & Mobile
 
-From the desktop app's **Share** menu:
-- **Live sessions:** Invite guests on local Wi-Fi (QR / PIN) or over a temporary encrypted Cloudflare link to follow pages live, co-edit Markdown notes, and optionally draw together.
-- **Phone / tablet as a drawing tablet:** Scan the QR code to turn any phone or tablet into a low-latency pen canvas for the note open on your computer.
-
----
-
-### Desktop, Web & Mobile
-
-- **Multi-tab & multi-window** (`Ctrl+T`, drag tab out), first-run **Setup wizard** (`Help → Setup wizard…`) for look, performance, AI, optional modules, and prefab packs, colour themes with a theme editor (`View ▸ More themes…`), floating resizable windows with a shared tray, command palette (`Ctrl+K`), keyboard shortcut badges (`?`), interface zoom (`Ctrl+Shift+−/+/0`), and automatic update checks (also beta builds from a branch: `Help → Check for updates (branch)…`).
-- **Adaptive mobile & narrow layout:** Compact bottom bars, horizontally scrollable tool rows with edge fades, touch-friendly zoom/drag handling, and offline PWA support.
+- **Live sessions & Drawing Tablet:** Share notes live over local Wi-Fi or an encrypted Cloudflare link, or scan a QR code to turn any phone/tablet into a low-latency pen tablet.
+- **Cross-platform workspace:** Multi-tab/multi-window desktop app, first-run Setup wizard, custom themes, command palette (`Ctrl+K`), automatic updates, and an adaptive offline PWA for mobile/tablets.
 
 ---
 
 ## The `.nfedit` format
 
-NoteComplete saves notes natively as **`.nfedit`** — a single non-destructive archive ([spec](spec/nfedit-v1.md)) that keeps everything belonging to a document together without mutating your original file:
-
-| Stored inside `.nfedit` | What it preserves |
-| --- | --- |
-| **Original source file** | Untouched `.noteful`, `.pdf`, `.goodnotes`, `.ntb`, `.rnote`, or image base |
-| **Edits & full history** | Every stroke, shape, text box, crop, layer change, and full undo/redo timeline |
-| **Markdown notes** | Side-panel notes (`N`) and `+ Page` section links |
-| **Searchable text & OCR** | Recognized handwriting text and synthesized Markdown-handwriting text |
-| **Audio & transcripts** | Added recordings, ink-sync timings, and word-level transcripts |
-| **Study material** | Saved flashcard decks, resumable quizzes, and AI Scratchpad threads |
-| **Chinese metadata** | Note Pinyin-over-characters toggle, script preference, and per-character reading overrides |
-| **Prefabs & interactive HTML** | Editable figure/diagram specs and embedded interactive exam HTML |
-
-Lighter siblings: **`.notecomp`** (a note with its Markdown notes, recordings and study material) and **`.notepart`** (part of a note). You can also export directly to **`.noteful`**, **PDF**, **SVG**, **images**, **OpenDocument (`.odt`)**, **Markdown**, or **Anki** decks. For details on `.noteful`, Goodnotes, and Notability compatibility, see [docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md).
+NoteComplete saves natively as **`.nfedit`** — a non-destructive archive ([spec](spec/nfedit-v1.md)) bundling your original source file (`.noteful`, `.pdf`, `.goodnotes`, `.ntb`, `.rnote`, or images) alongside strokes, undo history, side Markdown notes, OCR text, audio/transcripts, study decks, Chinese overrides, and editable prefabs. Lighter siblings: **`.notecomp`** and **`.notepart`**.
 
 ---
 
 ## Get it
 
-- **Installers:** [GitHub Releases](https://github.com/Emefedez/NoteComplete/releases) (Linux AppImage, macOS DMG/ZIP, Windows installer, Android APK, `SHA256SUMS.txt` · [build notes](docs/BUILDS.md))
+- **Installers:** [GitHub Releases](https://github.com/Emefedez/NoteComplete/releases) (Linux AppImage, macOS DMG/ZIP, Windows installer, Android APK · [build notes](docs/BUILDS.md))
 - **Build from source:**
 
 ```sh
