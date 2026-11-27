@@ -88,7 +88,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   const sectioned = () => documentInfo().unit === 'section';
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
-  let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
+  let history = [], busy = false, attachments = [], attachedDocs = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   function attachTablePasteButtons(body) {
     if (!toTablePrefab || !body || typeof body.querySelectorAll !== 'function') return;
@@ -258,18 +258,41 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     attachments.push({ url, label });
     renderAttachments();
   }
+  function attachFile(doc) {
+    if (!doc?.name) return;
+    if (doc.kind === 'image' && doc.url) { attach(doc.url, doc.name); return; }
+    if (!attachedDocs.some(d => (d.path && d.path === doc.path) || (!d.path && d.name === doc.name))) {
+      attachedDocs.push(doc);
+      renderAttachments();
+    }
+  }
   function renderAttachments() {
     const box = $('chatAttachments');
     if (!box) return;
-    box.hidden = !attachments.length;
-    box.replaceChildren(...attachments.map((a, i) => {
-      const item = document.createElement('figure'), img = document.createElement('img'), remove = document.createElement('button');
-      img.src = a.url; img.alt = a.label; img.title = a.label ? `${a.label} — click to enlarge` : 'Click to enlarge';
-      img.onclick = () => openImagePreview(a.url, a.label);
-      remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove'; remove.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
-      item.append(img, remove);
-      return item;
-    }));
+    box.hidden = !attachments.length && !attachedDocs.length;
+    const nodes = [
+      ...attachments.map((a, i) => {
+        const item = document.createElement('figure'), img = document.createElement('img'), remove = document.createElement('button');
+        img.src = a.url; img.alt = a.label; img.title = a.label ? `${a.label} — click to enlarge` : 'Click to enlarge';
+        img.onclick = () => openImagePreview(a.url, a.label);
+        remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove'; remove.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
+        item.append(img, remove);
+        return item;
+      }),
+      ...attachedDocs.map((d, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'chat-file-chip';
+        chip.title = d.path || d.name;
+        const name = document.createElement('span');
+        name.textContent = d.name;
+        const remove = document.createElement('button');
+        remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove file';
+        remove.onclick = () => { attachedDocs.splice(i, 1); renderAttachments(); };
+        chip.append(icon('note'), name, remove);
+        return chip;
+      }),
+    ];
+    box.replaceChildren(...nodes);
   }
   async function dataUrlImage(url, label) {
     rememberAiFile(label, { url, label });
@@ -281,9 +304,13 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     busy = true;
     $('chatSend').hidden = true; $('chatStop').hidden = false;
     const pendingAttachments = attachments.splice(0);
+    const pendingDocs = attachedDocs.splice(0);
     renderAttachments();
     const sentImages = normalizeMessageImages(pendingAttachments);
-    add('user', question, '', sentImages);
+    const userDisplay = pendingDocs.length
+      ? `${question}${question ? '\n' : ''}${pendingDocs.map(d => `[Attached: ${d.name}]`).join(' ')}`
+      : question;
+    add('user', userDisplay, '', sentImages);
     // Three dots pulse until the first words arrive.
     const waiting = add('assistant', '', 'Thinking');
     const dots = document.createElement('span');
@@ -310,6 +337,16 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       for (const [i, a] of pendingAttachments.entries()) {
         images.push(await dataUrlImage(a.url, `region-${i + 1}`));
         context.push(`The student attached ${a.label} as the image "region-${i + 1}". Focus on it.`);
+      }
+      const diskAttached = pendingDocs.filter(d => d.path);
+      if (diskAttached.length) {
+        context.push(
+          `The student attached these files for this request (you can read, compare, expand, or create notes/Markdown/prefabs from them using the notecomplete MCP tools and file read tools):\n` +
+          diskAttached.map(d => `- ${d.name} (path: ${d.path})`).join('\n'),
+        );
+      }
+      for (const d of pendingDocs.filter(d => !d.path && d.text)) {
+        context.push(`Attached file "${d.name}":\n"""\n${String(d.text).slice(0, 40000)}\n"""`);
       }
       const passage = $('chatSelection').checked && sections ? selectedText() : '';
       if (passage) context.push(`The student selected this passage; focus on it:\n"""\n${passage}\n"""`);
@@ -344,7 +381,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       // every 120 ms so long answers stay cheap.
       let streamed = '', timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => answer(waiting, streamed)).then(() => waiting.scrollIntoView({ block: 'end' })); };
-      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, notePath: targetNotePath, tag: 'chat', label: 'Ask AI', peek: () => streamed }, delta => {
+      const { text } = await runAI(ai, { provider: $('chatProvider').value, model: model.value, prompt, images, attachedFiles: diskAttached.map(d => ({ path: d.path, name: d.name })), notePath: targetNotePath, tag: 'chat', label: 'Ask AI', peek: () => streamed }, delta => {
         if (!streamed) { waiting.querySelector('small')?.remove(); dots.remove(); }
         streamed += delta;
         timer ||= setTimeout(show, 120);
@@ -377,10 +414,42 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   }
   $('chatForm').onsubmit = event => {
     event.preventDefault();
-    const q = $('chatInput').value.trim() || (attachments.length ? 'Explain this image.' : '');
+    const q = $('chatInput').value.trim() || (attachments.length ? 'Explain this image.' : (attachedDocs.length ? 'Summarize the attached file(s).' : ''));
     $('chatInput').value = '';
     ask(q);
   };
+  if ($('chatAttachFile')) {
+    $('chatAttachFile').onclick = async () => {
+      if (globalThis.notecompleteFiles?.pickAiFiles) {
+        const picked = await globalThis.notecompleteFiles.pickAiFiles().catch(() => []);
+        for (const f of picked || []) attachFile(f);
+        $('chatInput')?.focus();
+      } else {
+        $('chatFileInput')?.click();
+      }
+    };
+  }
+  if ($('chatFileInput')) {
+    $('chatFileInput').onchange = async () => {
+      const files = [...($('chatFileInput').files || [])];
+      $('chatFileInput').value = '';
+      for (const f of files.slice(0, 12)) {
+        if (/^image\//.test(f.type) || /\.(png|jpe?g|webp|gif)$/i.test(f.name)) {
+          const url = await new Promise((resolve) => {
+            const fr = new FileReader();
+            fr.onload = () => resolve(String(fr.result || ''));
+            fr.onerror = () => resolve('');
+            fr.readAsDataURL(f);
+          });
+          if (url) attach(url, f.name);
+        } else {
+          const text = f.size <= 2_000_000 ? await f.text().catch(() => '') : '';
+          attachFile({ name: f.name, kind: 'file', text });
+        }
+      }
+      $('chatInput')?.focus();
+    };
+  }
   $('chatInput').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } };
   $('chatPanel').addEventListener('paste', async event => {
     if (!hasClipboardImage(event.clipboardData)) return;
@@ -390,7 +459,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; attachments = []; renderAttachments(); $('chatMessages').replaceChildren(); setHeading(''); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; attachments = []; attachedDocs = []; renderAttachments(); $('chatMessages').replaceChildren(); setHeading(''); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }

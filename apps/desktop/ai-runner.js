@@ -111,21 +111,23 @@ export function openCodeConfig(mcp) {
 }
 
 // The command line for one request. `images` are absolute paths in `dir`.
-export function invocation(provider, { prompt, images, dir, model, mcp, stream = false }) {
-  const listed = images.length ? `\n\nAttached files (read them):\n${images.map(i => `- ${i}`).join('\n')}` : '';
+export function invocation(provider, { prompt, images, attachedPaths = [], dir, model, mcp, stream = false }) {
+  const allFiles = [...images, ...attachedPaths];
+  const listed = allFiles.length ? `\n\nAttached files (read them):\n${allFiles.map(i => `- ${i}`).join('\n')}` : '';
+  const extraDirs = [...new Set([dir, ...attachedPaths.map(p => path.dirname(p))])];
   if (provider === 'claude') {
     const format = stream ? ['stream-json', '--verbose', '--include-partial-messages'] : ['json'];
-    const args = ['-p', '--output-format', ...format, '--add-dir', dir, '--strict-mcp-config', '--allowedTools', 'Read'];
+    const args = ['-p', '--output-format', ...format, ...extraDirs.flatMap(d => ['--add-dir', d]), '--strict-mcp-config', '--allowedTools', 'Read'];
     if (mcp) args.push('--mcp-config', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } }), '--allowedTools', 'mcp__notecomplete');
     if (model) args.push('--model', model);
     return { args, stdin: prompt + listed, parse: out => (stream ? lastFinal(provider, out) : JSON.parse(out).result) };
   }
   if (provider === 'antigravity') {
-    const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', '--add-dir', dir, '--print-timeout', '3600s'];
+    const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', ...extraDirs.flatMap(d => ['--add-dir', d]), '--print-timeout', '3600s'];
     if (model) args.push('--model', model);
     // A workspace plugin: .agents/plugins/<name>/{plugin.json, mcp_config.json}.
     const files = mcp ? [
-      ['.agents/plugins/notecomplete/plugin.json', JSON.stringify({ name: 'notecomplete', description: 'Read the open NoteComplete note' })],
+      ['.agents/plugins/notecomplete/plugin.json', JSON.stringify({ name: 'notecomplete', description: 'Read and edit NoteComplete notes' })],
       ['.agents/plugins/notecomplete/mcp_config.json', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } })],
     ] : [];
     return { args, stdin: null, files, parse: out => (stream ? lastFinal(provider, out) : JSON.parse(out).response) };
@@ -135,18 +137,18 @@ export function invocation(provider, { prompt, images, dir, model, mcp, stream =
     const args = ['exec', '--skip-git-repo-check', '--sandbox', 'read-only', '--ephemeral', '--color', 'never', '-o', last];
     if (mcp) args.push('-c', `mcp_servers.notecomplete.command=${JSON.stringify(mcp)}`, '-c', 'mcp_servers.notecomplete.args=["mcp"]');
     if (model) args.push('-m', model);
-    // Codex takes images as -i; other files (PDFs) are listed in the prompt for it to read.
+    // Codex takes images as -i; other files (PDFs, notes) are listed in the prompt for it to read.
     for (const image of images) if (/\.(png|jpe?g)$/i.test(image)) args.push('-i', image);
     args.push('-');
-    return { args, stdin: prompt + (images.some(i => !/\.(png|jpe?g)$/i.test(i)) ? listed : ''), parse: async () => readFile(last, 'utf8') };
+    return { args, stdin: prompt + (attachedPaths.length || images.some(i => !/\.(png|jpe?g)$/i.test(i)) ? listed : ''), parse: async () => readFile(last, 'utf8') };
   }
   if (provider === 'opencode') {
     // The prompt goes on stdin (no length limit on the command line); images are
-    // attached with -f, PDFs (often over its 10 MiB attachment limit) are listed.
+    // attached with -f, PDFs and notes are listed.
     const args = ['run', '--format', 'json'];
     if (model) args.push('-m', model);
     for (const image of images) if (/\.(png|jpe?g)$/i.test(image)) args.push('-f', image);
-    const others = images.some(i => !/\.(png|jpe?g)$/i.test(i));
+    const others = attachedPaths.length > 0 || images.some(i => !/\.(png|jpe?g)$/i.test(i));
     return {
       args,
       stdin: prompt + (others ? listed : ''),
@@ -257,10 +259,14 @@ export function aiRunner({ tools = findTools, mcpBinary = null, t3 = null } = {}
     // One request: write images, run the tool in the temporary folder, return its answer.
     // `onDelta` receives the answer's text pieces while it is written (tools that stream).
     // `onActivity` gets short notes ("Thinking…", "Reading x.png…") while no answer text comes.
-    async run(owner, { provider, prompt, images = [], model = '', notePath = '', tag = '', docGen = false }, onDelta = null, onActivity = null) {
+    async run(owner, { provider, prompt, images = [], attachedFiles = [], model = '', notePath = '', tag = '', docGen = false }, onDelta = null, onActivity = null) {
       if (!PROVIDERS[provider]) throw Error('Unknown AI provider.');
       if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 400_000) throw Error('Empty or oversized request.');
       if (images.length > 24) throw Error('Too many page images in one request.');
+      const attachedPaths = (Array.isArray(attachedFiles) ? attachedFiles : [])
+        .map(f => (typeof f === 'string' ? f : f?.path))
+        .filter(p => typeof p === 'string' && path.isAbsolute(p))
+        .slice(0, 16);
       if (typeof model !== 'string' || (model && !MODEL.test(model))) throw Error('Invalid model name.');
       if (typeof tag !== 'string' || !/^[\w-]{0,40}$/.test(tag)) throw Error('Invalid request tag.');
       found ||= await tools();
@@ -310,9 +316,12 @@ export function aiRunner({ tools = findTools, mcpBinary = null, t3 = null } = {}
           await writeFile(file, image.bytes);
           files.push(file);
         }
-        const mcp = mcpBinary && notePath && path.isAbsolute(notePath) ? mcpBinary : null;
+        const mcp = mcpBinary && ((notePath && path.isAbsolute(notePath)) || attachedPaths.length > 0) ? mcpBinary : null;
         const stream = !!onDelta && STREAMS.has(provider);
-        const call = invocation(provider, { prompt: notePath && mcp ? `${prompt}\n\nThe note file is ${notePath}; the notecomplete MCP tools can read any of its pages.` : prompt, images: files, dir, model, mcp, stream });
+        const mcpHint = notePath && mcp
+          ? `\n\nThe open note file is ${notePath}; the notecomplete MCP tools can read, edit, expand, or create notes and prefabs.`
+          : (attachedPaths.length && mcp ? '\n\nThe notecomplete MCP tools can read, edit, expand, or create notes and prefabs for any of the attached files.' : '');
+        const call = invocation(provider, { prompt: prompt + mcpHint, images: files, attachedPaths, dir, model, mcp, stream });
         for (const [name, content] of call.files || []) {
           await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
           await writeFile(path.join(dir, name), content);

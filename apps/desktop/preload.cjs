@@ -221,6 +221,7 @@ contextBridge.exposeInMainWorld('notecompleteFiles', {
   write: (name, bytes) => ipcRenderer.invoke('files:write', name, bytes),
   remove: name => ipcRenderer.invoke('files:remove', name),
   openFile: () => ipcRenderer.invoke('files:open'),
+  pickAiFiles: () => ipcRenderer.invoke('files:pick-ai'),
   // The file the system asked this tab to open (Open with…), or null.
   launched: () => ipcRenderer.invoke('files:launched'),
   readRecent: file => ipcRenderer.invoke('files:read-recent', file),

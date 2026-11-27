@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.30
+
+- **One-click paste AI-generated tables as Table prefabs** directly from Ask AI chat onto the current page (or into Markdown).
+
 ## 2.0.29
 
 - **Apple Notes import (`Import, export and share…` → `Import Apple Notes…`):** Direct `NoteStore.sqlite` reader (protobuf + CRDT tables, headings, checklists, highlights, hashtags, nested folders) and `.zip`/HTML/Markdown export importer.

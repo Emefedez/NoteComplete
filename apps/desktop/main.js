@@ -588,6 +588,30 @@ app.whenReady().then(async () => {
     if (/\.(mp4|m4v|webm|mkv|mov|avi|ogv)$/i.test(file)) return { path: file, name: path.basename(file), bytes: new Uint8Array(0), external: true };
     return { path: file, name: path.basename(file), bytes: new Uint8Array(await readFile(file)) };
   }));
+  ipcMain.handle('files:pick-ai', guarded(async event => {
+    const chosen = await dialog.showOpenDialog(windowOf(event.sender), {
+      title: 'Attach files to Ask AI',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        { name: 'Notes, PDFs, Markdown, Office & Images', extensions: OPENABLE },
+        { name: 'All files', extensions: ['*'] },
+      ],
+    });
+    if (chosen.canceled || !chosen.filePaths?.length) return [];
+    const out = [];
+    for (const file of chosen.filePaths.slice(0, 12)) {
+      const name = path.basename(file);
+      const isImg = /\.(png|jpe?g|webp|gif)$/i.test(name);
+      if (isImg) {
+        const buf = await readFile(file);
+        const mime = /\.png$/i.test(name) ? 'image/png' : /\.webp$/i.test(name) ? 'image/webp' : /\.gif$/i.test(name) ? 'image/gif' : 'image/jpeg';
+        out.push({ path: file, name, kind: 'image', url: `data:${mime};base64,${buf.toString('base64')}` });
+      } else {
+        out.push({ path: file, name, kind: 'file' });
+      }
+    }
+    return out;
+  }));
   // The file the system asked this tab to open, once; it joins Recent like a dialog pick.
   ipcMain.handle('files:launched', guarded(async event => {
     const file = launchPending.get(event.sender.id);
