@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.18
+
+- **Find (Ctrl F) finds formulas.** A search such as `B(n,p)` used to split into the letters b, n and p, each also matching any word that starts with it, so nearly every page came up. A term written without spaces with signs inside (`B(n,p)`, `P(X≤3)`, `x-ray`) is now searched as one, also where the PDF or the handwriting recognition broke it into pieces; a single letter matches only that letter.
+- **Match case, whole word and regular expressions, as in VS Code.** The Find field has **Aa**, **ab** and **.\*** toggles on its right (Alt C, Alt W, Alt R), remembered between searches; an invalid regular expression is marked on the field. Accents are still ignored.
+- **Fixed:** with Chinese input on, its 中 button sat over the Find field and covered the text; it is now in the field's own row of buttons.
+
 ## 2.0.17
 
 - **Several infinite canvases in one note, turned like pages.** A canvas note can now hold any number of canvases: **New canvas** below the last one, **Pages → Insert canvas**, or right-click **Insert canvas before/after**; drag them to reorder. Each canvas grows on its own as you write near its edge.
