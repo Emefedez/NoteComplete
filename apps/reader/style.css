@@ -488,6 +488,22 @@ body.pages-dark #textBody { --ink: #e5e8ed; --muted: #a6aeb9; --accent: #91b4ff;
 #pagesPanel .group-panel { margin-top: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .group-panel h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .group-panel .panel-heading button { min-height: 24px; padding: 0 8px; }
+.group-panel .panel-heading .group-toggle { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 0; border: 0; background: transparent; color: inherit; text-align: left; }
+.group-panel .panel-heading .group-toggle:hover { color: var(--accent); background: transparent; }
+.group-toggle .chevron-icon { flex: none; width: 10px; height: 10px; color: var(--muted); transition: transform .15s ease; }
+.group-toggle:hover .chevron-icon { color: currentColor; }
+#pagesPanel .group-panel.collapsed { padding-bottom: 6px; }
+#pagesPanel .group-panel.collapsed .group-list { display: none; }
+#pagesPanel .group-panel.collapsed .group-toggle .chevron-icon { transform: rotate(-90deg); }
+.side-body .group-panel .group-toggle .chevron-icon { transform: rotate(90deg); }
+.side-body .group-panel.collapsed { width: 32px; padding: 8px 4px; overflow: hidden; }
+.side-body .group-panel.collapsed .panel-heading { justify-content: center; }
+.side-body .group-panel.collapsed .group-toggle { flex: none; padding: 4px; justify-content: center; }
+.side-body .group-panel.collapsed .group-toggle .chevron-icon { transform: rotate(-90deg); }
+.side-body .group-panel.collapsed #groupName,
+.side-body .group-panel.collapsed #groupAdd,
+.side-body .group-panel.collapsed .group-list { display: none; }
+.side-body:has(.group-panel.collapsed) > .panel-grip { display: none; }
 .group-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .group-list li { min-width: 0; display: flex; align-items: center; gap: 2px; }
 .group-item { flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 3px 6px; font-size: 13px; }

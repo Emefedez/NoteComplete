@@ -6838,7 +6838,7 @@ async function openArchiveMember(member) {
 // Groups (groups.js): the open document's group is listed beside it, in the pages panel or
 // at the left of HTML and text documents. Only documents reopenable by key can be grouped.
 const groupList = groupPanel({
-  root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), groups, open: openMember, status, onChange: () => syncSideButtons(),
+  root: $("groupPanel"), name: $("groupName"), list: $("groupList"), add: $("groupAdd"), toggle: $("groupToggle"), groups, open: openMember, status, onChange: () => syncSideButtons(),
   // The pen on a file of this computer renames it on disk.
   rename: (member, name) => renameLocal(member, name),
   canRename: (member) => member.source === "local" && !!window.notecompleteFiles?.renameOpened,

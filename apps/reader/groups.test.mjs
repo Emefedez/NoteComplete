@@ -119,3 +119,42 @@ test('a folder on disk is shown one level at a time, subfolders with their file 
   assert.deepEqual(aci.dirs.map(d => d.path), ['ACI2/Examen1', 'ACI2/Examen2']);
   assert.deepEqual(folderLevel(members, 'ACI2/Examen1').files.map(f => f.name), ['ACI2/Examen1/GG 01.pdf']);
 });
+
+test('groupPanel collapses and expands via its arrow toggle and persists state', async () => {
+  const { groupPanel } = await import('./groups.js');
+  const classes = new Set();
+  const root = { hidden: false, classList: { toggle(c, on) { if (on) classes.add(c); else classes.delete(c); } } };
+  const attrs = {};
+  const toggle = { title: '', setAttribute(k, v) { attrs[k] = String(v); }, onclick: null };
+  const store = new Map();
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  globalThis.localStorage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, String(v)) };
+  try {
+    const panel = groupPanel({ root, name: {}, list: { replaceChildren() {} }, add: null, toggle, groups: { of: async () => null, members: async () => [] }, open: async () => {} });
+    assert.equal(panel.collapsed, false);
+    assert.equal(classes.has('collapsed'), false);
+    assert.equal(attrs['aria-expanded'], 'true');
+
+    toggle.onclick();
+    assert.equal(panel.collapsed, true);
+    assert.equal(classes.has('collapsed'), true);
+    assert.equal(attrs['aria-expanded'], 'false');
+    assert.equal(store.get('notecomplete-group-collapsed'), '1');
+
+    // A new instance restores the saved collapsed state.
+    const classes2 = new Set();
+    const attrs2 = {};
+    const panel2 = groupPanel({
+      root: { hidden: false, classList: { toggle(c, on) { if (on) classes2.add(c); else classes2.delete(c); } } },
+      name: {}, list: { replaceChildren() {} }, add: null,
+      toggle: { title: '', setAttribute(k, v) { attrs2[k] = String(v); }, onclick: null },
+      groups: { of: async () => null, members: async () => [] }, open: async () => {},
+    });
+    assert.equal(panel2.collapsed, true);
+    assert.equal(classes2.has('collapsed'), true);
+    assert.equal(attrs2['aria-expanded'], 'false');
+  } finally {
+    if (saved) Object.defineProperty(globalThis, 'localStorage', saved);
+    else delete globalThis.localStorage;
+  }
+});

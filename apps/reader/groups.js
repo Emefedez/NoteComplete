@@ -193,7 +193,26 @@ export function starButton(on, label, toggle) {
 // rename(member, name): renames the document's file (files on disk, canRename); a pen shown
 // on hover, or a right click, turns its name into a field (Enter renames, Esc cancels).
 // trash(member): × asks first, in the row, then moves the file to the system trash.
-export function groupPanel({ root, name, list, add, groups, open, status = () => {}, onChange = () => {}, rename = null, canRename = () => false, trash = null }) {
+export function groupPanel({ root, name, list, add, toggle = null, groups, open, status = () => {}, onChange = () => {}, rename = null, canRename = () => false, trash = null }) {
+  const COLLAPSE_KEY = 'notecomplete-group-collapsed';
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch { /* Optional. */ }
+  function applyCollapsed() {
+    root.classList?.toggle?.('collapsed', collapsed);
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      const label = collapsed ? 'Expand folder sidebar' : 'Collapse folder sidebar';
+      toggle.title = label;
+      toggle.setAttribute('aria-label', label);
+    }
+  }
+  function setCollapsed(on) {
+    collapsed = Boolean(on);
+    try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* Optional. */ }
+    applyCollapsed();
+  }
+  applyCollapsed();
+  if (toggle) toggle.onclick = () => setCollapsed(!collapsed);
   const clean = (error) => String(error?.message || error).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
   // The confirmation takes the row's place: Move to the trash, (Remove from the group), Cancel.
   function confirmTrash(li, m) {
@@ -311,6 +330,8 @@ export function groupPanel({ root, name, list, add, groups, open, status = () =>
     mount(slot) { if (slot && root.parentElement !== slot) slot.append(root); },
     pick,
     get group() { return group; },
+    get collapsed() { return collapsed; },
+    setCollapsed,
     render,
   };
 }
