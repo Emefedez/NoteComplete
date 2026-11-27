@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.27
+
+- **Word-by-word (`Ctrl + ←/→`) and line-start/end (`Alt + ←/→`) navigation & selection** in editable fields (with `Shift` to select).
+
 ## 2.0.26
 
 - **Fixed Moodle Grades (`moodle:grades` `TypeError: fetch failed`)** via `gradereport_overview_get_course_grades` REST API + graceful HTML fallback.

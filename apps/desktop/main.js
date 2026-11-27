@@ -591,8 +591,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('files:launched', guarded(async event => {
     const file = launchPending.get(event.sender.id);
     launchPending.delete(event.sender.id);
-    // The diagnostic log (Help → Open the log) is not a system file type but opens as text.
-    if (!openablePath(file) && file !== log.file) return null;
+    if (typeof file !== 'string' || !file) return null;
+    if (!openablePath(file) && file !== log.file && !(path.isAbsolute(file) && existsSync(file))) return null;
     const bytes = new Uint8Array(await readFile(file));
     await files.remember(file);
     return { path: file, name: path.basename(file), bytes };
@@ -907,7 +907,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('tabs:new', guarded((event, filePath) => {
     const win = windowOf(event.sender);
     if (!win) return;
-    const target = typeof filePath === 'string' && filePath.trim() ? openablePath(filePath) : null;
+    const trimmed = typeof filePath === 'string' ? filePath.trim() : '';
+    const target = trimmed && path.isAbsolute(trimmed) && existsSync(trimmed) ? trimmed : null;
     openTab(win, target);
   }));
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
