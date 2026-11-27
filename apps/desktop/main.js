@@ -4,7 +4,7 @@ import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCredentials, desktopSignIn, refreshDesktopToken } from './google-auth.js';
 import { dropboxDesktopSignIn, refreshDropboxDesktopToken } from './dropbox-auth.js';
-import { createMoodleService } from './moodle-service.js';
+import { createMoodleService, parseMobileTokenUrl } from './moodle-service.js';
 import { assetPath } from './asset-path.js';
 import { archiveDownload, downloadRegistry } from './archive-download.js';
 import { libraryFiles, withExtension } from './library-files.js';
@@ -709,6 +709,11 @@ app.whenReady().then(async () => {
   void officeBridge.cleanupStale?.().catch(() => {});
   void officeBridge.status().then((s) => setEuroOfficeMenuEntry(Boolean(s?.installed))).catch(() => {});
   ipcMain.handle('office:status', guarded(() => officeBridge.status()));
+  ipcMain.handle('office:setup-prereqs', guarded(async (event) => {
+    return officeBridge.setupPrereqs((p) => {
+      if (!event.sender.isDestroyed()) event.sender.send('office:progress', p);
+    });
+  }));
   ipcMain.handle('office:install', guarded(async (event) => {
     const res = await officeBridge.install((p) => {
       if (!event.sender.isDestroyed()) event.sender.send('office:progress', p);
@@ -1097,7 +1102,7 @@ app.whenReady().then(async () => {
       const ses = session.fromPartition('persist:moodle');
       await ses.clearStorageData({ storages: ['cookies'] });
     },
-    openSsoWindow: ({ baseUrl, ssoUrl, label }) => new Promise((resolve, reject) => {
+    openSsoWindow: ({ baseUrl, ssoUrl, mobileLaunchUrl = '', label }) => new Promise((resolve, reject) => {
       const baseOrigin = new URL(baseUrl).origin;
       const win = new BrowserWindow({
         width: 920,
@@ -1113,12 +1118,32 @@ app.whenReady().then(async () => {
       });
       let settled = false;
       let pendingCred = null;
+      let triedMobileFallback = false;
       const finish = (err, val) => {
         if (settled) return;
         settled = true;
         if (!win.isDestroyed()) win.close();
         if (err) reject(err);
         else resolve(val);
+      };
+      const savePendingCred = async () => {
+        if (pendingCred && !pendingCred.forget && pendingCred.remember && pendingCred.username && pendingCred.password) {
+          const map = await readMoodleCreds();
+          map[baseOrigin] = { username: pendingCred.username, password: pendingCred.password, savedAt: Date.now() };
+          await writeMoodleCreds(map).catch(() => {});
+        }
+      };
+      const handleMobileRedirect = async (targetUrl) => {
+        const parsed = parseMobileTokenUrl(targetUrl);
+        if (!parsed?.token || settled) return false;
+        await savePendingCred();
+        let cookieStr = '';
+        try {
+          const cookies = await win.webContents.session.cookies.get({ url: baseUrl });
+          cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
+        } catch { /* Optional */ }
+        finish(null, { token: parsed.token, privateToken: parsed.privateToken || '', cookies: cookieStr, sesskey: '', userName: '', userId: 0 });
+        return true;
       };
       // Capture form credentials submitted inside the SSO window (only when user keeps "Remember" checked).
       win.webContents.on('console-message', (_e, _level, message) => {
@@ -1202,28 +1227,61 @@ app.whenReady().then(async () => {
         try {
           const info = await win.webContents.executeJavaScript(`(() => {
             const sesskey = (window.M && window.M.cfg && window.M.cfg.sesskey) || '';
+            const bodyNotLoggedIn = Boolean(document.body && document.body.classList && document.body.classList.contains('notloggedin'));
+            const hasLogout = Boolean(document.querySelector('a[href*="/login/logout.php"]'));
             const userEl = document.querySelector('.usertext, .usermenu .userbutton, [data-userid]');
             const userName = userEl ? (userEl.textContent || '').trim().slice(0, 80) : '';
-            const userId = Number(document.querySelector('[data-userid]')?.getAttribute('data-userid') || 0);
-            return { sesskey, userName, userId };
+            const userId = Number(document.querySelector('[data-userid]')?.getAttribute('data-userid') || (window.M && window.M.cfg && window.M.cfg.userId) || 0);
+            const hasUserMenu = Boolean(document.querySelector('.usertext, .usermenu .userbutton, .usermenu .avatar'));
+            const isLoggedIn = !bodyNotLoggedIn && (hasLogout || userId > 1 || (hasUserMenu && /\\/(my|course|user)/i.test(location.pathname)));
+            return { sesskey, userName, userId, isLoggedIn };
           })()`, true);
+          if (!info?.isLoggedIn) {
+            void injectAutofillAndSaveBar();
+            return;
+          }
           const cookies = await win.webContents.session.cookies.get({ url: baseUrl });
           const hasMoodleCookie = cookies.some((c) => /moodlesession/i.test(c.name) && c.value);
           if (hasMoodleCookie && (info?.sesskey || /\/(my|course|user)/i.test(u.pathname))) {
-            if (pendingCred && !pendingCred.forget && pendingCred.remember && pendingCred.username && pendingCred.password) {
-              const map = await readMoodleCreds();
-              map[baseOrigin] = { username: pendingCred.username, password: pendingCred.password, savedAt: Date.now() };
-              await writeMoodleCreds(map).catch(() => {});
-            }
+            await savePendingCred();
             const cookieStr = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
             finish(null, { cookies: cookieStr, sesskey: info?.sesskey || '', userName: info?.userName || '', userId: info?.userId || 0 });
           }
         } catch { /* page still loading */ }
       };
+      win.webContents.on('will-redirect', (event, targetUrl) => {
+        if (/^moodlemobile:\/\//i.test(String(targetUrl || ''))) {
+          event.preventDefault();
+          void handleMobileRedirect(targetUrl);
+        }
+      });
+      win.webContents.on('will-navigate', (event, targetUrl) => {
+        if (/^moodlemobile:\/\//i.test(String(targetUrl || ''))) {
+          event.preventDefault();
+          void handleMobileRedirect(targetUrl);
+        }
+      });
+      win.webContents.on('did-fail-load', (_event, _code, _desc, validatedUrl) => {
+        if (/^moodlemobile:\/\//i.test(String(validatedUrl || ''))) {
+          void handleMobileRedirect(validatedUrl);
+          return;
+        }
+        if (mobileLaunchUrl && !triedMobileFallback && String(validatedUrl || '').includes('/admin/tool/mobile/launch.php')) {
+          triedMobileFallback = true;
+          win.loadURL(ssoUrl).catch((e) => finish(e));
+        }
+      });
       win.webContents.on('did-finish-load', checkLoggedIn);
       win.webContents.on('did-navigate', checkLoggedIn);
       win.on('closed', () => finish(Error('Moodle sign-in window was closed before completing login.')));
-      win.loadURL(ssoUrl).catch((e) => finish(e));
+      win.loadURL(mobileLaunchUrl || ssoUrl).catch((e) => {
+        if (mobileLaunchUrl && !triedMobileFallback) {
+          triedMobileFallback = true;
+          win.loadURL(ssoUrl).catch((err) => finish(err));
+        } else {
+          finish(e);
+        }
+      });
     }),
   });
   ipcMain.handle('moodle:presets', guarded(() => moodle.presets()));

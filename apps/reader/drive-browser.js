@@ -104,8 +104,10 @@ export function driveBrowser({ open, client = new DriveClient(), identityLoader 
     $('driveUseFolder').disabled = !client.ready || loading;
     // Public access can only browse from a folder link, not search the Drive.
     $('driveRefresh').disabled = !client.ready || loading || (client.publicAccess && !folder);
-    $('driveBack').hidden = $('driveRefresh').hidden = !client.ready;
-    $('driveBack').disabled = loading || !(history.length || (folder && !(client.publicAccess && trail.length <= 1)));
+    const canBack = Boolean(client.ready && (history.length || (folder && !(client.publicAccess && trail.length <= 1))));
+    $('driveBack').hidden = !canBack;
+    $('driveBack').disabled = loading || !canBack;
+    $('driveRefresh').hidden = !client.ready;
     $('driveMore').hidden = !nextPage;
     $('driveMore').disabled = loading || !client.ready;
     $('driveList').setAttribute('aria-busy', String(loading));

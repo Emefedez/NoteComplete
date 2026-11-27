@@ -136,11 +136,26 @@ export function euroOfficeState(status, { bridge = true } = {}) {
     diskBytes: status.diskBytes || 0,
     runner: status.runner || '',
     formats: status.formats || null,
+    platform: status.platform || '',
+    canAutoSetup: Boolean(status.canAutoSetup),
+    setupLabel: status.setupLabel || '',
+    needsEnable: Boolean(status.needsEnable),
+    rebootNeeded: Boolean(status.rebootNeeded),
+    missing: Array.isArray(status.missing) ? status.missing : [],
   };
   if (status.installed) {
     return { ...meta, state: 'installed', detail: status.detail || 'Ready', canRemove: true };
   }
   if (status.state === 'unavailable') {
+    if (status.canAutoSetup) {
+      return {
+        ...meta,
+        state: 'missing',
+        detail: status.detail || 'Prerequisites needed before installing Euro-Office',
+        action: status.setupLabel || 'Set up prerequisites',
+        isPrereqSetup: true,
+      };
+    }
     return { ...meta, state: 'unavailable', detail: status.detail || 'Not available on this device' };
   }
   const dl = formatSize(status.downloadBytes) || '~1 GB';
@@ -150,7 +165,7 @@ export function euroOfficeState(status, { bridge = true } = {}) {
     ...meta,
     state: 'missing',
     detail: `Download ${dl} (${disk} on disk)${extra}`,
-    action: 'Install',
+    action: status.needsEnable ? 'Set up WSL2 & Install' : 'Install',
   };
 }
 
@@ -174,7 +189,13 @@ export function euroOfficeModule({ storage = globalThis.localStorage, bridge = g
       if (!bridge) return euroOfficeState(null, { bridge: false });
       try { return euroOfficeState(await bridge.status()); } catch (e) { return { state: 'error', detail: e.message }; }
     },
-    async install(onProgress = () => {}) {
+    async install(onProgress = () => {}, current = {}) {
+      if (current?.isPrereqSetup) {
+        if (!bridge?.setupPrereqs) throw Error('Setting up prerequisites needs the desktop app.');
+        const res = await bridge.setupPrereqs((p) => onProgress(euroOfficeProgress(p)));
+        if (!res?.ok) throw Error(res?.error || 'Could not set up prerequisites.');
+        return { ok: true, text: res.text || 'Prerequisites ready' };
+      }
       if (!bridge?.install) throw Error('Installing Euro-Office needs the desktop app.');
       const res = await bridge.install((p) => onProgress(euroOfficeProgress(p)));
       if (!res?.ok) {
@@ -194,6 +215,34 @@ export function euroOfficeModule({ storage = globalThis.localStorage, bridge = g
     settingsAlways: true,
     settings(el, ui, status = {}) {
       const prefs = openWithPrefs(storage), installed = status.state === 'installed';
+      if (!installed && status.canAutoSetup && bridge?.setupPrereqs) {
+        const doc = el.ownerDocument;
+        const box = doc.createElement('div');
+        box.className = 'wizard-inline-row';
+        const btn = doc.createElement('button');
+        btn.type = 'button';
+        btn.textContent = status.setupLabel || 'Set up prerequisites';
+        const note = doc.createElement('span');
+        note.className = 'wizard-hint';
+        note.textContent = status.needsEnable
+          ? 'Enables WSL2 on Windows before installing Euro-Office.'
+          : status.platform === 'darwin'
+            ? 'Installs and starts Podman via Homebrew for macOS.'
+            : 'Installs pasta (passt) and rootless container prerequisites.';
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            const res = await bridge.setupPrereqs((p) => { note.textContent = euroOfficeProgress(p).text; });
+            note.textContent = res?.ok ? (res.text || 'Ready!') : (res?.error || 'Setup failed.');
+          } catch (e) {
+            note.textContent = e?.message || 'Setup failed.';
+          } finally {
+            btn.disabled = false;
+          }
+        };
+        box.append(btn, note);
+        el.append(box);
+      }
       el.append(ui.hint('Open by default with:'));
       for (const kind of OFFICE_KINDS) {
         el.append(ui.row(OFFICE_NAMES[kind][0], ui.segmented(OFFICE_NAMES[kind][0], [

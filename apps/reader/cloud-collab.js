@@ -125,7 +125,11 @@ export function githubBrowser({
       $('githubDisconnect').disabled = !config.connected || loading;
     }
     if ($('githubRefresh')) $('githubRefresh').disabled = !config.connected || loading;
-    if ($('githubBack')) $('githubBack').disabled = !config.connected || loading || !history.length;
+    if ($('githubBack')) {
+      const canBack = Boolean(config.connected && history.length);
+      $('githubBack').hidden = !canBack;
+      $('githubBack').disabled = loading || !canBack;
+    }
     if ($('githubPublishBtn')) { $('githubPublishBtn').hidden = !config.connected || !config.token; $('githubPublishBtn').disabled = loading; }
     if ($('githubPath')) $('githubPath').textContent = config.connected ? `${client.slug}${currentPath ? '/' + currentPath : ''}` : 'GitHub';
   }
@@ -365,7 +369,11 @@ export function webdavBrowser({
       $('webdavDisconnect').disabled = !config.connected || loading;
     }
     if ($('webdavRefresh')) $('webdavRefresh').disabled = !config.connected || loading;
-    if ($('webdavBack')) $('webdavBack').disabled = !config.connected || loading || !history.length;
+    if ($('webdavBack')) {
+      const canBack = Boolean(config.connected && history.length);
+      $('webdavBack').hidden = !canBack;
+      $('webdavBack').disabled = loading || !canBack;
+    }
     if ($('webdavPublishBtn')) { $('webdavPublishBtn').hidden = !config.connected; $('webdavPublishBtn').disabled = loading; }
     if ($('webdavPath')) {
       const host = client.target?.host || 'Nextcloud / WebDAV';

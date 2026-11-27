@@ -91,8 +91,10 @@ export function dropboxBrowser({ open, client = new DropboxClient(), identity = 
     $('dropboxFind').disabled = loading || !client.ready;
     $('dropboxUseFolder').disabled = loading || !client.ready;
     $('dropboxRefresh').disabled = !client.ready || loading;
-    $('dropboxBack').hidden = $('dropboxRefresh').hidden = !client.ready;
-    $('dropboxBack').disabled = !canGoBack();
+    const backable = Boolean(client.ready && canGoBack());
+    $('dropboxBack').hidden = !backable;
+    $('dropboxBack').disabled = !backable;
+    $('dropboxRefresh').hidden = !client.ready;
     $('dropboxMore').hidden = !nextPage;
     $('dropboxMore').disabled = loading || !client.ready;
     $('dropboxList').setAttribute('aria-busy', String(loading));

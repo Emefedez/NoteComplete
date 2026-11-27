@@ -441,6 +441,11 @@ contextBridge.exposeInMainWorld('notecompleteRBridge', {
 // Euro-Office module (office-bridge.js): local DocumentServer for Word, Excel and PowerPoint files.
 contextBridge.exposeInMainWorld('notecompleteOffice', {
   status: () => ipcRenderer.invoke('office:status'),
+  setupPrereqs: onProgress => {
+    const listener = (_e, p) => { if (typeof onProgress === 'function') onProgress(p); };
+    ipcRenderer.on('office:progress', listener);
+    return ipcRenderer.invoke('office:setup-prereqs').finally(() => ipcRenderer.removeListener('office:progress', listener));
+  },
   install: onProgress => {
     const listener = (_event, p) => { if (typeof onProgress === 'function') onProgress(p); };
     ipcRenderer.on('office:progress', listener);

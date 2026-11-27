@@ -6,6 +6,10 @@ import path from 'node:path';
 import {
   MOODLE_PRESETS,
   normalizeBaseUrl,
+  buildMobileLaunchUrl,
+  parseMobileTokenUrl,
+  appendTokenIfSameOrigin,
+  parseIcsEvents,
   parseCoursesFromHtml,
   parseCourseStateJson,
   extractSubSectionUrls,
@@ -159,6 +163,166 @@ test('createMoodleService persists SSO session, lists courses, downloads files, 
 
     await service.disconnect();
     assert.equal(await service.getSession(), null);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('listCourses retries AJAX after refreshing rotated sesskey and flags logged-out HTML as expired', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-moodle-retry-'));
+  try {
+    let ajaxCalls = 0;
+    const service = createMoodleService({
+      sessionFile: path.join(dir, 'moodle-session.json'),
+      openSsoWindow: async () => ({ cookies: 'MoodleSession=valid', sesskey: 'stale', userName: 'Student', userId: 7 }),
+      fetcher: async (url) => {
+        const s = String(url);
+        if (s.includes('/lib/ajax/service.php')) {
+          ajaxCalls++;
+          if (s.includes('sesskey=stale')) {
+            return new Response(JSON.stringify([{ error: true, exception: { errorcode: 'invalidsesskey', message: 'Invalid sesskey' } }]), { status: 200 });
+          }
+          if (s.includes('sesskey=fresh')) {
+            return new Response(JSON.stringify([{ error: false, data: { courses: [{ id: 55, fullname: 'Estadística', shortname: 'EST' }] } }]), { status: 200 });
+          }
+        }
+        if (s.includes('/my/courses.php')) {
+          return new Response('<body class="pagelayout-mycourses"><script>M.cfg={"sesskey":"fresh","userId":7};</script></body>', { status: 200 });
+        }
+        return new Response('', { status: 404 });
+      },
+    });
+    await service.signIn({ presetId: 'moovi-uvigo' });
+    const courses = await service.listCourses();
+    assert.equal(ajaxCalls, 2);
+    assert.equal(courses.length, 1);
+    assert.equal(courses[0].fullname, 'Estadística');
+
+    // Logged-out HTML page with guest sesskey must report expired session, not empty courses.
+    const expiredService = createMoodleService({
+      sessionFile: path.join(dir, 'moodle-expired.json'),
+      openSsoWindow: async () => ({ cookies: 'MoodleSession=old', sesskey: 'old', userName: 'Student', userId: 7 }),
+      fetcher: async (url) => {
+        const s = String(url);
+        if (s.includes('/lib/ajax/service.php')) {
+          return new Response(JSON.stringify([{ error: true, exception: { errorcode: 'servicerequireslogin', message: 'Login required' } }]), { status: 200 });
+        }
+        return new Response('<body class="notloggedin"><script>M.cfg={"sesskey":"guest123","userId":0};</script></body>', { status: 200 });
+      },
+    });
+    await expiredService.signIn({ presetId: 'moovi-uvigo' });
+    await assert.rejects(() => expiredService.listCourses(), /SSO session expired/i);
+
+    // Force sign-in clears SSO cookies before opening the login window.
+    const events = [];
+    const forceService = createMoodleService({
+      sessionFile: path.join(dir, 'moodle-force.json'),
+      clearSsoCookies: async () => { events.push('clear'); },
+      openSsoWindow: async () => { events.push('open'); return { cookies: 'MoodleSession=new', sesskey: 'sk2', userName: 'Student', userId: 7 }; },
+    });
+    await forceService.signIn({ presetId: 'moovi-uvigo', force: true });
+    assert.deepEqual(events, ['clear', 'open']);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('mobile token URL, same-origin token guard, ICS parser, submission status, and REST forums', async () => {
+  const launch = buildMobileLaunchUrl('https://moovi.uvigo.gal', 'abc123');
+  assert.equal(launch, 'https://moovi.uvigo.gal/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=abc123&urlscheme=moodlemobile');
+
+  const payload = Buffer.from('sig999:::tok_secret_42:::priv_7').toString('base64');
+  assert.deepEqual(parseMobileTokenUrl(`moodlemobile://token=${payload}`), {
+    signature: 'sig999',
+    token: 'tok_secret_42',
+    privateToken: 'priv_7',
+  });
+  assert.equal(parseMobileTokenUrl('https://moovi.uvigo.gal/my/'), null);
+
+  // Token only appended on https + same origin
+  assert.match(appendTokenIfSameOrigin('https://moovi.uvigo.gal/pluginfile.php/1/a.pdf', 'https://moovi.uvigo.gal', 'tok1'), /token=tok1/);
+  assert.doesNotMatch(appendTokenIfSameOrigin('https://evil.example.com/a.pdf', 'https://moovi.uvigo.gal', 'tok1'), /token=/);
+  assert.doesNotMatch(appendTokenIfSameOrigin('http://moovi.uvigo.gal/pluginfile.php/1/a.pdf', 'https://moovi.uvigo.gal', 'tok1'), /token=/);
+
+  // ICS parser with Galician suffixes
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'BEGIN:VEVENT',
+    'UID:ev1@moovi',
+    'SUMMARY:Práctica 2 está pendente de entrega',
+    'CATEGORIES:2627-AEDII',
+    'DTSTART:20261201T225900Z',
+    'END:VEVENT',
+    'BEGIN:VEVENT',
+    'UID:ev2@moovi',
+    'SUMMARY:Cuestionario T3 pecha',
+    'DTSTART:20261202T180000Z',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+  const icsEvents = parseIcsEvents(ics, 'https://moovi.uvigo.gal');
+  assert.equal(icsEvents.length, 2);
+  assert.equal(icsEvents[0].eventKind, 'due');
+  assert.equal(icsEvents[0].modname, 'assign');
+  assert.equal(icsEvents[0].course, '2627-AEDII');
+  assert.equal(icsEvents[1].eventKind, 'closes');
+  assert.equal(icsEvents[1].modname, 'quiz');
+
+  // REST deadlines submission status + REST forum announcements + invalidtoken error
+  const dir = await mkdtemp(path.join(tmpdir(), 'nc-moodle-rest-'));
+  try {
+    let invalidMode = false;
+    const svc = createMoodleService({
+      sessionFile: path.join(dir, 'moodle-rest.json'),
+      openSsoWindow: async ({ mobileLaunchUrl }) => {
+        assert.match(mobileLaunchUrl, /\/admin\/tool\/mobile\/launch\.php/);
+        return { token: 'mobtok_1', cookies: '', sesskey: '', userName: '', userId: 0 };
+      },
+      fetcher: async (url, opts) => {
+        const s = String(url);
+        if (s.includes('/webservice/rest/server.php')) {
+          const params = new URLSearchParams(opts?.body?.toString() || '');
+          const fn = params.get('wsfunction');
+          if (invalidMode) {
+            return new Response(JSON.stringify({ errorcode: 'invalidtoken', message: 'Invalid token' }), { status: 200 });
+          }
+          if (fn === 'core_webservice_get_site_info') return new Response(JSON.stringify({ userid: 99, fullname: 'Ana UVigo' }), { status: 200 });
+          if (fn === 'core_calendar_get_action_events_by_timesort') {
+            return new Response(JSON.stringify({
+              events: [
+                { id: 1, instance: 10, modulename: 'assign', name: 'Entrega 1', timesort: Math.floor(Date.now() / 1000) + 3600, course: { id: 5, fullname: 'SO' } },
+                { id: 2, instance: 20, modulename: 'quiz', name: 'Test 1', timesort: Math.floor(Date.now() / 1000) + 7200, course: { id: 5, fullname: 'SO' } },
+              ],
+            }), { status: 200 });
+          }
+          if (fn === 'mod_assign_get_submission_status') return new Response(JSON.stringify({ lastattempt: { submission: { status: 'submitted' } } }), { status: 200 });
+          if (fn === 'mod_quiz_get_user_attempts') return new Response(JSON.stringify({ attempts: [] }), { status: 200 });
+          if (fn === 'mod_forum_get_forums_by_courses') return new Response(JSON.stringify([{ id: 300, course: 5, type: 'news', name: 'Avisos' }]), { status: 200 });
+          if (fn === 'mod_forum_get_forum_discussions') return new Response(JSON.stringify({ discussions: [{ id: 1, discussion: 77, subject: 'Cambio de aula', userfullname: 'Prof. X', created: 1700000000, message: '<p>Mañana en el aula 4.</p>' }] }), { status: 200 });
+        }
+        return new Response('', { status: 404 });
+      },
+    });
+    const sess = await svc.signIn({ presetId: 'moovi-uvigo' });
+    assert.equal(sess.authMode, 'token');
+    assert.equal(sess.userName, 'Ana UVigo');
+    assert.equal(sess.userId, 99);
+
+    const deadlines = await svc.getUpcomingDeadlines({ days: 7 });
+    assert.equal(deadlines.length, 2);
+    assert.equal(deadlines[0].submitted, true);
+    assert.equal(deadlines[0].statusLabel, 'Submitted');
+    assert.equal(deadlines[1].submitted, false);
+    assert.equal(deadlines[1].statusLabel, 'Pending');
+
+    const ann = await svc.getAnnouncements(5);
+    assert.equal(ann.items.length, 1);
+    assert.equal(ann.items[0].name, 'Cambio de aula');
+    assert.equal(ann.items[0].snippet, 'Mañana en el aula 4.');
+    assert.match(ann.items[0].url, /discuss\.php\?d=77/);
+
+    invalidMode = true;
+    await assert.rejects(() => svc.listCourses(), /Sign in again/i);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

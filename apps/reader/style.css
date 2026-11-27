@@ -1572,7 +1572,8 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .folder-chip .note-meta strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
 .folder-chip .note-meta span { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
 .drive-heading, .drive-actions, .drive-search { display: flex; align-items: center; gap: 8px; }
-.drive-heading { justify-content: space-between; margin: 0 0 10px; flex-wrap: wrap; }
+.drive-heading { justify-content: flex-start; margin: 0 0 10px; flex-wrap: wrap; }
+.drive-heading > .drive-actions { margin-left: auto; }
 .drive-actions { flex-wrap: wrap; }
 .drive-search { flex-wrap: wrap; margin: 2px 0 6px; }
 #drivePath, #dropboxPath { overflow-wrap: anywhere; min-width: 0; flex: 1 1 200px; }
@@ -3782,10 +3783,10 @@ button.link { min-height: 0; padding: 0; border: 0; background: none; color: var
 .collab-linkrow .collab-link { margin-bottom: 0; }
 
 /* Inside a folder: an icon-only back button right after the folder's name, centred on it. */
-.recent-heading > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0; border-radius: 99px; background: var(--fill); color: var(--ink); }
-.recent-heading > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
-.recent-heading > .folder-back[hidden] { display: none; }
-.recent-heading > .folder-back svg { width: 16px; height: 16px; }
+:is(.recent-heading, .drive-heading) > .folder-back { flex: none; align-self: center; width: 28px; min-height: 28px; height: 28px; margin: 0; border-radius: 99px; background: var(--fill); color: var(--ink); }
+:is(.recent-heading, .drive-heading) > .folder-back:hover { background: var(--accent-soft); color: var(--accent); }
+:is(.recent-heading, .drive-heading) > .folder-back[hidden] { display: none; }
+:is(.recent-heading, .drive-heading) > .folder-back svg { width: 16px; height: 16px; }
 .collab-dialog .check { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
 .collab-dialog .check .muted { font-size: 12px; }
 
@@ -6096,6 +6097,13 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
 }
 .moodle-sb-item strong { font-size: 13px; font-weight: 600; line-height: 1.35; text-align: left; width: 100%; }
 .moodle-sb-item .muted { font-size: 11.5px; line-height: 1.3; text-align: left; width: 100%; }
+.moodle-sb-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 6px; width: 100%; }
+.moodle-sb-row strong { flex: 1; min-width: 0; width: auto; }
+.moodle-sb-badge { flex: none; padding: 1px 6px; border-radius: 99px; font-size: 10.5px; font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.moodle-sb-badge.is-done { background: color-mix(in srgb, #16a34a 16%, transparent); color: #15803d; }
+.moodle-sb-badge.is-pending { background: color-mix(in srgb, #d97706 16%, transparent); color: #b45309; }
+.moodle-sb-badge.is-kind { background: var(--fill); color: var(--muted); }
+.moodle-sb-snippet { font-size: 11.5px; color: var(--ink); opacity: .82; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-align: left; width: 100%; }
 .moodle-sb-item:hover { border-color: var(--accent); background: var(--accent-soft); }
 .moodle-sb-ask { display: grid; gap: 8px; }
 .moodle-sb-ask textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); resize: vertical; }

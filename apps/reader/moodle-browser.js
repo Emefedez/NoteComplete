@@ -147,12 +147,18 @@ export function moodleBrowser({
     if ($('moodleSignin')) $('moodleSignin').hidden = connected;
     if ($('moodleBrowse')) $('moodleBrowse').hidden = !connected;
     if ($('moodleBack')) {
-      $('moodleBack').hidden = !connected;
-      $('moodleBack').disabled = loading || view === 'courses';
+      const canBack = connected && view !== 'courses';
+      $('moodleBack').hidden = !canBack;
+      $('moodleBack').disabled = loading || !canBack;
+      $('moodleBack').title = view === 'folder' ? `Back to ${currentCourse?.fullname || 'course'}` : 'Back to Moodle courses';
     }
     if ($('moodleRefresh')) {
       $('moodleRefresh').hidden = !connected;
       $('moodleRefresh').disabled = loading;
+    }
+    if ($('moodleReconnect')) {
+      $('moodleReconnect').hidden = !connected;
+      $('moodleReconnect').disabled = loading || !api;
     }
     if ($('moodleImagesToggle')) {
       $('moodleImagesToggle').hidden = !connected;
@@ -176,6 +182,7 @@ export function moodleBrowser({
       if (view === 'folder' && currentFolder) $('moodlePath').textContent = `${rootLabel} / ${currentCourse?.fullname || 'Course'} / ${currentFolder.name}`;
       else if (view === 'course' && currentCourse) $('moodlePath').textContent = `${rootLabel} / ${currentCourse.fullname}`;
       else $('moodlePath').textContent = session?.userName ? `${rootLabel} · ${session.userName}` : rootLabel;
+      $('moodlePath').title = session?.authMode === 'token' ? 'Connected via Moodle Mobile Web Service token' : 'Connected via Moodle SSO session';
     }
     updateQueueControls();
   }
@@ -666,14 +673,36 @@ export function moodleBrowser({
     const baseUrl = $('moodleUrl')?.value?.trim() || '';
     const ssoUrl = $('moodleSsoUrl')?.value?.trim() || '';
     const token = $('moodleToken')?.value?.trim() || '';
+    const icsUrl = $('moodleIcsUrl')?.value?.trim() || '';
     const preset = presets.find((p) => p.id === presetId);
     saveCfg({ presetId, baseUrl, ssoUrl });
     loading = true;
     controls();
     msg(token ? 'Verifying Moodle token…' : 'Opening Moodle SSO login window…');
     try {
-      session = await api.signIn({ presetId, baseUrl, ssoUrl, token, label: preset?.label || '' });
+      session = await api.signIn({ presetId, baseUrl, ssoUrl, token, icsUrl, label: preset?.label || '' });
       msg(`Connected to ${session.label}`);
+      await loadCourses();
+    } catch (e) {
+      msg(e?.message || String(e));
+    } finally {
+      loading = false;
+      controls();
+    }
+  }
+
+  async function reconnect() {
+    if (!api || loading) return;
+    const presetId = session?.presetId || $('moodlePreset')?.value || 'moovi-uvigo';
+    const baseUrl = session?.baseUrl || $('moodleUrl')?.value?.trim() || '';
+    const ssoUrl = session?.ssoUrl || $('moodleSsoUrl')?.value?.trim() || '';
+    const label = session?.label || presets.find((p) => p.id === presetId)?.label || '';
+    loading = true;
+    controls();
+    msg('Opening fresh Moodle SSO login window…');
+    try {
+      session = await api.signIn({ presetId, baseUrl, ssoUrl, token: '', label, force: true });
+      msg(`Reconnected to ${session.label}`);
       await loadCourses();
     } catch (e) {
       msg(e?.message || String(e));
@@ -774,17 +803,45 @@ export function moodleBrowser({
           body.innerHTML = '<p class="muted">No upcoming deadlines in the next 30 days.</p>';
           return;
         }
+        const relDue = (ts) => {
+          if (!ts) return '';
+          const diff = ts - Date.now();
+          if (diff < 0) return 'Overdue';
+          const mins = Math.round(diff / 60000);
+          if (mins < 60) return `in ${mins}m`;
+          const hrs = Math.round(diff / 3600000);
+          if (hrs < 48) return `in ${hrs}h`;
+          return `in ${Math.round(diff / 86400000)}d`;
+        };
         const ul = document.createElement('ul');
         ul.className = 'moodle-sb-list';
         for (const ev of events) {
           const li = document.createElement('li');
           const due = ev.dueAt ? new Date(ev.dueAt).toLocaleString() : (ev.dueLabel || '');
+          const rel = relDue(ev.dueAt);
           const link = document.createElement('button');
           link.type = 'button';
           link.className = 'moodle-sb-item';
-          link.innerHTML = `<strong></strong><span class="muted"></span>`;
-          link.querySelector('strong').textContent = ev.name;
-          link.querySelector('span').textContent = [ev.course, due].filter(Boolean).join(' · ');
+          const top = document.createElement('div');
+          top.className = 'moodle-sb-row';
+          const titleEl = document.createElement('strong');
+          titleEl.textContent = ev.name;
+          top.append(titleEl);
+          if (ev.statusLabel) {
+            const badge = document.createElement('span');
+            badge.className = `moodle-sb-badge ${ev.submitted ? 'is-done' : 'is-pending'}`;
+            badge.textContent = ev.submitted ? `✓ ${ev.statusLabel}` : ev.statusLabel;
+            top.append(badge);
+          } else if (ev.eventKind && ev.eventKind !== 'event') {
+            const badge = document.createElement('span');
+            badge.className = 'moodle-sb-badge is-kind';
+            badge.textContent = ev.eventKind === 'due' ? 'Due' : ev.eventKind === 'closes' ? 'Closes' : 'Opens';
+            top.append(badge);
+          }
+          const metaEl = document.createElement('span');
+          metaEl.className = 'muted';
+          metaEl.textContent = [ev.course, rel, due].filter(Boolean).join(' · ');
+          link.append(top, metaEl);
           link.onclick = () => openExternalUrl(ev.url);
           li.append(link);
           ul.append(li);
@@ -846,7 +903,22 @@ export function moodleBrowser({
           const btn = document.createElement('button');
           btn.type = 'button';
           btn.className = 'moodle-sb-item';
-          btn.textContent = a.name;
+          const titleEl = document.createElement('strong');
+          titleEl.textContent = a.name;
+          btn.append(titleEl);
+          const metaParts = [a.course, a.author, a.createdAt ? new Date(a.createdAt).toLocaleDateString() : ''].filter(Boolean);
+          if (metaParts.length) {
+            const metaEl = document.createElement('span');
+            metaEl.className = 'muted';
+            metaEl.textContent = metaParts.join(' · ');
+            btn.append(metaEl);
+          }
+          if (a.snippet) {
+            const snip = document.createElement('span');
+            snip.className = 'moodle-sb-snippet';
+            snip.textContent = a.snippet;
+            btn.append(snip);
+          }
           btn.onclick = () => openExternalUrl(a.url);
           li.append(btn);
           ul.append(li);
@@ -874,9 +946,10 @@ export function moodleBrowser({
         askBtn.disabled = true;
         out.textContent = 'Gathering your Moodle courses & deadlines…';
         try {
-          const [deadlines, gradesRes, provs] = await Promise.all([
+          const [deadlines, gradesRes, annRes, provs] = await Promise.all([
             api.deadlines({ days: 30 }).catch(() => []),
             api.grades(currentCourse?.id || 0).catch(() => ({ items: [] })),
+            api.announcements(currentCourse?.id || 0).catch(() => ({ items: [] })),
             ai.providers().catch(() => []),
           ]);
           let prov = '';
@@ -889,7 +962,8 @@ export function moodleBrowser({
             `Moodle server: ${session?.label || session?.baseUrl}`,
             courses.length ? `Courses:\n${courses.map((c) => `- ${c.fullname}`).join('\n')}` : '',
             currentCourse ? `Currently viewing course: ${currentCourse.fullname}\nResources:\n${currentSections.flatMap((s) => s.items.map((i) => `- [${s.name}] ${i.name} (${i.modname})`)).slice(0, 60).join('\n')}` : '',
-            deadlines.length ? `Upcoming deadlines:\n${deadlines.map((d) => `- ${d.name} (${d.course || 'course'}) due ${d.dueAt ? new Date(d.dueAt).toLocaleString() : d.dueLabel || 'soon'}`).join('\n')}` : 'No upcoming deadlines.',
+            deadlines.length ? `Upcoming deadlines:\n${deadlines.map((d) => `- ${d.statusLabel ? `[${d.statusLabel}] ` : ''}${d.name} (${d.course || 'course'}) due ${d.dueAt ? new Date(d.dueAt).toLocaleString() : d.dueLabel || 'soon'}`).join('\n')}` : 'No upcoming deadlines.',
+            annRes?.items?.length ? `Recent announcements:\n${annRes.items.slice(0, 15).map((a) => `- [${a.course || 'Forum'}] ${a.name}${a.snippet ? `: ${a.snippet}` : ''}`).join('\n')}` : '',
             gradesRes?.items?.length ? `Grades:\n${gradesRes.items.slice(0, 30).map((g) => `- ${g.name}: ${g.grade} ${g.percentage}`).join('\n')}` : '',
           ].filter(Boolean).join('\n\n');
           out.textContent = '';
@@ -983,6 +1057,7 @@ export function moodleBrowser({
       };
     }
     if ($('moodleDisconnect')) $('moodleDisconnect').onclick = disconnect;
+    if ($('moodleReconnect')) $('moodleReconnect').onclick = reconnect;
     if ($('moodleOpenBrowser')) $('moodleOpenBrowser').onclick = () => openExternalUrl(currentBrowserUrl());
     if ($('moodleSidebarBtn')) $('moodleSidebarBtn').onclick = () => openSidebar('deadlines');
     if ($('moodleBack')) {

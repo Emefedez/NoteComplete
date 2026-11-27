@@ -36,6 +36,114 @@ export function normalizeBaseUrl(raw) {
   }
 }
 
+export function buildMobileLaunchUrl(baseUrl, passport = '') {
+  const norm = normalizeBaseUrl(baseUrl);
+  if (!norm) return '';
+  const pass = String(passport || `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`);
+  const u = new URL('/admin/tool/mobile/launch.php', norm);
+  u.searchParams.set('service', 'moodle_mobile_app');
+  u.searchParams.set('passport', pass);
+  u.searchParams.set('urlscheme', 'moodlemobile');
+  return u.href;
+}
+
+export function parseMobileTokenUrl(rawUrl) {
+  const s = String(rawUrl || '').trim();
+  const m = /^moodlemobile:\/\/token=([^&#\s]+)/i.exec(s);
+  if (!m) return null;
+  try {
+    const decoded = Buffer.from(decodeURIComponent(m[1]), 'base64').toString('utf8');
+    const parts = decoded.split(':::');
+    const token = (parts[1] || '').trim();
+    if (!token) return null;
+    return {
+      signature: (parts[0] || '').trim(),
+      token,
+      privateToken: (parts[2] || '').trim(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function appendTokenIfSameOrigin(targetUrl, baseUrl, token) {
+  if (!token || !targetUrl || !baseUrl) return targetUrl;
+  try {
+    const u = new URL(targetUrl, baseUrl);
+    const base = new URL(baseUrl);
+    if (u.protocol !== 'https:' || u.origin !== base.origin) return u.href;
+    if (!u.searchParams.has('token')) u.searchParams.set('token', token);
+    return u.href;
+  } catch {
+    return targetUrl;
+  }
+}
+
+function parseIcsDate(raw) {
+  const s = String(raw || '').trim();
+  const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/i.exec(s);
+  if (!m) return 0;
+  const [, y, mo, d, hh = '00', mm = '00', ss = '00', z] = m;
+  return z
+    ? Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss))
+    : new Date(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), Number(ss)).getTime();
+}
+
+export function classifyCalendarEvent(title = '') {
+  const t = String(title || '').toLowerCase();
+  if (/pendente de entrega|pendiente de entrega|\bis due\b|vencimiento|fecha límite/i.test(t)) return { eventKind: 'due', modname: 'assign' };
+  if (/\bpecha\b|\bcierra\b|\bcloses\b/i.test(t)) return { eventKind: 'closes', modname: 'quiz' };
+  if (/\babre\b|\bopens\b/i.test(t)) return { eventKind: 'opens', modname: 'event' };
+  return { eventKind: 'event', modname: 'event' };
+}
+
+export function parseIcsEvents(icsText, baseUrl = '') {
+  const unfolded = String(icsText || '').replace(/\r?\n[ \t]/g, '');
+  const events = [];
+  const blockRe = /BEGIN:VEVENT([\s\S]*?)END:VEVENT/gi;
+  let m;
+  while ((m = blockRe.exec(unfolded))) {
+    const block = m[1];
+    const field = (name) => {
+      const r = new RegExp(`^${name}(?:;[^:]*)?:(.*)$`, 'mi').exec(block);
+      return r ? r[1].replace(/\\n/gi, ' ').replace(/\\([,;\\])/g, '$1').trim() : '';
+    };
+    const summary = field('SUMMARY');
+    if (!summary) continue;
+    const uid = field('UID') || `${summary}:${field('DTSTART')}`;
+    const dueAt = parseIcsDate(field('DTEND') || field('DTSTART'));
+    const course = field('CATEGORIES');
+    const rawUrl = field('URL');
+    const { eventKind, modname } = classifyCalendarEvent(summary);
+    events.push({
+      id: uid,
+      uid,
+      name: summary,
+      course,
+      courseId: 0,
+      dueAt,
+      modname,
+      eventKind,
+      url: rawUrl || (baseUrl ? new URL('/calendar/view.php?view=upcoming', baseUrl).href : ''),
+      source: 'ics',
+    });
+  }
+  return events;
+}
+
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, limit), items.length) }, async () => {
+    while (next < items.length) {
+      const idx = next++;
+      out[idx] = await fn(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 export function decodeHtmlEntities(str) {
   return String(str || '')
     .replace(/&amp;/g, '&')
@@ -507,12 +615,23 @@ export function createMoodleService({
       wstoken: s.token,
       wsfunction,
       moodlewsrestformat: 'json',
-      ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
     });
+    for (const [k, v] of Object.entries(params)) {
+      if (Array.isArray(v)) {
+        v.forEach((item, idx) => body.set(`${k}[${idx}]`, String(item)));
+      } else if (v !== undefined && v !== null) {
+        body.set(k, String(v));
+      }
+    }
     const res = await fetcher(url.href, { method: 'POST', body });
     if (!res.ok) throw Error(`Moodle API error (HTTP ${res.status}).`);
     const data = await res.json();
-    if (data?.exception) throw Error(data.message || data.exception);
+    if (data?.exception || data?.errorcode) {
+      if (data.errorcode === 'invalidtoken' || /invalidtoken|invalid token/i.test(String(data.message || ''))) {
+        throw Error('Your Moodle token expired or is invalid. Click "Sign in again" to reconnect.');
+      }
+      throw Error(data.message || data.exception || data.errorcode);
+    }
     return data;
   }
 
@@ -542,18 +661,21 @@ export function createMoodleService({
       return publicSession(await loadSession());
     },
 
-    async signIn({ presetId = 'moovi-uvigo', baseUrl = '', ssoUrl = '', token = '', label = '' } = {}) {
+    async signIn({ presetId = 'moovi-uvigo', baseUrl = '', ssoUrl = '', token = '', icsUrl = '', label = '', force = false } = {}) {
       const preset = MOODLE_PRESETS.find((p) => p.id === presetId);
       const normBase = normalizeBaseUrl(baseUrl || preset?.baseUrl || '');
       if (!normBase) throw Error('Enter a valid Moodle server URL (e.g. https://moovi.uvigo.gal).');
       const normSso = String(ssoUrl || preset?.ssoUrl || '').trim() || new URL('/login/index.php', normBase).href;
       const cleanLabel = String(label || preset?.label || new URL(normBase).hostname).trim();
       const cleanToken = String(token || '').trim();
+      const cleanIcs = String(icsUrl || '').trim();
+      const prev = await loadSession().catch(() => null);
+      const effectiveIcs = cleanIcs || (prev?.baseUrl === normBase ? (prev.icsUrl || '') : '');
 
-      if (cleanToken) {
+      const verifyTokenInfo = async (tok) => {
         const url = new URL('/webservice/rest/server.php', normBase);
         const body = new URLSearchParams({
-          wstoken: cleanToken,
+          wstoken: tok,
           wsfunction: 'core_webservice_get_site_info',
           moodlewsrestformat: 'json',
         });
@@ -561,12 +683,19 @@ export function createMoodleService({
         if (!res.ok) throw Error(`Could not reach Moodle at ${normBase} (HTTP ${res.status}).`);
         const info = await res.json();
         if (info?.exception) throw Error(info.message || 'Invalid Moodle token.');
+        return info;
+      };
+
+      if (cleanToken) {
+        const info = await verifyTokenInfo(cleanToken);
         const next = {
           presetId,
           label: cleanLabel,
           baseUrl: normBase,
           ssoUrl: normSso,
           token: cleanToken,
+          icsUrl: effectiveIcs,
+          icsCache: prev?.icsCache || [],
           cookies: '',
           sesskey: '',
           userName: info.fullname || info.username || '',
@@ -580,18 +709,31 @@ export function createMoodleService({
       if (typeof openSsoWindow !== 'function') {
         throw Error('Interactive SAML2 / SSO login requires the NoteComplete desktop app, or paste a Moodle Web Service token.');
       }
-      const ssoResult = await openSsoWindow({ baseUrl: normBase, ssoUrl: normSso, label: cleanLabel });
-      if (!ssoResult?.cookies) throw Error('Moodle SSO sign-in did not complete.');
+      if (force) await clearSsoCookies?.().catch(() => {});
+      const mobileLaunchUrl = buildMobileLaunchUrl(normBase);
+      const ssoResult = await openSsoWindow({ baseUrl: normBase, ssoUrl: normSso, mobileLaunchUrl, label: cleanLabel });
+      if (!ssoResult?.cookies && !ssoResult?.token) throw Error('Moodle SSO sign-in did not complete.');
+      let userName = ssoResult.userName || '';
+      let userId = Number(ssoResult.userId) || 0;
+      if (ssoResult.token) {
+        try {
+          const info = await verifyTokenInfo(ssoResult.token);
+          userName = info.fullname || info.username || userName;
+          userId = Number(info.userid) || userId;
+        } catch { /* Keep token even if site info lookup fails */ }
+      }
       const next = {
         presetId,
         label: cleanLabel,
         baseUrl: normBase,
         ssoUrl: normSso,
         token: ssoResult.token || '',
-        cookies: ssoResult.cookies,
+        icsUrl: effectiveIcs,
+        icsCache: prev?.icsCache || [],
+        cookies: ssoResult.cookies || '',
         sesskey: ssoResult.sesskey || '',
-        userName: ssoResult.userName || '',
-        userId: Number(ssoResult.userId) || 0,
+        userName,
+        userId,
         connectedAt: Date.now(),
       };
       await saveSession(next);
@@ -618,43 +760,69 @@ export function createMoodleService({
         }));
       }
 
+      const fetchAjaxCourses = async () => {
+        const data = await ajaxCall('core_course_get_enrolled_courses_by_timeline_classification', {
+          offset: 0,
+          limit: 100,
+          classification: 'all',
+          sort: 'fullname',
+        });
+        const courses = Array.isArray(data?.courses) ? data.courses : [];
+        if (!courses.length) return null;
+        return courses.map((c) => ({
+          id: Number(c.id),
+          fullname: decodeHtmlEntities(c.fullname || c.fullnamedisplay || `Course ${c.id}`),
+          shortname: decodeHtmlEntities(c.shortname || ''),
+          viewurl: c.viewurl || new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
+          courseimage: c.courseimage || '',
+        }));
+      };
+
       // Try Moodle AJAX enrolled courses first (fast & clean JSON)
+      let ajaxError = null;
       if (s.sesskey) {
         try {
-          const data = await ajaxCall('core_course_get_enrolled_courses_by_timeline_classification', {
-            offset: 0,
-            limit: 100,
-            classification: 'all',
-            sort: 'fullname',
-          });
-          const courses = Array.isArray(data?.courses) ? data.courses : [];
-          if (courses.length) {
-            return courses.map((c) => ({
-              id: Number(c.id),
-              fullname: decodeHtmlEntities(c.fullname || c.fullnamedisplay || `Course ${c.id}`),
-              shortname: decodeHtmlEntities(c.shortname || ''),
-              viewurl: c.viewurl || new URL(`/course/view.php?id=${c.id}`, s.baseUrl).href,
-              courseimage: c.courseimage || '',
-            }));
-          }
-        } catch { /* Fall back to HTML parsing below. */ }
+          const found = await fetchAjaxCourses();
+          if (found) return found;
+        } catch (err) {
+          ajaxError = err;
+        }
       }
 
       // Fallback: parse /my/courses.php and /my/ with authenticated session cookies
+      let refreshedSesskey = false;
       for (const rel of ['/my/courses.php', '/my/']) {
         const res = await authedFetch(new URL(rel, s.baseUrl).href);
         if (!res.ok) continue;
         const html = await res.text();
-        if (/\/login\/index\.php|SAMLRequest/i.test(res.url || '')) {
+        const loggedOut = /\/login\/index\.php|SAMLRequest|\/auth\/saml2\//i.test(res.url || '')
+          || /\bclass="[^"]*\bnotloggedin\b/i.test(html)
+          || /"userId"\s*:\s*0\b/i.test(html);
+        if (loggedOut) {
           throw Error('Your Moodle SSO session expired. Click Reconnect to sign in again.');
         }
         const sessMatch = html.match(/"sesskey"\s*:\s*"([^"]+)"/);
         if (sessMatch && sessMatch[1] && sessMatch[1] !== s.sesskey) {
           s.sesskey = sessMatch[1];
           await saveSession(s);
+          refreshedSesskey = true;
         }
         const parsed = parseCoursesFromHtml(html, s.baseUrl);
         if (parsed.length) return parsed;
+      }
+
+      // Moodle 4.x renders /my/courses.php via AJAX: if we refreshed sesskey above, retry AJAX once.
+      if (refreshedSesskey && s.sesskey) {
+        try {
+          const found = await fetchAjaxCourses();
+          if (found) return found;
+        } catch (err) {
+          ajaxError = err;
+        }
+      }
+
+      if (ajaxError && /login|session|sesskey|expired/i.test(String(ajaxError.message || ''))) {
+        throw Error('Your Moodle SSO session expired. Click Reconnect to sign in again.');
       }
       return [];
     },
@@ -810,9 +978,7 @@ export function createMoodleService({
       let target = String(fileUrl || '').trim();
       if (!target) throw Error('Missing Moodle file URL.');
       if (s.token && /\/pluginfile\.php\//i.test(target) && !target.includes('token=')) {
-        const u = new URL(target);
-        u.searchParams.set('token', s.token);
-        target = u.href;
+        target = appendTokenIfSameOrigin(target, s.baseUrl, s.token);
       }
       const res = await authedFetch(target);
       if (!res.ok) throw Error(`Download failed (HTTP ${res.status}).`);
@@ -844,9 +1010,7 @@ export function createMoodleService({
       let target = raw;
       try { target = new URL(raw, s.baseUrl).href; } catch { return ''; }
       if (s.token && /\/pluginfile\.php\//i.test(target) && !target.includes('token=')) {
-        const u = new URL(target);
-        u.searchParams.set('token', s.token);
-        target = u.href;
+        target = appendTokenIfSameOrigin(target, s.baseUrl, s.token);
       }
       const res = await authedFetch(target);
       if (!res.ok) return '';
@@ -865,6 +1029,61 @@ export function createMoodleService({
       const now = Math.floor(Date.now() / 1000);
       const limit = now + Math.max(1, Number(days) || 30) * 86400;
 
+      const mergeIcsDeadlines = async (baseEvents) => {
+        if (!s.icsUrl) return baseEvents;
+        let fresh = [];
+        try {
+          const res = await fetcher(s.icsUrl);
+          if (res.ok) fresh = parseIcsEvents(await res.text(), s.baseUrl);
+        } catch { /* Keep cached ICS events if offline */ }
+        const byUid = new Map();
+        for (const ev of Array.isArray(s.icsCache) ? s.icsCache : []) if (ev?.uid) byUid.set(ev.uid, ev);
+        for (const ev of fresh) if (ev?.uid) byUid.set(ev.uid, ev);
+        if (fresh.length) {
+          s.icsCache = [...byUid.values()].sort((a, b) => (a.dueAt || 0) - (b.dueAt || 0)).slice(-200);
+          await saveSession(s).catch(() => {});
+        }
+        const seen = new Set(baseEvents.map((e) => `${String(e.name || '').toLowerCase()}@${Math.floor((e.dueAt || 0) / 60000)}`));
+        const nowMs = Date.now(), limitMs = limit * 1000;
+        const extras = [...byUid.values()].filter((ev) => {
+          if (ev.dueAt && (ev.dueAt < nowMs - 86400000 || ev.dueAt > limitMs)) return false;
+          const k = `${String(ev.name || '').toLowerCase()}@${Math.floor((ev.dueAt || 0) / 60000)}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        return [...baseEvents, ...extras].sort((a, b) => (a.dueAt || Infinity) - (b.dueAt || Infinity));
+      };
+
+      const enrichSubmissionStatus = async (events) => {
+        if (!s.token || !events.length) return events;
+        const targets = events.slice(0, 20);
+        await mapLimit(targets, 4, async (ev) => {
+          if (!ev.instance) return;
+          if (ev.modname === 'assign') {
+            try {
+              const st = await restCall('mod_assign_get_submission_status', { assignid: ev.instance });
+              const subStatus = st?.lastattempt?.submission?.status || '';
+              if (subStatus === 'submitted') {
+                ev.submitted = true;
+                ev.statusLabel = 'Submitted';
+              } else {
+                ev.submitted = false;
+                ev.statusLabel = 'Pending';
+              }
+            } catch { /* Optional */ }
+          } else if (ev.modname === 'quiz') {
+            try {
+              const res = await restCall('mod_quiz_get_user_attempts', { quizid: ev.instance, status: 'finished' });
+              const attempts = Array.isArray(res?.attempts) ? res.attempts : [];
+              ev.submitted = attempts.length > 0;
+              ev.statusLabel = ev.submitted ? 'Completed' : 'Pending';
+            } catch { /* Optional */ }
+          }
+        });
+        return events;
+      };
+
       if (s.token) {
         try {
           const data = await restCall('core_calendar_get_action_events_by_timesort', {
@@ -872,8 +1091,9 @@ export function createMoodleService({
             timesortto: limit,
             limitnum: 40,
           });
-          return (data?.events || []).map((ev) => ({
+          let list = (data?.events || []).map((ev) => ({
             id: Number(ev.id),
+            instance: Number(ev.instance || 0),
             name: decodeHtmlEntities(ev.name || 'Deadline'),
             course: decodeHtmlEntities(ev.course?.fullname || ''),
             courseId: Number(ev.course?.id || 0),
@@ -881,7 +1101,30 @@ export function createMoodleService({
             modname: ev.modulename || 'event',
             url: ev.url || new URL('/calendar/view.php?view=upcoming', s.baseUrl).href,
           }));
-        } catch { /* fall through */ }
+          if (!list.length) {
+            const cal = await restCall('core_calendar_get_calendar_events', {
+              'options[timestart]': now,
+              'options[timeend]': limit,
+              'options[userevents]': 1,
+              'options[siteevents]': 1,
+            }).catch(() => null);
+            list = (cal?.events || []).map((ev) => ({
+              id: Number(ev.id),
+              instance: Number(ev.instance || 0),
+              name: decodeHtmlEntities(ev.name || 'Deadline'),
+              course: '',
+              courseId: Number(ev.courseid || 0),
+              dueAt: Number(ev.timestart || 0) * 1000,
+              modname: ev.modulename || 'event',
+              url: new URL('/calendar/view.php?view=upcoming', s.baseUrl).href,
+            }));
+          }
+          await enrichSubmissionStatus(list);
+          return mergeIcsDeadlines(list);
+        } catch (err) {
+          if (/invalid|expired/i.test(String(err?.message || ''))) throw err;
+          /* fall through */
+        }
       }
 
       if (s.sesskey) {
@@ -928,7 +1171,7 @@ export function createMoodleService({
           });
         }
       }
-      return events;
+      return mergeIcsDeadlines(events);
     },
 
     async getGrades(courseId = 0) {
@@ -985,6 +1228,46 @@ export function createMoodleService({
       const listUrl = cid
         ? new URL(`/mod/forum/index.php?id=${cid}`, s.baseUrl).href
         : new URL('/my/', s.baseUrl).href;
+
+      if (s.token) {
+        try {
+          let courseIds = cid ? [cid] : [];
+          const courseNames = new Map();
+          if (!courseIds.length) {
+            const enrolled = await this.listCourses().catch(() => []);
+            for (const c of enrolled.slice(0, 12)) {
+              courseIds.push(c.id);
+              courseNames.set(c.id, c.fullname);
+            }
+          }
+          if (courseIds.length) {
+            const forums = await restCall('mod_forum_get_forums_by_courses', { courseids: courseIds });
+            const list = Array.isArray(forums) ? forums : [];
+            const news = list.filter((f) => f.type === 'news');
+            const chosen = (news.length ? news : list).slice(0, 12);
+            const buckets = await mapLimit(chosen, 4, async (f) => {
+              try {
+                const res = await restCall('mod_forum_get_forum_discussions', { forumid: f.id, perpage: 5 });
+                return (res?.discussions || []).map((d) => ({
+                  name: decodeHtmlEntities(d.subject || d.name || f.name || 'Announcement'),
+                  course: courseNames.get(Number(f.course)) || decodeHtmlEntities(f.name || ''),
+                  author: decodeHtmlEntities(d.userfullname || ''),
+                  createdAt: Number(d.created || d.timemodified || 0) * 1000,
+                  snippet: stripTags(d.message || '').slice(0, 180),
+                  url: new URL(`/mod/forum/discuss.php?d=${d.discussion || d.id}`, s.baseUrl).href,
+                }));
+              } catch {
+                return [];
+              }
+            });
+            const items = buckets.flat().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 40);
+            if (items.length) return { url: listUrl, items };
+          }
+        } catch (err) {
+          if (/invalid|expired/i.test(String(err?.message || ''))) throw err;
+          /* fall through to HTML */
+        }
+      }
 
       const res = await authedFetch(listUrl);
       if (!res.ok) return { url: listUrl, items: [] };

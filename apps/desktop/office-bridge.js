@@ -225,6 +225,43 @@ export async function detectMacRunner({ run = runProcess, runnerDir = defaultRun
   }
 }
 
+export function linuxPrereqPlan({ missing = [], apparmorRestricted = false, pkgManager = '', user = '' } = {}) {
+  const cmds = [];
+  const needPasta = missing.some((m) => /pasta|passt/i.test(m));
+  const needUidmap = missing.some((m) => /newuidmap|uidmap/i.test(m));
+  const needPython = missing.some((m) => /python3/i.test(m));
+  const needSubuid = missing.some((m) => /subuid/i.test(m));
+  const pkgs = [];
+  if (pkgManager === 'pacman') {
+    if (needPasta) pkgs.push('passt');
+    if (needUidmap) pkgs.push('shadow');
+    if (needPython) pkgs.push('python');
+    if (pkgs.length) cmds.push(`pacman -Sy --noconfirm --needed ${pkgs.join(' ')}`);
+  } else if (pkgManager === 'apt-get') {
+    if (needPasta) pkgs.push('passt');
+    if (needUidmap) pkgs.push('uidmap');
+    if (needPython) pkgs.push('python3');
+    if (pkgs.length) cmds.push(`apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ${pkgs.join(' ')}`);
+  } else if (pkgManager === 'dnf') {
+    if (needPasta) pkgs.push('passt');
+    if (needUidmap) pkgs.push('shadow-utils');
+    if (needPython) pkgs.push('python3');
+    if (pkgs.length) cmds.push(`dnf install -y ${pkgs.join(' ')}`);
+  } else if (pkgManager === 'zypper') {
+    if (needPasta) pkgs.push('passt');
+    if (needUidmap) pkgs.push('shadow');
+    if (needPython) pkgs.push('python3');
+    if (pkgs.length) cmds.push(`zypper --non-interactive install ${pkgs.join(' ')}`);
+  }
+  if (needSubuid && user && /^[a-zA-Z0-9._-]+$/.test(user)) {
+    cmds.push(`usermod --add-subuids 100000-165535 --add-subgids 100000-165535 ${user}`);
+  }
+  if (apparmorRestricted) {
+    cmds.push('sysctl -w kernel.apparmor_restrict_unprivileged_userns=0');
+  }
+  return cmds.join(' && ');
+}
+
 export function createOfficeBridge({
   moduleDir = defaultModuleDir(),
   imageDir = defaultImageDir(),
@@ -319,6 +356,20 @@ export function createOfficeBridge({
       meta.runner !== 'rootless' || existsSync(path.join(moduleDir, 'versions', meta.tag || image.tag, 'rootfs', 'entrypoint.sh'))
     ));
     const state = installed ? 'installed' : runnerInfo.ready ? 'missing' : 'unavailable';
+    let canAutoSetup = false;
+    let setupLabel = '';
+    if (!installed && !runnerInfo.rebootNeeded) {
+      if (platform === 'linux' && !runnerInfo.ready) {
+        canAutoSetup = true;
+        setupLabel = runnerInfo.apparmorRestricted ? 'Allow user namespaces' : 'Install pasta & prerequisites';
+      } else if (platform === 'win32' && (runnerInfo.needsEnable || !runnerInfo.ready)) {
+        canAutoSetup = true;
+        setupLabel = 'Set up WSL2';
+      } else if (platform === 'darwin' && !runnerInfo.ready) {
+        canAutoSetup = true;
+        setupLabel = 'Install Podman (macOS)';
+      }
+    }
     return {
       installed,
       state,
@@ -342,7 +393,88 @@ export function createOfficeBridge({
       rebootNeeded: Boolean(runnerInfo.rebootNeeded),
       apparmorRestricted: Boolean(runnerInfo.apparmorRestricted),
       needsEnable: Boolean(runnerInfo.needsEnable),
+      canAutoSetup,
+      setupLabel,
     };
+  }
+
+  async function setupPrereqs(onProgress = () => {}) {
+    if (platform === 'win32') {
+      const ps1 = path.join(runnerDir, 'windows', 'euro-office.ps1');
+      onProgress({ phase: 'enabling', text: 'Enabling WSL2 (approve administrator prompt)…', fraction: 0.25 });
+      const en = await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ps1, '-Action', 'Enable'], { timeoutMs: 300000 });
+      let parsed = {};
+      try { parsed = JSON.parse(en.stdout.trim().split(/\r?\n/).pop() || '{}'); } catch { /* ignore */ }
+      if (!parsed.ok) return { ok: false, error: parsed.error || en.stderr.trim() || 'Could not enable WSL2.' };
+      if (parsed.rebootNeeded) {
+        onProgress({ phase: 'done', text: 'WSL2 enabled — restart Windows to finish.', fraction: 1 });
+        return { ok: true, rebootNeeded: true, text: 'WSL2 enabled. Restart Windows, then click Install.' };
+      }
+      onProgress({ phase: 'done', text: 'WSL2 is ready.', fraction: 1 });
+      return { ok: true, rebootNeeded: false, text: 'WSL2 is ready. You can now install Euro-Office.' };
+    }
+
+    if (platform === 'linux') {
+      const runnerInfo = await detectRunner();
+      if (runnerInfo.ready) return { ok: true, text: 'Linux prerequisites are already installed.' };
+      let pkgManager = '';
+      for (const pm of ['pacman', 'apt-get', 'dnf', 'zypper']) {
+        const check = await run('sh', ['-c', `command -v ${pm}`], { timeoutMs: 5000 }).catch(() => ({ code: 1 }));
+        if (check.code === 0) { pkgManager = pm; break; }
+      }
+      const user = env.USER || env.LOGNAME || '';
+      const cmd = linuxPrereqPlan({
+        missing: runnerInfo.missing || [],
+        apparmorRestricted: Boolean(runnerInfo.apparmorRestricted),
+        pkgManager,
+        user,
+      });
+      if (!cmd) {
+        return { ok: false, error: runnerInfo.detail || 'Could not determine package manager to install pasta/passt automatically.' };
+      }
+      const hasPkexec = (await run('sh', ['-c', 'command -v pkexec'], { timeoutMs: 5000 }).catch(() => ({ code: 1 }))).code === 0;
+      if (!hasPkexec) {
+        return { ok: false, manualCommand: `sudo sh -c '${cmd}'`, error: `Run in a terminal: sudo sh -c '${cmd}'` };
+      }
+      onProgress({ phase: 'installing', text: 'Installing pasta & prerequisites (approve authentication prompt)…', fraction: 0.35 });
+      const res = await run('pkexec', ['sh', '-c', cmd], { timeoutMs: 300000 });
+      if (res.code !== 0) {
+        return { ok: false, manualCommand: `sudo sh -c '${cmd}'`, error: res.stderr.trim() || res.stdout.trim() || 'Prerequisite installation was cancelled or failed.' };
+      }
+      onProgress({ phase: 'done', text: 'Linux prerequisites installed.', fraction: 1 });
+      return { ok: true, text: 'Installed pasta & prerequisites. You can now install Euro-Office.' };
+    }
+
+    if (platform === 'darwin') {
+      const findBrew = async () => {
+        for (const cand of ['/opt/homebrew/bin/brew', '/usr/local/bin/brew', 'brew']) {
+          const r = await run('sh', ['-c', `command -v "${cand}"`], { timeoutMs: 5000 }).catch(() => ({ code: 1, stdout: '' }));
+          if (r.code === 0 && r.stdout.trim()) return r.stdout.trim();
+        }
+        return '';
+      };
+      const brew = await findBrew();
+      const hasPodman = (await run('sh', ['-c', 'command -v podman'], { timeoutMs: 5000 }).catch(() => ({ code: 1 }))).code === 0;
+      if (!hasPodman) {
+        if (!brew) {
+          const manualCommand = '/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew install podman && podman machine init && podman machine start';
+          return { ok: false, manualCommand, error: 'Homebrew is not installed. Run the command below in Terminal (or install OrbStack / Docker Desktop).' };
+        }
+        onProgress({ phase: 'installing', text: 'Installing Podman via Homebrew…', fraction: 0.25 });
+        const inst = await run(brew, ['install', 'podman'], { timeoutMs: 600000 });
+        if (inst.code !== 0) return { ok: false, error: inst.stderr.trim() || inst.stdout.trim() || 'brew install podman failed.' };
+      }
+      onProgress({ phase: 'enabling', text: 'Initializing & starting Podman machine…', fraction: 0.65 });
+      await run('sh', ['-c', 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" podman machine init || true'], { timeoutMs: 300000 }).catch(() => {});
+      const start = await run('sh', ['-c', 'PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" podman machine start'], { timeoutMs: 300000 });
+      if (start.code !== 0 && !/already running/i.test(start.stderr + start.stdout)) {
+        return { ok: false, error: start.stderr.trim() || start.stdout.trim() || 'Could not start Podman machine.' };
+      }
+      onProgress({ phase: 'done', text: 'Podman is ready on macOS.', fraction: 1 });
+      return { ok: true, text: 'Podman installed and started. You can now install Euro-Office.' };
+    }
+
+    return { ok: false, error: `Automatic prerequisite setup is not available on ${platform}.` };
   }
 
   async function install(onProgress = () => {}) {
@@ -832,6 +964,7 @@ export function createOfficeBridge({
 
   return {
     status,
+    setupPrereqs,
     install,
     uninstall,
     start,

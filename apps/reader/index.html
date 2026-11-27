@@ -486,8 +486,8 @@
           <div id="driveSection" class="cloud-panel" role="region" aria-labelledby="driveTitle">
             <div class="drive-heading">
               <button id="drivePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="drivePanelBody"><h4 id="driveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M21.35 11.1H12v2.96h5.36c-.46 2.3-2.43 3.94-5.36 3.94a5.99 5.99 0 0 1-6-6 5.99 5.99 0 0 1 6-6c1.47 0 2.8.56 3.82 1.48l2.2-2.2A9.97 9.97 0 0 0 12 3a9 9 0 0 0-9 9 9 9 0 0 0 9 9c5.21 0 8.66-3.66 8.66-8.83 0-.71-.07-1.4-.2-2.07h-.11z"/></svg><span>Google Drive</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="driveBack" type="button" class="icon-button folder-back" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
               <div class="drive-actions">
-                <button id="driveBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="driveRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
                 <button id="driveDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Google Drive on this device (no files change in Drive)" disabled hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="Google Drive guided setup">
@@ -539,8 +539,8 @@
           <div id="dropboxSection" class="cloud-panel" role="region" aria-labelledby="dropboxTitle" hidden>
             <div class="drive-heading">
               <button id="dropboxPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="dropboxPanelBody"><h4 id="dropboxTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 3 2 6.2l5 3.2 5-3.2zm10 0-5 3.2 5 3.2 5-3.2zM2 12.6l5 3.2 5-3.2-5-3.2zm15-3.2-5 3.2 5 3.2 5-3.2zM7 17l5 3.2 5-3.2-5-3.2z"/></svg><span>Dropbox</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="dropboxBack" type="button" class="icon-button folder-back" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
               <div class="drive-actions">
-                <button id="dropboxBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="dropboxRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh the list" disabled></button>
                 <button id="dropboxDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect Dropbox on this device (no files change in Dropbox)" disabled hidden></button>
                 <span class="cloud-role-group" role="group" aria-label="Dropbox guided setup">
@@ -589,9 +589,10 @@
           <div id="moodleSection" class="cloud-panel" role="region" aria-labelledby="moodleTitle" hidden>
             <div class="drive-heading">
               <button id="moodlePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="moodlePanelBody"><h4 id="moodleTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 3 1 9l11 6 9-4.91V17h2V9L12 3zm-7 9.18V16l7 3.82L19 16v-3.82L12 16l-7-3.82z"/></svg><span>Moodle</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="moodleBack" type="button" class="icon-button folder-back" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
               <div class="drive-actions">
-                <button id="moodleBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
                 <button id="moodleRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh Moodle" disabled hidden></button>
+                <button id="moodleReconnect" type="button" class="chip" data-icon="restart" title="Clear Moodle cookies and force a fresh SSO sign-in" disabled hidden>Sign in again</button>
                 <button id="moodleImagesToggle" type="button" class="chip" aria-pressed="false" title="Load course banners and image previews from Moodle" hidden>Show images</button>
                 <button id="moodleOpenBrowser" type="button" class="chip" data-icon="open" title="Open the current Moodle course/page in your browser" hidden>Open in browser</button>
                 <button id="moodleSidebarBtn" type="button" class="chip" data-icon="spark" title="Open Moodle Assistant sidebar (Deadlines, Grades, Forums, Ask AI, MCP)" hidden>Moodle tools</button>
@@ -613,6 +614,7 @@
                       <label>Moodle base URL<input id="moodleUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://moovi.uvigo.gal" /></label>
                       <label>SAML2 / SSO login URL (optional)<input id="moodleSsoUrl" type="url" autocomplete="off" spellcheck="false" placeholder="https://moovi.uvigo.gal/auth/saml2/login.php?…" /></label>
                       <label>Web Service token (optional, skips browser SSO)<input id="moodleToken" type="password" autocomplete="off" spellcheck="false" placeholder="Optional Moodle mobile token" /></label>
+                      <label>Calendar .ics URL (optional, encrypted on device)<input id="moodleIcsUrl" type="password" autocomplete="off" spellcheck="false" placeholder="https://moovi.uvigo.gal/calendar/export_execute.php?…" /></label>
                     </details>
                   </div>
                 </div>
@@ -639,8 +641,8 @@
           <div id="githubSection" class="cloud-panel" role="region" aria-labelledby="githubTitle" hidden>
             <div class="drive-heading">
               <button id="githubPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="githubPanelBody"><h4 id="githubTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.35 1.09 2.92.83.09-.65.35-1.09.64-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.58 9.58 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.75c0 .27.18.58.69.48A10 10 0 0 0 12 2z"/></svg><span>GitHub · Auto-Chunked</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="githubBack" type="button" class="icon-button folder-back" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
               <div class="drive-actions">
-                <button id="githubBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="githubRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh repository" disabled></button>
                 <button id="githubPublishBtn" type="button" class="chip" data-icon="export" title="Split open note into ≤4 MiB chunks and commit to GitHub" hidden>Publish note</button>
                 <button id="githubDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect GitHub repository on this device" hidden></button>
@@ -677,8 +679,8 @@
           <div id="webdavSection" class="cloud-panel" role="region" aria-labelledby="webdavTitle" hidden>
             <div class="drive-heading">
               <button id="webdavPanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="webdavPanelBody"><h4 id="webdavTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="3.8" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="4.8" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="19.2" cy="12" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span>Nextcloud / WebDAV</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="webdavBack" type="button" class="icon-button folder-back" data-icon="back" aria-label="Back" title="Back" disabled hidden></button>
               <div class="drive-actions">
-                <button id="webdavBack" type="button" class="icon-button" data-icon="back" aria-label="Back" title="Back" disabled></button>
                 <button id="webdavRefresh" type="button" class="icon-button" data-icon="restart" aria-label="Refresh" title="Refresh folder" disabled></button>
                 <button id="webdavPublishBtn" type="button" class="chip" data-icon="export" title="Save open note into this shared WebDAV folder" hidden>Save note</button>
                 <button id="webdavDisconnect" type="button" class="icon-button" data-icon="unplug" aria-label="Disconnect" title="Disconnect WebDAV folder on this device" hidden></button>
@@ -714,9 +716,9 @@
           <div id="archiveSection" class="cloud-panel" role="region" aria-labelledby="archiveTitle" hidden>
             <div class="drive-heading">
               <button id="archivePanelToggle" type="button" class="category-toggle cloud-panel-toggle" aria-expanded="true" aria-controls="archivePanelBody"><h4 id="archiveTitle" class="cloud-panel-title"><svg class="provider-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M3 10h18M4 10v9M8 10v9M12 10v9M16 10v9M20 10v9M2 20h20M12 3 3 6h18z"/></svg><span>Internet Archive</span></h4><svg class="chevron-icon" viewBox="0 0 8 5" width="8" height="5" aria-hidden="true"><path d="M1 1l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+              <button id="archiveBack" type="button" class="icon-button folder-back nav-arrow" data-icon="back" aria-label="Back to repositories" title="Back to repositories" hidden></button>
+              <button id="archiveFolderUp" type="button" class="icon-button folder-back nav-arrow" data-icon="up" aria-label="Up one folder" title="Up one folder" hidden></button>
               <div class="drive-actions">
-                <button id="archiveBack" type="button" class="icon-button nav-arrow" data-icon="back" aria-label="Back to repositories" title="Back to repositories" hidden></button>
-                <button id="archiveFolderUp" type="button" class="icon-button nav-arrow" data-icon="up" aria-label="Up one folder" title="Up one folder" hidden></button>
                 <button id="archiveAddBtn" type="button" class="bar-icon" title="Add an Internet Archive repository" aria-label="Add repository">+</button>
                 <span class="cloud-role-group" role="group" aria-label="Internet Archive guided setup">
                   <button type="button" class="chip cloud-role-btn" data-cloud-guide="archive:user" data-icon="open" title="Step-by-step guide to open: browse or add an archive.org item">Open guide</button>
