@@ -1209,22 +1209,59 @@ export function createMoodleService({
         ? new URL(`/grade/report/user/index.php?id=${cid}`, s.baseUrl).href
         : new URL('/grade/report/overview/index.php', s.baseUrl).href;
 
-      if (s.token && s.userId && cid) {
-        try {
-          const data = await restCall('gradereport_user_get_grade_items', { courseid: cid, userid: s.userId });
-          const items = (data?.usergrades?.[0]?.gradeitems || []).map((g) => ({
-            name: decodeHtmlEntities(g.itemname || g.itemtype || 'Course total'),
-            grade: decodeHtmlEntities(g.gradeformatted || (g.graderaw != null ? String(g.graderaw) : '—')),
-            range: g.grademax != null ? `${g.grademin ?? 0}–${g.grademax}` : '',
-            percentage: decodeHtmlEntities(g.percentageformatted || ''),
-            feedback: stripTags(g.feedback || ''),
-            url: pageUrl,
-          }));
-          if (items.length) return { url: pageUrl, items };
-        } catch { /* fall through */ }
+      if (s.token) {
+        let userId = Number(s.userId) || 0;
+        if (!userId) {
+          try {
+            const info = await restCall('core_webservice_get_site_info');
+            userId = Number(info?.userid) || 0;
+          } catch { /* ignore */ }
+        }
+        if (userId && cid) {
+          try {
+            const data = await restCall('gradereport_user_get_grade_items', { courseid: cid, userid: userId });
+            const items = (data?.usergrades?.[0]?.gradeitems || []).map((g) => ({
+              name: decodeHtmlEntities(g.itemname || g.itemtype || 'Course total'),
+              grade: decodeHtmlEntities(g.gradeformatted || (g.graderaw != null ? String(g.graderaw) : '—')),
+              range: g.grademax != null ? `${g.grademin ?? 0}–${g.grademax}` : '',
+              percentage: decodeHtmlEntities(g.percentageformatted || ''),
+              feedback: stripTags(g.feedback || ''),
+              url: pageUrl,
+            }));
+            if (items.length) return { url: pageUrl, items };
+          } catch { /* fall through */ }
+        } else if (userId && !cid) {
+          try {
+            const [overview, enrolled] = await Promise.all([
+              restCall('gradereport_overview_get_course_grades', { userid: userId }),
+              this.listCourses().catch(() => []),
+            ]);
+            const courseMap = new Map(enrolled.map((c) => [Number(c.id), c]));
+            const grades = Array.isArray(overview?.grades) ? overview.grades : [];
+            const items = grades.map((g) => {
+              const c = courseMap.get(Number(g.courseid));
+              const rawGrade = decodeHtmlEntities(g.grade ?? (g.rawgrade != null ? String(g.rawgrade) : '—')).trim();
+              return {
+                name: c?.fullname || `Course #${g.courseid}`,
+                grade: rawGrade && rawGrade !== '-' ? rawGrade : '—',
+                range: '',
+                percentage: '',
+                feedback: '',
+                url: new URL(`/grade/report/user/index.php?id=${g.courseid}`, s.baseUrl).href,
+              };
+            });
+            return { url: pageUrl, items };
+          } catch { /* fall through */ }
+        }
       }
 
-      const res = await authedFetch(pageUrl);
+      if (!cookieHeader(s)) return { url: pageUrl, items: [] };
+      let res;
+      try {
+        res = await authedFetch(pageUrl);
+      } catch {
+        return { url: pageUrl, items: [] };
+      }
       if (!res.ok) return { url: pageUrl, items: [] };
       const html = await res.text();
       const items = [];
@@ -1296,7 +1333,13 @@ export function createMoodleService({
         }
       }
 
-      const res = await authedFetch(listUrl);
+      if (!cookieHeader(s)) return { url: listUrl, items: [] };
+      let res;
+      try {
+        res = await authedFetch(listUrl);
+      } catch {
+        return { url: listUrl, items: [] };
+      }
       if (!res.ok) return { url: listUrl, items: [] };
       const html = await res.text();
       const items = [];
@@ -1318,6 +1361,10 @@ export function createMoodleService({
       const baseUrl = s?.baseUrl || MOODLE_PRESETS[0].baseUrl;
       return {
         baseUrl,
+        connected: Boolean(s?.baseUrl && (s?.token || s?.cookies)),
+        hasToken: Boolean(s?.token),
+        authMode: s?.token ? 'token' : (s?.cookies ? 'cookies' : 'none'),
+        userName: s?.userName || '',
         openMoodle: {
           name: 'open-moodle',
           command: 'uvx',

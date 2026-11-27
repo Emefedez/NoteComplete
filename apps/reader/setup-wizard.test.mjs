@@ -88,7 +88,7 @@ test('the end screen', () => {
 
 test('modules: the registry and its cards', () => {
   const list = M.registerBuiltInModules({ rBridge: null, agents: null });
-  assert.deepEqual(list.map((m) => m.id), ['math', 'euro-office', 'chinese', 'ai-tools']);
+  assert.deepEqual(list.map((m) => m.id), ['math', 'euro-office', 'chinese', 'cloud-providers', 'ai-tools']);
   for (const m of list) {
     assert.ok(m.name && m.summary && m.icon, m.id);
     assert.ok(['feature', 'install'].includes(m.kind), m.id);

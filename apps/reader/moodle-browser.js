@@ -1031,6 +1031,78 @@ export function moodleBrowser({
     if (sidebarTab === 'mcp') {
       const cfgData = await api?.mcpConfig?.().catch(() => null);
       const baseUrl = cfgData?.baseUrl || session?.baseUrl || 'https://moovi.uvigo.gal';
+      const statusBox = document.createElement('div');
+      statusBox.className = 'moodle-mcp-card';
+      const stTitle = document.createElement('strong');
+      stTitle.textContent = 'Live Moodle Connection & Context';
+      const stInfo = document.createElement('p');
+      stInfo.className = 'muted';
+      const modeLabel = cfgData?.hasToken
+        ? 'Mobile API token (encrypted on device)'
+        : (session?.connected ? 'SSO browser session' : 'Not connected');
+      stInfo.textContent = `${baseUrl} · ${modeLabel}${cfgData?.userName ? ` · ${cfgData.userName}` : ''}`;
+      const stOut = document.createElement('div');
+      stOut.className = 'muted';
+      stOut.style.fontSize = '12px';
+      const stRow = document.createElement('div');
+      stRow.style.display = 'flex';
+      stRow.style.flexWrap = 'wrap';
+      stRow.style.gap = '6px';
+
+      const testBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Test Moodle API' });
+      testBtn.disabled = !session?.connected;
+      testBtn.onclick = async () => {
+        testBtn.disabled = true;
+        stOut.textContent = 'Checking courses, deadlines, grades & forums…';
+        const t0 = performance.now();
+        try {
+          const [cs, dl, gr, an] = await Promise.all([
+            api.courses().catch(() => []),
+            api.deadlines({ days: 30 }).catch(() => []),
+            api.grades(currentCourse?.id || 0).catch(() => ({ items: [] })),
+            api.announcements(currentCourse?.id || 0).catch(() => ({ items: [] })),
+          ]);
+          const ms = Math.round(performance.now() - t0);
+          stOut.textContent = `OK (${ms} ms): ${cs.length} courses · ${dl.length} deadlines · ${gr?.items?.length || 0} grades · ${an?.items?.length || 0} forum posts.`;
+        } catch (e) {
+          stOut.textContent = `Check failed: ${e?.message || e}`;
+        } finally {
+          testBtn.disabled = false;
+        }
+      };
+
+      const copyCtxBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Copy live Moodle context (MD)' });
+      copyCtxBtn.disabled = !session?.connected;
+      copyCtxBtn.onclick = async () => {
+        copyCtxBtn.disabled = true;
+        copyCtxBtn.textContent = 'Gathering…';
+        try {
+          const [dl, gr, an] = await Promise.all([
+            api.deadlines({ days: 30 }).catch(() => []),
+            api.grades(currentCourse?.id || 0).catch(() => ({ items: [] })),
+            api.announcements(currentCourse?.id || 0).catch(() => ({ items: [] })),
+          ]);
+          const md = [
+            `# Moodle Context (${session?.label || baseUrl})`,
+            courses.length ? `## Courses\n${courses.map((c) => `- ${c.fullname}`).join('\n')}` : '',
+            dl.length ? `## Upcoming Deadlines\n${dl.map((d) => `- ${d.statusLabel ? `[${d.statusLabel}] ` : ''}${d.name} (${d.course || 'course'}) — ${d.dueAt ? new Date(d.dueAt).toLocaleString() : d.dueLabel || 'soon'}`).join('\n')}` : '',
+            gr?.items?.length ? `## Grades\n${gr.items.slice(0, 40).map((g) => `- ${g.name}: ${g.grade}${g.percentage ? ` (${g.percentage})` : ''}`).join('\n')}` : '',
+            an?.items?.length ? `## Recent Forums\n${an.items.slice(0, 15).map((a) => `- [${a.course || 'Forum'}] ${a.name}${a.snippet ? `: ${a.snippet}` : ''}`).join('\n')}` : '',
+          ].filter(Boolean).join('\n\n');
+          await navigator.clipboard?.writeText(md);
+          copyCtxBtn.textContent = 'Copied!';
+          setTimeout(() => { copyCtxBtn.textContent = 'Copy live Moodle context (MD)'; }, 1800);
+        } catch (e) {
+          stOut.textContent = `Could not copy: ${e?.message || e}`;
+          copyCtxBtn.textContent = 'Copy live Moodle context (MD)';
+        } finally {
+          copyCtxBtn.disabled = false;
+        }
+      };
+
+      stRow.append(testBtn, copyCtxBtn);
+      statusBox.append(stTitle, stInfo, stRow, stOut);
+
       const openMoodleSnippet = JSON.stringify({
         mcpServers: {
           'open-moodle': { command: 'uvx', args: ['open-moodle'], env: { MOODLE_URL: baseUrl } },
@@ -1041,7 +1113,7 @@ export function moodleBrowser({
           'moodle-student-bridge': { command: 'npx', args: ['-y', 'moodle-student-bridge'], env: { MOODLE_BASE_URL: baseUrl, MOODLE_TOKEN: '<your-moodle-mobile-token>' } },
         },
       }, null, 2);
-      const mkBlock = (title, hint, snippet) => {
+      const mkBlock = (title, hint, snippet, docsUrl) => {
         const box = document.createElement('div');
         box.className = 'moodle-mcp-card';
         const h = document.createElement('strong');
@@ -1051,14 +1123,27 @@ export function moodleBrowser({
         p.textContent = hint;
         const pre = document.createElement('pre');
         pre.textContent = snippet;
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '6px';
         const copy = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Copy MCP JSON' });
-        copy.onclick = () => navigator.clipboard?.writeText(snippet).then(() => { copy.textContent = 'Copied'; }, () => {});
-        box.append(h, p, pre, copy);
+        copy.onclick = () => navigator.clipboard?.writeText(snippet).then(() => {
+          copy.textContent = 'Copied!';
+          setTimeout(() => { copy.textContent = 'Copy MCP JSON'; }, 1500);
+        }, () => {});
+        row.append(copy);
+        if (docsUrl) {
+          const docs = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Docs' });
+          docs.onclick = () => openExternalUrl(docsUrl);
+          row.append(docs);
+        }
+        box.append(h, p, pre, row);
         return box;
       };
       body.append(
-        mkBlock('open-moodle (SSO / SAML2 ready)', 'Great for UVIGO Moovi and universities that disable manual tokens.', openMoodleSnippet),
-        mkBlock('moodle-student-bridge (read-only student tools)', 'Courses, deadlines, quizzes, grades, feedback, announcements & files via mobile token.', bridgeSnippet),
+        statusBox,
+        mkBlock('open-moodle (SSO / SAML2 ready)', 'Great for UVIGO Moovi and universities that disable manual tokens.', openMoodleSnippet, cfgData?.openMoodle?.docsUrl),
+        mkBlock('moodle-student-bridge (read-only student tools)', 'Courses, deadlines, quizzes, grades, feedback, announcements & files via mobile token.', bridgeSnippet, cfgData?.studentBridge?.docsUrl),
       );
     }
   }

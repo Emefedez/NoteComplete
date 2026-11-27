@@ -1,8 +1,7 @@
-## What's new in 2.0.25
+## What's new in 2.0.26
 
-- **Fixed Moodle toolbar buttons.** Removed a stray `connected` reference in `moodle-browser.js` that prevented `Open in browser`, `Moodle tools`, `Queue`, `Back`, `Sign in again`, `Refresh`, `Disconnect`, and search from wiring up.
-- **Fixed nested `$...$` in Math Adaptation.** Adapting an expression that already contains adapted math (e.g. `5^(5-43) - 12 + $\binom{5}{3}$`) or selecting inside an existing `$...$` span now merges cleanly into one valid math box instead of creating broken nested `$` delimiters.
-- **`Shift + Right-click` instant Math Adaptation.** Highlighting non-Chinese text in any editable field and pressing `Shift + Right-click` immediately converts it to clean LaTeX.
-- **Fixed dialog action button wrapping.** Dialog action bars (`.ocr-actions`, `.quality-actions`) now wrap and align cleanly so buttons like **Resize this page** never overflow their dialog.
+- **Fixed Moodle Grades (`moodle:grades` `TypeError: fetch failed`).** Course-overview grades now use the Moodle Mobile REST API (`gradereport_overview_get_course_grades`) with automatic `userId` lookup, and HTML fallbacks handle network/redirect errors gracefully without crashing.
+- **Interactive Moodle MCP tab.** The Moodle Tools → MCP tab now displays live connection status, includes a **Test Moodle API** health check (courses, deadlines, grades, forums + latency), **Copy live Moodle context (MD)**, and MCP JSON cards with Docs links.
+- **Optional Cloud Providers card in the Setup Wizard.** Configure Google Drive, Dropbox, Moodle, GitHub, and Nextcloud/WebDAV keys, tokens, and URLs directly from the Setup Wizard.
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.

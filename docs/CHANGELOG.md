@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.25
+
+- **Fixed Moodle toolbar buttons** (`Open in browser`, `Moodle tools`, `Queue`, `Back`, `Sign in again`, `Refresh`, `Disconnect`, search).
+- **Fixed nested `$...$` in Math Adaptation** and added **`Shift + Right-click`** instant Math Adaptation for non-Chinese selections.
+- **Fixed dialog action button wrapping** (`.ocr-actions`, `.quality-actions`).
+
 ## 2.0.24
 
 - **Fixed horizontal toolbar expanding when popping the tool settings panel (e.g. pressing `P` twice).** Inline styles for `#toolOptionsMirror` now match its `data-mirror-id` descendants so the toolbar stays at its compact single-row height.

@@ -381,12 +381,189 @@ export function agentsModule(api = globalThis.notecompleteAgents) {
   };
 }
 
+// ---- Cloud providers (Google Drive, Dropbox, Moodle, GitHub, WebDAV) ----
+
+const CLOUD_KEYS = {
+  drive: 'notecomplete-drive-config-v1',
+  dropbox: 'notecomplete-dropbox-config-v1',
+  moodle: 'notecomplete-moodle-config-v1',
+  github: 'notecomplete-github-config-v1',
+  webdav: 'notecomplete-webdav-config-v1',
+  wizardOn: 'notecomplete-wizard-cloud-on',
+};
+
+function readJson(storage, key) {
+  try { return JSON.parse(storage?.getItem(key) || '{}') || {}; } catch { return {}; }
+}
+function writeJson(storage, key, val) {
+  try { storage?.setItem(key, JSON.stringify(val)); } catch { /* Optional. */ }
+}
+function hasAnyCloudConfig(storage) {
+  const d = readJson(storage, CLOUD_KEYS.drive);
+  const db = readJson(storage, CLOUD_KEYS.dropbox);
+  const m = readJson(storage, CLOUD_KEYS.moodle);
+  const g = readJson(storage, CLOUD_KEYS.github);
+  const w = readJson(storage, CLOUD_KEYS.webdav);
+  return Boolean(d.clientId || d.apiKey || d.folderLink || db.appKey || m.baseUrl || m.ssoUrl || g.repo || g.token || w.url);
+}
+
+export function cloudProvidersModule({ storage = globalThis.localStorage } = {}) {
+  const isEnabled = () => {
+    try {
+      const flag = storage?.getItem(CLOUD_KEYS.wizardOn);
+      if (flag === '0') return false;
+      if (flag === '1') return true;
+    } catch { /* Optional. */ }
+    return hasAnyCloudConfig(storage);
+  };
+  return {
+    id: 'cloud-providers',
+    kind: 'feature',
+    icon: 'cloud',
+    name: 'Cloud providers',
+    summary: 'Optional keys, URLs & credentials for Drive, Dropbox, Moodle, GitHub and WebDAV',
+    status: async () => ({ state: isEnabled() ? 'on' : 'off' }),
+    setEnabled(on) {
+      try { storage?.setItem(CLOUD_KEYS.wizardOn, on ? '1' : '0'); } catch { /* Optional. */ }
+    },
+    settings(el, ui) {
+      const syncDom = (id, val) => {
+        const node = typeof document !== 'undefined' ? document.getElementById(id) : null;
+        if (node && 'value' in node) node.value = val;
+      };
+      const mkField = (label, value, { type = 'text', placeholder = '', onSave }) => {
+        const wrap = document.createElement('label');
+        wrap.className = 'wizard-cloud-field';
+        const span = document.createElement('span');
+        span.textContent = label;
+        const input = document.createElement('input');
+        input.type = type;
+        input.value = value || '';
+        input.placeholder = placeholder;
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        input.oninput = () => onSave(input.value.trim());
+        wrap.append(span, input);
+        return wrap;
+      };
+      const mkGroup = (title, openByDefault, fields) => {
+        const det = document.createElement('details');
+        det.className = 'wizard-cloud-group';
+        if (openByDefault) det.open = true;
+        const sum = document.createElement('summary');
+        sum.textContent = title;
+        const body = document.createElement('div');
+        body.className = 'wizard-cloud-fields';
+        body.append(...fields);
+        det.append(sum, body);
+        return det;
+      };
+
+      const drive = readJson(storage, CLOUD_KEYS.drive);
+      const saveDrive = (patch) => {
+        Object.assign(drive, patch);
+        writeJson(storage, CLOUD_KEYS.drive, drive);
+      };
+
+      const dropbox = readJson(storage, CLOUD_KEYS.dropbox);
+      const saveDropbox = (patch) => {
+        Object.assign(dropbox, patch);
+        writeJson(storage, CLOUD_KEYS.dropbox, dropbox);
+      };
+
+      const moodle = readJson(storage, CLOUD_KEYS.moodle);
+      const saveMoodle = (patch) => {
+        Object.assign(moodle, patch);
+        writeJson(storage, CLOUD_KEYS.moodle, moodle);
+      };
+
+      const github = readJson(storage, CLOUD_KEYS.github);
+      const saveGithub = (patch) => {
+        Object.assign(github, patch);
+        writeJson(storage, CLOUD_KEYS.github, github);
+      };
+
+      const webdav = readJson(storage, CLOUD_KEYS.webdav);
+      const saveWebdav = (patch) => {
+        Object.assign(webdav, patch);
+        writeJson(storage, CLOUD_KEYS.webdav, webdav);
+      };
+
+      el.append(
+        ui.hint('Saved on this device only. Leave any provider blank to use defaults or set it up later from Home ▸ Cloud.'),
+        mkGroup('Google Drive', Boolean(drive.clientId || drive.apiKey || drive.folderLink), [
+          mkField('OAuth Client ID', drive.clientId, {
+            placeholder: '1234567890-abc.apps.googleusercontent.com',
+            onSave: (v) => { saveDrive({ clientId: v }); syncDom('driveClientId', v); },
+          }),
+          mkField('API Key (optional)', drive.apiKey, {
+            type: 'password',
+            placeholder: 'AIza…',
+            onSave: (v) => { saveDrive({ apiKey: v }); syncDom('driveApiKey', v); },
+          }),
+          mkField('Shared folder link (optional)', drive.folderLink, {
+            type: 'url',
+            placeholder: 'https://drive.google.com/drive/folders/…',
+            onSave: (v) => { saveDrive({ folderLink: v }); syncDom('driveFolderLink', v); },
+          }),
+        ]),
+        mkGroup('Dropbox', Boolean(dropbox.appKey), [
+          mkField('Dropbox App Key', dropbox.appKey, {
+            placeholder: 'App key from Dropbox App Console',
+            onSave: (v) => { saveDropbox({ appKey: v }); syncDom('dropboxAppKey', v); },
+          }),
+        ]),
+        mkGroup('Moodle (Moovi / Custom LMS)', Boolean(moodle.baseUrl || moodle.ssoUrl), [
+          mkField('Moodle Base URL', moodle.baseUrl, {
+            type: 'url',
+            placeholder: 'https://moovi.uvigo.gal',
+            onSave: (v) => { saveMoodle({ baseUrl: v, presetId: v && !/moovi\.uvigo\.gal/i.test(v) ? 'custom' : (moodle.presetId || 'moovi-uvigo') }); syncDom('moodleUrl', v); },
+          }),
+          mkField('SAML2 / SSO Login URL (optional)', moodle.ssoUrl, {
+            type: 'url',
+            placeholder: 'https://moovi.uvigo.gal/auth/saml2/login.php?…',
+            onSave: (v) => { saveMoodle({ ssoUrl: v }); syncDom('moodleSsoUrl', v); },
+          }),
+        ]),
+        mkGroup('GitHub (Auto-Chunked Sync)', Boolean(github.repo || github.token), [
+          mkField('Repository (owner/repo)', github.repo, {
+            placeholder: 'username/my-notes',
+            onSave: (v) => { saveGithub({ repo: v }); syncDom('githubRepoInput', v); },
+          }),
+          mkField('Branch', github.branch || 'main', {
+            placeholder: 'main',
+            onSave: (v) => saveGithub({ branch: v || 'main' }),
+          }),
+          mkField('Personal Access Token', github.token, {
+            type: 'password',
+            placeholder: 'ghp_… or github_pat_…',
+            onSave: (v) => { saveGithub({ token: v }); syncDom('githubTokenInput', v); },
+          }),
+        ]),
+        mkGroup('Nextcloud / WebDAV', Boolean(webdav.url || webdav.password), [
+          mkField('WebDAV / Share URL', webdav.url, {
+            type: 'url',
+            placeholder: 'https://cloud.example.com/remote.php/dav/files/user/',
+            onSave: (v) => { saveWebdav({ url: v }); syncDom('webdavUrlInput', v); },
+          }),
+          mkField('Password / App Token', webdav.password, {
+            type: 'password',
+            placeholder: 'App password or share password',
+            onSave: (v) => { saveWebdav({ password: v }); syncDom('webdavPassInput', v); },
+          }),
+        ]),
+      );
+    },
+  };
+}
+
 // The built-in cards, in the order the wizard shows them.
 export function registerBuiltInModules({ rBridge = globalThis.notecompleteRBridge, office = globalThis.notecompleteOffice, agents = globalThis.notecompleteAgents, storage = globalThis.localStorage } = {}) {
   registry.clear();
   registerModule(mathModule({ rBridge }));
   registerModule(euroOfficeModule({ storage, bridge: office }));
   registerModule(chineseModule());
+  registerModule(cloudProvidersModule({ storage }));
   registerModule(agentsModule(agents));
   return moduleList();
 }
