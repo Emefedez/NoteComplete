@@ -2597,14 +2597,29 @@ body.bar-compact .tab { height: 22px; }
 .notes-panel[hidden] { display: none; }
 .notes-resize { position: absolute; left: -3px; top: 0; bottom: 0; width: 6px; cursor: ew-resize; z-index: 2; }
 .notes-resize:hover { background: color-mix(in srgb, var(--accent) 35%, transparent); }
-.notes-head { gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
-.notes-head h2 { margin: 0; font-size: 14px; }
-.notes-head button { min-height: 26px; padding: 0 9px; font-size: 12px; }
+.notes-head { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.notes-head h2 { margin: 0; font-size: 14px; flex: none; white-space: nowrap; }
+.notes-head-strip { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: nowrap; align-items: center; justify-content: flex-end; gap: 4px; overflow-x: auto; scrollbar-width: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.notes-head-strip::-webkit-scrollbar { display: none; }
+.notes-head-strip.is-overflowing { justify-content: flex-start; }
+.notes-head-strip.is-dragging { cursor: grabbing; }
+.notes-head-strip[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+.notes-head-strip[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 22px); mask-image: linear-gradient(to right, transparent, #000 22px); }
+.notes-head-strip[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); }
+.notes-head-strip > * { flex: none; white-space: nowrap; }
+.notes-head button { min-height: 26px; padding: 0 8px; font-size: 12px; flex: none; white-space: nowrap; }
+.notes-head .notes-close { margin-left: 2px; padding: 0; width: 26px; min-width: 26px; border-left: 1px solid var(--line); border-radius: 0 6px 6px 0; }
 .notes-head [aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
-.notes-follow { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.notes-follow { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); white-space: nowrap; flex: none; padding: 0 2px; }
 .notes-commands:empty { display: none; }
 /* TinyMDE ships fixed light colours; these follow the app theme instead. */
-.notes-commands .TMCommandBar { display: flex; flex-wrap: wrap; gap: 2px; height: auto; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--chrome); }
+.notes-commands .TMCommandBar { display: flex; flex-wrap: nowrap; align-items: center; gap: 2px; height: auto; padding: 4px 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--chrome); overflow-x: auto; scrollbar-width: none; cursor: grab; }
+.notes-commands .TMCommandBar::-webkit-scrollbar { display: none; }
+.notes-commands .TMCommandBar.is-dragging { cursor: grabbing; }
+.notes-commands .TMCommandBar[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+.notes-commands .TMCommandBar[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 22px); mask-image: linear-gradient(to right, transparent, #000 22px); }
+.notes-commands .TMCommandBar[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); }
+.notes-commands .TMCommandBar > * { flex: none; }
 .notes-commands .TMCommandBar .TMCommandButton { width: 28px; height: 28px; margin: 0; padding: 5px; border-radius: 6px; background: transparent; color: var(--ink); fill: var(--ink); }
 .notes-commands .TMCommandBar .TMCommandButton svg { fill: currentColor; }
 .notes-commands .TMCommandBar .TMCommandButton_Inactive { background: transparent; }

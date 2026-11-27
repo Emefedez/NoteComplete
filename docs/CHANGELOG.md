@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.31
+
+- **Attach files directly in Ask AI (`+` button):** Attach multiple notes, PDFs, Markdown, Office files, or images with automatic MCP & directory access.
+
 ## 2.0.30
 
 - **One-click paste AI-generated tables as Table prefabs** directly from Ask AI chat onto the current page (or into Markdown).

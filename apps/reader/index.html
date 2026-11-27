@@ -1278,13 +1278,14 @@
           <div id="notesResize" class="notes-resize" title="Drag to resize"></div>
           <div class="row notes-head">
             <h2>Notes</h2>
-            <span class="spacer"></span>
-            <button id="notesTraceBtn" type="button" class="fmt-trace" title="Generate &amp; insert stroke order trace prefab for highlighted Chinese characters" hidden>笔</button>
-            <button id="notesMarker" type="button" title="Tie what follows to the page you are on">+ Page</button>
-            <button id="notesPreview" type="button" aria-pressed="false" title="Show the notes formatted">Preview</button>
-            <label class="notes-follow" title="Scroll the notes to the section of the page you are reading"><input id="notesFollow" type="checkbox" checked /> Follow</label>
-            <button id="notesHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Notes cheat sheet" title="What the keys and Markdown do (?)"></button>
-            <button id="closeNotes" type="button" aria-label="Close notes">×</button>
+            <div id="notesHeadStrip" class="notes-head-strip" role="toolbar" aria-label="Notes actions">
+              <button id="notesMarker" type="button" title="Tie what follows to the page you are on">+ Page</button>
+              <button id="notesPreview" type="button" aria-pressed="false" title="Show the notes formatted">Preview</button>
+              <label class="notes-follow" title="Scroll the notes to the section of the page you are reading"><input id="notesFollow" type="checkbox" checked /> Follow</label>
+              <button id="notesTraceBtn" type="button" class="fmt-trace" title="Generate &amp; insert stroke order trace prefab for highlighted Chinese characters" hidden>笔</button>
+              <button id="notesHelpBtn" type="button" class="icon-button" data-icon="help" aria-label="Notes cheat sheet" title="What the keys and Markdown do (?)"></button>
+            </div>
+            <button id="closeNotes" type="button" class="notes-close" aria-label="Close notes" title="Close notes (N)">×</button>
           </div>
           <div id="notesCommands" class="notes-commands"></div>
           <div id="notesEditor" class="notes-editor"></div>
