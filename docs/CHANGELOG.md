@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.19
+
+- **Sent images stay visible in AI chats.** Images attached or pasted into Ask AI, Quiz explanations, and Flashcard Ask AI now remain shown inside your sent message bubbles until you start a new conversation, click to enlarge in the image viewer, and are preserved when saving to or reopening from the Scratchpad.
+- **Home type filter simplified.** Removed the legacy `NotePart` and `NoteComp` entries from the Home file-type filter; legacy `.notepart` and `.notecomp` files still appear and open normally alongside other files.
+
 ## 2.0.18
 
 - **Find (Ctrl F) finds formulas.** A search such as `B(n,p)` used to split into the letters b, n and p, each also matching any word that starts with it, so nearly every page came up. A term written without spaces with signs inside (`B(n,p)`, `P(X≤3)`, `x-ray`) is now searched as one, also where the PDF or the handwriting recognition broke it into pieces; a single letter matches only that letter.
