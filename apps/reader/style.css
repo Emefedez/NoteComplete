@@ -1674,7 +1674,7 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .page-bg-inline > button svg, .ocr-actions button svg { width: 15px; height: 15px; flex: none; }
 .page-bg-picked { margin: -2px 0 10px 8.5em; font-size: 12px; }
 .page-bg-note.warn { color: var(--accent); font-weight: 500; }
-.ocr-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 4px; }
+.ocr-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 4px; }
 @media (prefers-color-scheme: dark) { .find-snippet mark { background: #7a6210; } }
 
 /* Ask AI: a floating panel on the right, like the find bar. */
@@ -2215,7 +2215,7 @@ body.show-keys [data-key][data-key-icon]::after { position: absolute; top: -6px;
 #qualityDialog label.quality-check { display: flex; gap: 8px; align-items: flex-start; line-height: 1.4; }
 .quality-check input { flex: none; margin: 2px 0 0; }
 .quality-check .muted { display: block; font-size: 12px; }
-.quality-presets, .quality-actions { display: flex; gap: 6px; }
+.quality-presets, .quality-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .quality-presets button { flex: 1; min-width: 0; padding: 3px 4px; font-size: 12px; background: var(--fill); }
 .quality-presets button:hover { background: var(--accent-soft); }
 .quality-presets button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }

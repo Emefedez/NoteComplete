@@ -881,6 +881,49 @@ function replaceRelationsAndSymbols(str) {
 }
 
 /**
+ * Checks whether the selection [startOffset, endOffset] in `fullText` lies strictly inside
+ * an already-open `$...$` or `$$...$$` math span (so adapting it should not add extra `$`).
+ * @param {string} fullText
+ * @param {number} startOffset
+ * @param {number} endOffset
+ * @returns {boolean}
+ */
+export function isInsideMathDelimiters(fullText, startOffset, endOffset) {
+  if (typeof fullText !== 'string' || startOffset == null || endOffset == null) return false;
+  if (startOffset < 0 || endOffset < startOffset || endOffset > fullText.length) return false;
+  const selected = fullText.slice(startOffset, endOffset);
+  if (/(?<!\\)\$/.test(selected)) return false;
+
+  let mode = null; // null | 'inline' | 'block'
+  let inCode = false;
+  for (let i = 0; i < startOffset; i++) {
+    const ch = fullText[i];
+    if (ch === '\\') { i++; continue; }
+    if (ch === '`') { inCode = !inCode; continue; }
+    if (inCode) continue;
+    if (ch === '$') {
+      if (fullText[i + 1] === '$') {
+        if (mode === 'block') mode = null;
+        else if (mode === null) mode = 'block';
+        i++;
+      } else {
+        if (mode === 'inline') mode = null;
+        else if (mode === null) mode = 'inline';
+      }
+    } else if (ch === '\n' && mode === 'inline') {
+      mode = null;
+    }
+  }
+  if (!mode) return false;
+
+  const after = fullText.slice(endOffset);
+  if (mode === 'block') return /(?<!\\)\$\$/.test(after);
+  const nextNl = after.indexOf('\n');
+  const restOfLine = nextNl === -1 ? after : after.slice(0, nextNl);
+  return /(?<!\\)\$/.test(restOfLine);
+}
+
+/**
  * Pure function converting shorthand math notation to clean LaTeX (without `$` delimiters).
  * @param {string} input
  * @returns {string}
@@ -900,6 +943,14 @@ export function adaptMathToLatex(input) {
 
   // Protect existing \text{...} blocks so their prose is never rewritten
   s = replaceNamedCall(s, /\\text\{/g, (_m, inner) => protect(`\\text{${inner}}`));
+
+  // Strip any inner/nested unescaped math delimiters ($...$, $$...$$, \(...\), \[...\])
+  // so adapting an expression that already contains adapted math merges cleanly into one box.
+  s = s.replace(/(?<!\\)\\\(([\s\S]*?)(?<!\\)\\\)/g, '$1');
+  s = s.replace(/(?<!\\)\\\[([\s\S]*?)(?<!\\)\\\]/g, '$1');
+  s = s.replace(/(?<!\\)\$/g, '');
+  s = s.trim();
+  if (!s) return '';
 
   // Stage 1: Annotated equals & arrows (before <=, =>, ->, = and Greek)
   s = replaceAnnotatedOperators(s, protect);

@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.24
+
+- **Fixed horizontal toolbar expanding when popping the tool settings panel (e.g. pressing `P` twice).** Inline styles for `#toolOptionsMirror` now match its `data-mirror-id` descendants so the toolbar stays at its compact single-row height.
+
 ## 2.0.23
 
 - **Expanded Math Adaptation shorthands & cheat sheet.** Added sets & logic (`forall`/`paratodo`, `exists`/`existe`, `isin`/`pert`/`in RR`, `notin`, `emptyset`/`vacio`, `union`/`cup`, `inter`/`cap`, `subset`/`subseteq`, `RR`/`NN`/`ZZ`/`QQ`/`CC`), `abs()`/`floor()`/`ceil()`, upright math functions (`ln`, `log`, `sin`, `cos`, `tan`, `exp`), `partial`/`nabla`, and operators (`===`, `=/=`, `<>`, `-+`, `<<`, `>>`, `...`, `propto`) — all searchable in the bilingual cheat sheet.

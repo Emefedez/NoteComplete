@@ -9,7 +9,7 @@
 //   openTranslation(text, { near })
 import { icon } from '../icons.js';
 import { openContextMenu } from '../context-menu.js';
-import { adaptMath, adaptMathToLatex } from '../math/math-adapt.js';
+import { adaptMath, adaptMathToLatex, isInsideMathDelimiters } from '../math/math-adapt.js';
 import { openMathAdaptSheet } from '../math/math-adapt-sheet.js';
 import { HAN, hasHan, lookUp, listen, lookupable, editableReplacer } from './zh-menu.js';
 import {
@@ -82,10 +82,11 @@ function buildRow(tag, controls) {
   return row;
 }
 // Also for text found another way (the grab tool's region): `rect` in client pixels.
-export function showBar(text, rect, near = null, selection = false, replace = null) {
+export function showBar(text, rect, near = null, selection = false, replace = null, insideMath = false) {
   fromSelection = selection;
   const isEditable = typeof replace === 'function';
   const inMathBar = Boolean(near?.closest?.('.math-bar-input'));
+  const inMath = inMathBar || Boolean(insideMath);
   const inTinyMde = Boolean(near?.closest?.('.TinyMDE'));
   const isZh = hasHan(text) || isPinyin(text);
   const rows = [];
@@ -94,9 +95,9 @@ export function showBar(text, rect, near = null, selection = false, replace = nu
     rows.push(buildRow('Math', [
       textButton(
         'Adapt math',
-        inMathBar ? 'Adapt shorthand notation to LaTeX' : 'Adapt shorthand math to inline LaTeX ($…$)',
+        inMath ? 'Adapt shorthand notation to LaTeX' : 'Adapt shorthand math to inline LaTeX ($…$)',
         async (t) => {
-          const out = inMathBar ? adaptMathToLatex(t) : adaptMath(t, { wrap: 'inline' });
+          const out = inMath ? adaptMathToLatex(t) : adaptMath(t, { wrap: 'inline' });
           await replace(out);
           host.status?.('Adapted math to LaTeX.');
         },
@@ -175,7 +176,19 @@ export function showBar(text, rect, near = null, selection = false, replace = nu
   });
 }
 
-// The selection worth a bar at the end of a gesture: { text, rect, near, replace } or null.
+// The selection worth a bar at the end of a gesture: { text, rect, near, replace, insideMath } or null.
+function rangeInsideMath(editable, range) {
+  try {
+    const pre = document.createRange();
+    pre.selectNodeContents(editable);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const start = pre.toString().length;
+    const len = range.toString().length;
+    return isInsideMathDelimiters(editable.textContent || '', start, start + len);
+  } catch {
+    return false;
+  }
+}
 function currentSelection(lastPointer) {
   const active = document.activeElement;
   if (isTextField(active) && !active.closest(SKIP)) {
@@ -187,6 +200,7 @@ function currentSelection(lastPointer) {
       text: active.value.slice(a, b),
       rect: { left: x, right: x, top: Math.max(r.top, y - 10), bottom: Math.min(r.bottom, y + 10) },
       near: active,
+      insideMath: isInsideMathDelimiters(active.value, a, b),
       replace: async (to) => {
         active.focus();
         active.setSelectionRange(a, b);
@@ -205,7 +219,8 @@ function currentSelection(lastPointer) {
   const rect = rects.at(-1) || range.getBoundingClientRect();
   const editable = near.closest?.('[contenteditable="true"], [contenteditable=""]');
   const replace = editable ? editableReplacer(editable, range, text) : null;
-  return { text, rect, near, replace };
+  const insideMath = editable ? rangeInsideMath(editable, range) : false;
+  return { text, rect, near, replace, insideMath };
 }
 
 export function installZhSelection(h = {}) {
@@ -220,7 +235,7 @@ export function installZhSelection(h = {}) {
       const isEditable = Boolean(s?.replace);
       if (!s || !text || text.length > MAX || (!isZh && !isEditable)) return fromSelection && hideBar();
       if (text === barFor && s.near === barNear && !bar?.hidden) return;
-      showBar(text, s.rect, s.near, true, s.replace);
+      showBar(text, s.rect, s.near, true, s.replace, s.insideMath);
     }, 30);
   };
   document.addEventListener('pointerup', (e) => { pointer = [e.clientX, e.clientY]; if (!e.target.closest?.('.zh-select-bar')) check(); }, true);
@@ -229,21 +244,32 @@ export function installZhSelection(h = {}) {
   document.addEventListener('selectionchange', () => { if (bar && !bar.hidden && fromSelection && !String(currentSelection(pointer)?.text || '').trim()) hideBar(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && bar && !bar.hidden) hideBar(); }, true);
   document.addEventListener('contextmenu', (e) => {
-    if (e.defaultPrevented || e.shiftKey) return;
+    if (e.defaultPrevented) return;
     const target = e.target;
     if (!(target instanceof Element) || target.closest(SKIP)) return;
     const s = currentSelection([e.clientX, e.clientY]);
     const text = String(s?.text || '').trim();
     if (!s || !s.replace || !text || text.length > MAX || hasHan(text)) return;
     const inMathBar = Boolean(s.near?.closest?.('.math-bar-input'));
+    const inMath = inMathBar || Boolean(s.insideMath);
+    if (e.shiftKey) {
+      if (isPinyin(text)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      hideBar();
+      const out = inMath ? adaptMathToLatex(text) : adaptMath(text, { wrap: 'inline' });
+      Promise.resolve(s.replace(out)).then(() => host.status?.('Adapted math to LaTeX.'));
+      return;
+    }
     e.preventDefault();
     hideBar();
     const entries = [
       {
-        label: inMathBar ? 'Adapt math to LaTeX' : 'Adapt math to LaTeX ($…$)',
+        label: inMath ? 'Adapt math to LaTeX' : 'Adapt math to LaTeX ($…$)',
         icon: 'math',
+        key: '⇧ Right-click',
         run: async () => {
-          const out = inMathBar ? adaptMathToLatex(text) : adaptMath(text, { wrap: 'inline' });
+          const out = inMath ? adaptMathToLatex(text) : adaptMath(text, { wrap: 'inline' });
           await s.replace(out);
           host.status?.('Adapted math to LaTeX.');
         },

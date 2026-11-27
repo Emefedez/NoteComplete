@@ -1092,13 +1092,6 @@ export function moodleBrowser({
       };
     }
     if ($('moodleHiddenToggle')) {
-      const hiddenCount = courses.filter(isCourseHidden).length;
-      $('moodleHiddenToggle').hidden = !connected || view !== 'courses' || (!hiddenCount && !showHiddenCourses);
-      $('moodleHiddenToggle').setAttribute('aria-pressed', String(showHiddenCourses));
-      $('moodleHiddenToggle').classList.toggle('active', showHiddenCourses);
-      $('moodleHiddenToggle').textContent = showHiddenCourses ? `Showing hidden (${hiddenCount})` : `Hidden (${hiddenCount})`;
-    }
-    if ($('moodleHiddenToggle')) {
       $('moodleHiddenToggle').onclick = () => {
         showHiddenCourses = !showHiddenCourses;
         controls();
