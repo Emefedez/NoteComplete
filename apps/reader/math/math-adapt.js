@@ -823,16 +823,56 @@ function replaceRelationsAndSymbols(str) {
   s = s.replace(/=>/g, '\\Rightarrow');
   s = s.replace(/->/g, '\\to');
   s = s.replace(/<-/g, '\\leftarrow');
+  s = s.replace(/===/g, '\\equiv');
+  s = s.replace(/=\/=|<>/g, '\\neq');
   s = s.replace(/<=/g, '\\le');
   s = s.replace(/>=/g, '\\ge');
+  s = s.replace(/<</g, '\\ll');
+  s = s.replace(/>>/g, '\\gg');
   s = s.replace(/!=/g, '\\neq');
   s = s.replace(/\+-/g, '\\pm');
+  s = s.replace(/-\+/g, '\\mp');
+  s = s.replace(/\.\.\./g, '\\dots');
 
   // Multiplication `*` between math terms -> `\cdot`
   s = s.replace(/\s*\*\s*/g, ' \\cdot ');
 
-  // Infinity `inf` on word boundary -> `\infty`
-  s = s.replace(/(?<![\\a-zA-Z0-9\u00C0-\u024F])inf(?![a-zA-Z0-9\u00C0-\u024F])/g, '\\infty');
+  // abs(x), floor(x), ceil(x)
+  s = replaceNamedCall(s, /(?<![\\a-zA-Z0-9\u00C0-\u024F])abs\(/g, (_m, inner) => `|${inner.trim()}|`);
+  s = replaceNamedCall(s, /(?<![\\a-zA-Z0-9\u00C0-\u024F])floor\(/g, (_m, inner) => `\\lfloor ${inner.trim()} \\rfloor`);
+  s = replaceNamedCall(s, /(?<![\\a-zA-Z0-9\u00C0-\u024F])ceil\(/g, (_m, inner) => `\\lceil ${inner.trim()} \\rceil`);
+
+  // Standard upright math functions when followed by `(`
+  s = s.replace(/(?<![\\a-zA-Z0-9\u00C0-\u024F])(ln|log|sin|cos|tan|exp)(?=\()/g, '\\$1');
+
+  // Sets, logic, calculus & blackboard bold (strict word boundaries)
+  const W_PRE = '(?<![\\\\a-zA-Z0-9\\u00C0-\\u024F])';
+  const W_POST = '(?![a-zA-Z0-9\\u00C0-\\u024F])';
+  const wordSyms = [
+    ['inf', '\\infty'],
+    ['propto', '\\propto'],
+    ['forall|paratodo', '\\forall'],
+    ['exists|existe', '\\exists'],
+    ['notin', '\\notin'],
+    ['isin|pert', '\\in'],
+    ['emptyset|vacio', '\\emptyset'],
+    ['union|cup', '\\cup'],
+    ['inter|cap', '\\cap'],
+    ['subseteq', '\\subseteq'],
+    ['subset|subc', '\\subset'],
+    ['partial', '\\partial'],
+    ['nabla', '\\nabla'],
+    ['RR', '\\mathbb{R}'],
+    ['NN', '\\mathbb{N}'],
+    ['ZZ', '\\mathbb{Z}'],
+    ['QQ', '\\mathbb{Q}'],
+    ['CC', '\\mathbb{C}'],
+  ];
+  // `x in RR` / `x en RR` -> `x \in \mathbb{R}`
+  s = s.replace(new RegExp(`${W_PRE}(?:in|en)\\s+(?=(?:RR|NN|ZZ|QQ|CC|\\\\mathbb)${W_POST})`, 'g'), '\\in ');
+  for (const [pat, rep] of wordSyms) {
+    s = s.replace(new RegExp(`${W_PRE}(?:${pat})${W_POST}`, 'g'), rep);
+  }
 
   // Greek letters on strict word boundaries
   s = s.replace(GREEK_RE, (_m, name) => `\\${name}`);
@@ -1224,12 +1264,20 @@ export const MATH_ADAPT_CHEATSHEET = [
     titleEs: 'Relaciones, letras griegas y operadores',
     items: [
       {
-        notation: '+- / <= / >= / !=',
+        notation: '+- / -+ / <= / >= / != / =/= / ===',
         example: 'x <= y != z',
         latex: 'x \\le y \\neq z',
-        en: 'Plus-minus and inequality relations',
-        es: 'Más-menos y desigualdades',
-        tags: ['pm', 'le', 'ge', 'neq', 'inequality', 'desigualdad'],
+        en: 'Plus-minus, minus-plus, inequalities & equivalence',
+        es: 'Más-menos, desigualdades y equivalencia',
+        tags: ['pm', 'mp', 'le', 'ge', 'neq', 'equiv', 'inequality', 'desigualdad'],
+      },
+      {
+        notation: '<< / >> / ... / propto',
+        example: 'x_1, x_2, ..., x_n',
+        latex: 'x_{1}, x_{2}, \\dots, x_{n}',
+        en: 'Much less/greater, ellipsis, proportional to',
+        es: 'Mucho menor/mayor, puntos suspensivos, proporcional a',
+        tags: ['ll', 'gg', 'dots', 'ellipsis', 'propto', 'proporcional'],
       },
       {
         notation: '<=> / => / -> / <-',
@@ -1246,6 +1294,52 @@ export const MATH_ADAPT_CHEATSHEET = [
         en: 'Greek letters (word-bounded) and multiplication dot',
         es: 'Letras griegas (solo palabras completas) y producto',
         tags: ['greek', 'griegas', 'alpha', 'theta', 'lambda', 'sigma', 'cdot'],
+      },
+    ],
+  },
+  {
+    titleEn: 'Sets, Logic & Standard Functions',
+    titleEs: 'Conjuntos, lógica y funciones',
+    items: [
+      {
+        notation: 'forall / paratodo / exists / existe',
+        example: 'forall x in RR',
+        latex: '\\forall x \\in \\mathbb{R}',
+        en: 'Universal & existential quantifiers and number sets (RR, NN, ZZ, QQ, CC)',
+        es: 'Cuantificadores (para todo, existe) y conjuntos numéricos',
+        tags: ['forall', 'exists', 'paratodo', 'existe', 'real', 'reales', 'RR', 'NN', 'ZZ', 'in'],
+      },
+      {
+        notation: 'isin / pert / notin / emptyset / vacio',
+        example: 'A inter B = vacio',
+        latex: 'A \\cap B = \\emptyset',
+        en: 'Set membership, union (union/cup), intersection (inter/cap), subset, empty set',
+        es: 'Pertenencia, unión, intersección, subconjunto y conjunto vacío',
+        tags: ['set', 'conjunto', 'union', 'inter', 'cup', 'cap', 'subset', 'vacio', 'emptyset', 'pert', 'notin'],
+      },
+      {
+        notation: 'abs(x) / floor(x) / ceil(x)',
+        example: 'abs(x - mu)',
+        latex: '|x - \\mu|',
+        en: 'Absolute value, floor, and ceiling',
+        es: 'Valor absoluto, suelo (parte entera) y techo',
+        tags: ['abs', 'absoluto', 'floor', 'ceil'],
+      },
+      {
+        notation: 'ln(x) / log(x) / sin(x) / cos(x) / exp(x)',
+        example: 'ln(0.1) = -15 * lambda',
+        latex: '\\ln(0.1) = -15 \\cdot \\lambda',
+        en: 'Upright logarithmic, exponential & trigonometric functions',
+        es: 'Funciones logarítmicas, exponenciales y trigonométricas',
+        tags: ['ln', 'log', 'sin', 'cos', 'tan', 'exp', 'logaritmo'],
+      },
+      {
+        notation: 'partial / nabla',
+        example: '(partial L) / (partial theta) = 0',
+        latex: '\\frac{\\partial L}{\\partial \\theta} = 0',
+        en: 'Partial derivative & nabla gradient (e.g. maximum likelihood)',
+        es: 'Derivada parcial y gradiente nabla (ej. máxima verosimilitud)',
+        tags: ['partial', 'parcial', 'nabla', 'verosimilitud', 'likelihood', 'derivada'],
       },
     ],
   },
