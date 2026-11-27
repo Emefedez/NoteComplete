@@ -5,7 +5,7 @@
 // (part.rs), so any of it selects all of it. app.js wires it in with figureInserts().
 import { rgbaOf } from "./text-box.js";
 import { graphItems } from "./graph.js";
-import { tableItems, tableNaturalSize } from "./table.js";
+import { tableItems, tableNaturalSize, tableSpec } from "./table.js";
 import { editorOf, moduleOf } from "./prefab-registry.js";
 import { missingPackFor, missingPackMessage } from "./prefab-packs.js";
 import { editGraph, editTable } from "./compound-dialogs.js";
@@ -61,6 +61,23 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     try { items = compoundItems(kind, compoundBox(p, kind, box, size), chosen); } catch (e) { return status(e.message, true), false; }
     await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
     status(`${kind === "graph" ? "Graph" : "Table"} inserted. Select it to move it, resize it or edit it again; one undo removes it.`);
+    return true;
+  }
+  // Place a pre-populated Table prefab directly onto the page (e.g. from an AI chat table)
+  // without opening the modal editor first; still fully editable via Select → Edit table.
+  async function placeTableDirect(p, spec = {}, box = null) {
+    const startedEmpty = !app.doc;
+    if (startedEmpty ? !canReplace() : (!p || !ensureEditableLayer())) return false;
+    if (startedEmpty) {
+      p = await openBlankNoteForPrefab("Table");
+      if (!p || !ensureEditableLayer()) return false;
+    }
+    const chosen = tableSpec({ header: true, background: "header", tint: "blue", fit: true, ...spec });
+    const size = ((w, h) => [w, Math.min(h, p.size[1] - 60)])(...tableNaturalSize(chosen));
+    let items;
+    try { items = compoundItems("table", compoundBox(p, "table", box, size), chosen); } catch (e) { return status(e.message, true), false; }
+    await action("drawMany", { page: p.index, lines: items.lines, images: items.images });
+    status("Table pasted as prefab. Select it to move, resize, or edit; one undo removes it.");
     return true;
   }
   // The editor of a graph or table: its module's (prefabs/graph, prefabs/table: a movable window
@@ -766,5 +783,5 @@ export function figureInserts({ $, TOOL_DEFAULTS, action, call, canReplace, clos
     return spec ? { spec } : null;
   }
   $("editCompound").onclick = () => editCompound(selection.item);
-  return { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
+  return { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, placeTableDirect, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi };
 }

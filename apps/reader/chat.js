@@ -8,6 +8,41 @@ import { modelPicker } from './model-picker.js';
 import { runAI } from './small-model.js';
 import { renderMarkdown, plainText, rememberAiFile } from './rich-text.js';
 import { windowOf } from './floating.js';
+import { parseHtmlTable } from './table-paste.js';
+import { icon } from './icons.js';
+
+// Extract a Table prefab spec ({ cells, merges, header, background, tint, fit }) from a rendered
+// <table> element inside an AI chat answer, preserving KaTeX formulas as inline $…$ LaTeX.
+export function extractTableSpecFromElement(tableEl) {
+  if (!tableEl) return null;
+  const clone = tableEl.cloneNode(true);
+  if (typeof clone.querySelectorAll === 'function') {
+    for (const k of clone.querySelectorAll('.katex')) {
+      const tex = k.querySelector('annotation[encoding="application/x-tex"]')?.textContent?.trim();
+      if (tex) k.replaceWith(document.createTextNode(`$${tex}$`));
+    }
+  }
+  const parsed = parseHtmlTable(clone.outerHTML || '');
+  if (!parsed || !parsed.cells?.length) return null;
+  return {
+    cells: parsed.cells,
+    merges: parsed.merges || [],
+    header: true,
+    background: 'header',
+    tint: 'blue',
+    fit: true,
+  };
+}
+
+export function tableSpecToMarkdown(spec) {
+  const rows = spec?.cells || [];
+  if (!rows.length) return '';
+  const esc = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\n+/g, '<br>');
+  const head = rows[0].map(esc);
+  const sep = head.map(() => '---');
+  const body = rows.slice(1).map((r) => `| ${r.map(esc).join(' | ')} |`);
+  return [`| ${head.join(' | ')} |`, `| ${sep.join(' | ')} |`, ...body].join('\n');
+}
 
 const $ = id => document.getElementById(id);
 
@@ -49,17 +84,47 @@ export function normalizeThreadMessages(messages = [], fallbackText = '') {
 
 // Text documents (documentInfo().unit 'section') send the section being read and
 // the selected text instead of page images; their answers have no page to go on.
-export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, notesText = async () => '', keep = null, selectedText = () => '', win = null, onNoteChanged = null }) {
+export function chatController({ ai, pageCanvas, pageText, documentInfo, currentPage, selection, notePath, status, providers, markdown, toTextBox, toTablePrefab = null, notesText = async () => '', keep = null, selectedText = () => '', win = null, onNoteChanged = null }) {
   const sectioned = () => documentInfo().unit === 'section';
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
   let history = [], busy = false, attachments = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
+  function attachTablePasteButtons(body) {
+    if (!toTablePrefab || !body || typeof body.querySelectorAll !== 'function') return;
+    for (const old of body.querySelectorAll('.chat-table-actions')) old.remove();
+    const tables = [...body.querySelectorAll('table')];
+    for (const tbl of tables) {
+      const bar = document.createElement('div');
+      bar.className = 'chat-table-actions';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chat-paste-table';
+      btn.title = sectioned()
+        ? 'Paste this table into your Markdown document'
+        : 'Paste this table directly as an editable Table prefab on the current page';
+      btn.append(icon('table'), Object.assign(document.createElement('span'), { textContent: sectioned() ? 'Paste table' : 'Paste as table prefab' }));
+      btn.onclick = async () => {
+        const spec = extractTableSpecFromElement(tbl);
+        if (!spec) return status('Could not read table cells.', true);
+        btn.disabled = true;
+        try {
+          await toTablePrefab(spec, tableSpecToMarkdown(spec));
+        } finally {
+          btn.disabled = false;
+        }
+      };
+      bar.append(btn);
+      tbl.after(bar);
+    }
+  }
   // Answers render as Markdown (lists, tables, code, formulas). Under each, T
   // puts its text in a text box on the current page; ⧉ copies it.
-  function answer(item, content) {
+  function answer(item, content, { withTableButtons = false } = {}) {
     const body = item.querySelector('.chat-body') || item.appendChild(Object.assign(document.createElement('div'), { className: 'chat-body' }));
-    return renderMarkdown(body, content, markdown).catch(() => { body.replaceChildren(renderAnswer(content)); });
+    return renderMarkdown(body, content, markdown)
+      .then(() => { if (withTableButtons) attachTablePasteButtons(body); })
+      .catch(() => { body.replaceChildren(renderAnswer(content)); });
   }
   function actions(item, content, upto = history.slice()) {
     const row = document.createElement('div');
@@ -78,7 +143,29 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     copy.onclick = () => navigator.clipboard.writeText(plainText(content)).then(() => status('Answer copied.'), () => status('The clipboard is not available here.', true));
     // Scratchpad: this conversation up to this answer, kept with the note.
     const snap = upto.slice(), id = conversation, title = chatTitle || snap.find(m => m.role === 'user')?.content || 'Ask AI';
-    row.append(box, copy, scratchButton(keep, () => ({ id, title, messages: snap })));
+    const bodyTables = typeof item.querySelectorAll === 'function' ? [...item.querySelectorAll('.chat-body table')] : [];
+    let tableBtn = null;
+    if (toTablePrefab && bodyTables.length) {
+      tableBtn = document.createElement('button');
+      tableBtn.type = 'button';
+      tableBtn.className = 'chat-to-table';
+      tableBtn.title = sectioned()
+        ? 'Paste table(s) from this answer into your Markdown document'
+        : 'Paste table(s) from this answer directly as editable Table prefab(s) on this page';
+      tableBtn.append(icon('table'), Object.assign(document.createElement('span'), { textContent: bodyTables.length > 1 ? `Tables (${bodyTables.length})` : 'Table prefab' }));
+      tableBtn.onclick = async () => {
+        tableBtn.disabled = true;
+        try {
+          for (const tbl of bodyTables) {
+            const spec = extractTableSpecFromElement(tbl);
+            if (spec) await toTablePrefab(spec, tableSpecToMarkdown(spec));
+          }
+        } finally {
+          tableBtn.disabled = false;
+        }
+      };
+    }
+    row.append(...[box, tableBtn, copy, scratchButton(keep, () => ({ id, title, messages: snap }))].filter(Boolean));
     item.append(row);
   }
   function bubble(role, content, note = '', images = []) {
@@ -270,7 +357,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       );
       waiting.querySelector('small')?.remove();
       dots.remove();
-      await answer(waiting, text);
+      await answer(waiting, text, { withTableButtons: true });
       actions(waiting, text.trim());
       follow?.(question, text.trim());
       if (targetNotePath && onNoteChanged) {
@@ -329,8 +416,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     for (const [i, m] of normalized.entries()) {
       const { item, rendered } = bubble(m.role, m.content, '', m.images);
       if (m.role === 'assistant') {
-        if (rendered) renders.push(rendered);
-        actions(item, m.content, normalized.slice(0, i + 1));
+        const done = (rendered || Promise.resolve()).then(() => {
+          attachTablePasteButtons(item.querySelector('.chat-body'));
+          actions(item, m.content, normalized.slice(0, i + 1));
+        });
+        renders.push(done);
       }
     }
     setHeading(title || firstUser || '');

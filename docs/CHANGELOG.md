@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.29
+
+- **Apple Notes import (`Import, export and share…` → `Import Apple Notes…`):** Direct `NoteStore.sqlite` reader (protobuf + CRDT tables, headings, checklists, highlights, hashtags, nested folders) and `.zip`/HTML/Markdown export importer.
+
 ## 2.0.28
 
 - **Fixed `Ctrl+Click` / middle-click opening a blank Home tab instead of the clicked document.** `tabs:new` now passes the actual file path string instead of the boolean return of `openablePath()`.

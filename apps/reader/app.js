@@ -7703,7 +7703,7 @@ const projectModelController = {
   applyRename: (modelId, newName, opts) => applyProjectRename(modelId, newName, opts),
 };
 // Graphs, tables, prefabs, UML and the figure editors on the page (figures.js).
-const { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
+const { chooseFigureSpec, editCompound, editPrefabByPart, exerciseRefs, figureEditor, figureIsOpen, importDiagramSpec, insertCompound, insertPrefab, insertUml, pickWhole, placePrefab, placeTableDirect, redrawResized, replacePrefabSpec, svgToPngFile, syncKeptRefsUi } = figureInserts({
   $,
   TOOL_DEFAULTS,
   action,
@@ -8023,7 +8023,30 @@ async function reloadNoteFromDisk(targetPath) {
   home?.renderRecent?.();
   status("Note updated with AI changes.");
 }
-const chat = chatController({ ...studyDeps, selection, selectedText: () => textSource.selected(), providers: () => ai.providers(), markdown: (text) => call("markdownHtml", { text }), toTextBox: (text) => textBox.answerToTextBox(text), onNoteChanged: reloadNoteFromDisk });
+const chat = chatController({
+  ...studyDeps,
+  selection,
+  selectedText: () => textSource.selected(),
+  providers: () => ai.providers(),
+  markdown: (text) => call("markdownHtml", { text }),
+  toTextBox: (text) => textBox.answerToTextBox(text),
+  toTablePrefab: async (spec, mdTable) => {
+    if (doc && panels[page]) {
+      await placeTableDirect(panels[page], spec);
+      return;
+    }
+    if (mdTable) {
+      const notes = await notesApi().catch(() => null);
+      if (notes?.append) {
+        notes.append(`\n\n${mdTable}\n`);
+        status("Table pasted into your Markdown notes.");
+        return;
+      }
+    }
+    await placeTableDirect(null, spec);
+  },
+  onNoteChanged: reloadNoteFromDisk,
+});
 audio.transcript.jobs = jobs;
 audio.transcript.ai = ai;
 // The scissors in the audio panel: only the text of a chosen segment (audio-trim.js).
