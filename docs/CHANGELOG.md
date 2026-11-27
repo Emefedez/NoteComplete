@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.22
+
+- **On-demand Math Adaptation (shorthand → LaTeX) & thematic selection hover bar.** Highlight math shorthand in any editable field (Notes, Markdown editor, Math Bar, text boxes) and click **Adapt math** / **Adapt block** in the new multi-row thematic hover bar or right-click menu to convert it to coherent LaTeX.
+- **Searchable bilingual Math Notation & LaTeX Cheat Sheet.** Open `?` from the selection bar or Math Bar to search in English or Spanish and see custom notation, equivalent LaTeX syntax, and live KaTeX previews side by side.
+- **Moodle polish: course images fixed (on by default), hide/restore courses with an eye icon, and fixed SSO password caching.**
+- **Ask AI prompt escalation.** Ask AI focuses on the current page first, then proactively checks nearby pages, the rest of the note via MCP, and related files/web knowledge when needed.
+
 ## 2.0.21
 
 - **Official Moodle Mobile API login (`admin/tool/mobile/launch.php`) & Sign in again button.** Moodle SSO sign-in now captures the long-lived Moodle Mobile Web Service token via `moodlemobile://token=…` (stored encrypted on device, with automatic fallback to SSO cookies) and no longer mistakes logged-out guest pages for a completed sign-in. Added a **Sign in again** button in the Moodle bar to clear stale cookies and force a fresh login.
