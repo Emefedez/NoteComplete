@@ -2,7 +2,7 @@
 // under it with the tool, model and material chosen in the box, follow-ups keep the
 // thread, and the last answer is kept with the item: folded under it behind an arrow,
 // editable, and reused instead of asking again. Flashcards have the same box in study.js.
-import { scratchButton, newId } from './scratchpad.js';
+import { scratchButton, newId, normalizeMessageImages, renderMessageImages, openImagePreview } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 import { modelPicker } from './model-picker.js';
@@ -56,7 +56,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   const form = el('form', { className: 'practice-ask-form' }, input, send, stop, again, close);
   // Images pasted into the question go with it.
   const pasted = [], tray = el('div', { className: 'chat-attachments', hidden: true });
-  const drawTray = () => { tray.hidden = !pasted.length; tray.replaceChildren(...pasted.map((a, i) => { const f = el('figure'), im = el('img', { src: a.url, alt: a.label }), x = el('button', { type: 'button', textContent: '×', title: 'Remove' }); x.onclick = () => { pasted.splice(i, 1); drawTray(); growWindow(); }; f.append(im, x); return f; })); };
+  const drawTray = () => { tray.hidden = !pasted.length; tray.replaceChildren(...pasted.map((a, i) => { const f = el('figure'), im = el('img', { src: a.url, alt: a.label, title: a.label ? `${a.label} — click to enlarge` : 'Click to enlarge' }), x = el('button', { type: 'button', textContent: '×', title: 'Remove' }); im.onclick = () => openImagePreview(a.url, a.label); x.onclick = () => { pasted.splice(i, 1); drawTray(); growWindow(); }; f.append(im, x); return f; })); };
   form.addEventListener('paste', async event => {
     if (!hasClipboardImage(event.clipboardData)) return;
     event.preventDefault();
@@ -112,6 +112,7 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     if (asking?.busy) ai?.cancel(tag);
     clearInterval(asking?.clock);
     asking = null;
+    pasted.length = 0; drawTray();
     box.hidden = true; stop.hidden = true;
     showSaved(item);
   }
@@ -147,7 +148,15 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
     const run = asking;
     if (run.busy) return;
     run.busy = true; input.value = ''; stop.hidden = false;
-    if (question) thread.append(el('p', { className: 'practice-ask-question', textContent: question }));
+    const sentPasted = pasted.splice(0); drawTray();
+    const sentImages = normalizeMessageImages(sentPasted);
+    if (question || sentImages.length) {
+      const qEl = el('div', { className: 'practice-ask-question' });
+      const gallery = renderMessageImages(sentImages);
+      if (gallery) qEl.append(gallery);
+      if (question) qEl.append(el('div', { className: 'chat-user-text', textContent: question }));
+      thread.append(qEl);
+    }
     const reply = el('div', { className: 'practice-ask-answer chat-body' });
     thread.append(reply);
     const started = Date.now();
@@ -162,12 +171,16 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
       const text0 = [prompt(current, { history: run.history, question, withImage: !!ctx.images.length }), ...(ctx.notes || []), ctx.text].filter(Boolean).join('\n\n');
       let timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => asking === run && render(reply, streamed)).then(growWindow); };
-      const mine = await Promise.all(pasted.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawTray();
+      const mine = await Promise.all(sentPasted.map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` })));
       const { text } = await runAI(ai, { provider: tool, model: picker?.value || '', notePath: want.note ? notePath() : '', images: [...ctx.images, ...mine], tag, prompt: text0 }, delta => { streamed += delta; timer ||= setTimeout(show, 120); }, { small: picker?.small, vision: picker?.vision });
       clearTimeout(timer); await rendering;
       if (asking !== run) return;
       const answer = text.trim();
-      run.history.push({ role: 'user', content: question || 'Explain this.' }, { role: 'assistant', content: answer });
+      const userContent = question || (sentImages.length ? 'Explain this image.' : 'Explain this.');
+      run.history.push(
+        sentImages.length ? { role: 'user', content: userContent, images: sentImages } : { role: 'user', content: userContent },
+        { role: 'assistant', content: answer },
+      );
       await render(reply, answer);
       growWindow();
       const upto = run.history.slice(), title = titleOf(current) || `Clarify: ${label}`;
@@ -186,10 +199,10 @@ export function explainBox({ ai, markdown, notePath, status, tag, label, mount, 
   // A follow-up moves the conversation to Ask AI with its thread and context.
   form.onsubmit = event => {
     event.preventDefault();
-    const q = input.value.trim(), current = asking?.item || item;
+    const rawQ = input.value.trim(), q = rawQ || (pasted.length ? 'Explain this image.' : ''), current = asking?.item || item;
     if (!current) return;
     // The first question is answered here; follow-ups move to Ask AI.
-    if (!asking?.history.length) return ask(current, q, { send: true });
+    if (!asking?.history.length) return ask(current, rawQ, { send: true });
     if (!q) return;
     if (!handoff) return ask(current, q);
     const history = asking.history, extraImages = pasted.splice(0); drawTray();

@@ -641,6 +641,7 @@ export function homeScreen({ library, drive, dropbox = null, moodle = null, gith
   let filters = { since: 0, period: '', tags: [], audio: false, favourites: false, sources: [], sizes: [], types: [], sort: 'name' };
   try { Object.assign(filters, JSON.parse(localStorage.getItem('notecomplete-home-filters')) || {}); } catch { /* Optional. */ }
   if (!Array.isArray(filters.types)) filters.types = [];
+  else filters.types = filters.types.filter(t => Object.hasOwn(TYPES, t));
   if (!Array.isArray(filters.sources)) filters.sources = [];
   const SOURCES = { drive: 'Google Drive', dropbox: 'Dropbox', moodle: 'Moodle', github: 'GitHub', webdav: 'Nextcloud / WebDAV', archive: 'Internet Archive' };
   const chip = (label, pressed, onclick) => {

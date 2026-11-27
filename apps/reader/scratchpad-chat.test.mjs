@@ -105,6 +105,12 @@ function makeDom(ids = []) {
         return { left: l, top: t, width: w, height: h };
       },
       focus() { this.focused = true; },
+      remove() {
+        if (!this.parentElement) return;
+        this.parentElement.children = this.parentElement.children.filter(c => c !== this);
+        this.parentElement.childNodes = this.parentElement.childNodes.filter(c => c !== this);
+        this.parentElement = null;
+      },
       scrollIntoView() {},
       showModal() { this.open = true; },
       close() { this.open = false; },
@@ -114,6 +120,8 @@ function makeDom(ids = []) {
   }
   function matches(el, sel) {
     if (sel === 'svg') return el.tagName === 'SVG';
+    if (sel === 'img') return el.tagName === 'IMG';
+    if (sel === 'small') return el.tagName === 'SMALL';
     if (sel === '*') return true;
     if (sel === '.chat-head strong') return el.tagName === 'STRONG' && el.parentElement?.classList.contains('chat-head');
     if (sel.startsWith('.')) return el.classList.contains(sel.slice(1));
@@ -436,4 +444,122 @@ test('allQuizzes renders Open in Ask AI on scratchpad items, closes dialog, and 
       assert.equal(openedChats[0].ctx.fp, 'fp1');
     },
   );
+});
+
+test('chatController keeps sent images visible in user bubbles until cleared and preserves them in Scratchpad/openThread', async () => {
+  await withFakeGlobals(
+    ['chatPanel', 'chatProvider', 'chatModel', 'chatModelOther', 'chatNoteLabel', 'chatNotes', 'chatPageLabel', 'chatPage', 'chatSelection', 'chatNote', 'chatInput', 'chatMessages', 'chatAttachments', 'chatForm', 'chatSend', 'chatStop', 'chatClear', 'chatClose', 'imageViewer', 'imageViewerImage'],
+    async ({ byId, createEl }) => {
+      const panel = byId.get('chatPanel');
+      panel.hidden = true;
+      const head = createEl('div');
+      head.classList.add('chat-head');
+      const strong = createEl('strong');
+      strong.append('Ask AI');
+      head.append(strong);
+      panel.append(head);
+
+      const pageWrap = createEl('label');
+      pageWrap.append(byId.get('chatPage'));
+      const select = byId.get('chatProvider');
+      select.add(new Option('Codex', 'codex'));
+      select.value = 'codex';
+
+      const kept = [];
+      const dataUrl = 'data:image/png;base64,iVBORw0KGgo=';
+      const savedFetch = globalThis.fetch;
+      globalThis.fetch = async () => ({
+        blob: async () => ({ type: 'image/png', arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }),
+      });
+
+      try {
+        const chat = chatController({
+          ai: {
+            async run(_req, onDelta) { onDelta?.('It is a diagram.'); return { text: 'It is a diagram.' }; },
+            models: async () => [],
+            cancel() {},
+          },
+          pageCanvas: async () => null,
+          pageText: async () => '',
+          documentInfo: () => ({ title: 'OS Notes', pages: 4, unit: 'page' }),
+          currentPage: () => 0,
+          selection: { item: null },
+          notePath: () => '',
+          status: () => {},
+          providers: async () => [{ id: 'codex', label: 'Codex', available: true }],
+          markdown: async (text) => `<p>${text}</p>`,
+          toTextBox: () => {},
+          notesText: async () => '',
+          keep: (entry) => kept.push(entry),
+        });
+
+        await chat.open();
+        byId.get('chatPage').checked = false;
+        byId.get('chatSelection').checked = false;
+        byId.get('chatNote').checked = false;
+
+        chat.attach(dataUrl, 'a region of page 1');
+        assert.equal(byId.get('chatAttachments').hidden, false);
+        assert.equal(byId.get('chatAttachments').querySelectorAll('img').length, 1);
+
+        byId.get('chatInput').value = 'What is shown here?';
+        await byId.get('chatForm').onsubmit({ preventDefault() {} });
+        // Wait a tick for async ask() to finish.
+        await new Promise((r) => setTimeout(r, 20));
+
+        // Pending tray is cleared after sending, while the sent user bubble keeps the image.
+        assert.equal(byId.get('chatAttachments').hidden, true);
+        const bubbles = byId.get('chatMessages').children;
+        const userBubble = bubbles.find((b) => b.classList.contains('chat-user'));
+        assert.ok(userBubble, 'user bubble should exist');
+        const sentImgs = userBubble.querySelectorAll('img');
+        assert.equal(sentImgs.length, 1);
+        assert.equal(sentImgs[0].src, dataUrl);
+        assert.equal(sentImgs[0].alt, 'a region of page 1');
+        assert.equal(userBubble.querySelector('.chat-user-text').textContent, 'What is shown here?');
+
+        // Clicking the sent image opens the lightbox viewer.
+        sentImgs[0].onclick();
+        assert.equal(byId.get('imageViewer').open, true);
+        assert.equal(byId.get('imageViewerImage').src, dataUrl);
+
+        // Saving to Scratchpad keeps the sent image on the user turn.
+        const assistantBubble = bubbles.at(-1);
+        assistantBubble.querySelector('.scratch-keep').onclick();
+        assert.equal(kept.length, 1);
+        assert.deepEqual(kept[0].messages[0].images, [{ url: dataUrl, label: 'a region of page 1' }]);
+
+        // Reopening that thread restores the sent image.
+        await chat.openThread(kept[0]);
+        const restoredImgs = byId.get('chatMessages').children[0].querySelectorAll('img');
+        assert.equal(restoredImgs.length, 1);
+        assert.equal(restoredImgs[0].src, dataUrl);
+
+        // Starting a new conversation removes the sent images when no longer needed.
+        byId.get('chatClear').onclick();
+        await new Promise((r) => setTimeout(r, 10));
+        assert.equal(byId.get('chatMessages').querySelectorAll('img').length, 0);
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
+    },
+  );
+});
+
+test('normalizeThreadMessages keeps valid data:image attachments and ignores invalid URLs', () => {
+  const valid = 'data:image/jpeg;base64,/9j/4AAQ';
+  const out = normalizeThreadMessages([
+    {
+      role: 'user',
+      content: 'Check this',
+      images: [
+        { url: valid, label: 'graph' },
+        { url: 'javascript:alert(1)', label: 'bad' },
+        { url: 'https://example.com/a.png', label: 'remote' },
+      ],
+    },
+  ]);
+  assert.deepEqual(out, [
+    { role: 'user', content: 'Check this', images: [{ url: valid, label: 'graph' }] },
+  ]);
 });

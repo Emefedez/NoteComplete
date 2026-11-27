@@ -1756,8 +1756,13 @@ body.bar-compact .bar-ai { min-height: 22px; padding: 0 8px; }
 /* Chat resize grip and attachments */
 .chat-attachments { display: flex; gap: 6px; padding: 6px 8px 0; flex-wrap: wrap; }
 .chat-attachments figure { position: relative; margin: 0; }
-.chat-attachments img { display: block; height: 54px; max-width: 120px; object-fit: cover; border: 1px solid var(--line); border-radius: 6px; }
+.chat-attachments img { display: block; height: 54px; max-width: 120px; object-fit: cover; border: 1px solid var(--line); border-radius: 6px; cursor: zoom-in; }
 .chat-attachments button { position: absolute; top: -6px; right: -6px; width: 18px; min-height: 18px; padding: 0; border-radius: 50%; background: var(--menu); border: 1px solid var(--line); font-size: 11px; }
+.chat-sent-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.chat-sent-images:last-child { margin-bottom: 0; }
+.chat-sent-images img { display: block; max-width: min(100%, 220px); max-height: 160px; object-fit: contain; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); cursor: zoom-in; }
+.chat-panel.window-large .chat-sent-images img { max-width: min(100%, 340px); max-height: 240px; }
+.chat-user-text { white-space: pre-wrap; }
 @keyframes region-flash { 0%, 100% { opacity: 0; } 15%, 75% { opacity: 1; } }
 .region-flash { position: absolute; z-index: 4; pointer-events: none; border: 3px solid #ff8a00; border-radius: 6px; background: #ff8a0018; animation: region-flash 2.6s ease; }
 table.shortcuts { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }

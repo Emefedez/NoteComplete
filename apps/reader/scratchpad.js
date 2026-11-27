@@ -16,6 +16,45 @@ export function scratchButton(keep, snapshot) {
 }
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 export { newId };
+
+// Validated image attachments carried on a chat message ({ url, label }).
+export function normalizeMessageImages(images) {
+  if (!Array.isArray(images)) return [];
+  const out = [];
+  for (const img of images) {
+    if (!img) continue;
+    const url = typeof img === 'string' ? img : String(img.url || '');
+    if (!/^data:image\//i.test(url)) continue;
+    const label = typeof img === 'object' && img.label ? String(img.label) : 'Attached image';
+    out.push({ url, label });
+  }
+  return out;
+}
+
+export function openImagePreview(url, alt = '') {
+  const viewer = $('imageViewer'), img = $('imageViewerImage');
+  if (!viewer || !img || !url) return;
+  img.src = url;
+  img.alt = alt || '';
+  viewer.onclick = () => viewer.close();
+  viewer.showModal?.();
+}
+
+export function renderMessageImages(images) {
+  const list = normalizeMessageImages(images);
+  if (!list.length) return null;
+  const wrap = document.createElement('div');
+  wrap.className = 'chat-sent-images';
+  for (const a of list) {
+    const img = document.createElement('img');
+    img.src = a.url;
+    img.alt = a.label;
+    img.title = a.label ? `${a.label} — click to enlarge` : 'Click to enlarge';
+    img.onclick = () => openImagePreview(a.url, a.label);
+    wrap.append(img);
+  }
+  return wrap;
+}
 // A conversation as Markdown: each question in bold, then its answer.
 export function conversationMarkdown(messages) {
   return messages.map(m => (m.role === 'user' ? `**${String(m.content).trim().replace(/\*\*/g, '').replace(/\n+/g, ' ')}**` : String(m.content).trim())).filter(Boolean).join('\n\n');
@@ -44,7 +83,17 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
   async function keep({ id, title, messages }) {
     if (!key()) return status('Open a note first.', true);
     const list = await read(), had = list.some(e => e.id === id);
-    await store.set('settings', key(), keepEntry(list, { id, title: String(title || 'Ask AI').slice(0, 160), text: conversationMarkdown(messages), messages: messages.map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: String(m.content) })), at: Date.now() }));
+    await store.set('settings', key(), keepEntry(list, {
+      id,
+      title: String(title || 'Ask AI').slice(0, 160),
+      text: conversationMarkdown(messages),
+      messages: messages.map(m => {
+        const images = normalizeMessageImages(m.images);
+        const base = { role: m.role === 'user' ? 'user' : 'assistant', content: String(m.content ?? '') };
+        return images.length ? { ...base, images } : base;
+      }),
+      at: Date.now(),
+    }));
     status(had ? 'Scratchpad entry rewritten up to this answer.' : 'Kept in this note’s scratchpad (View → Scratchpad…).');
     if ($('scratchDialog').open) render();
   }
@@ -79,7 +128,20 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
       for (const m of Array.isArray(entry.messages) && entry.messages.length ? entry.messages : parseConversation(entry.text)) {
         const bubble = document.createElement('li');
         bubble.className = m.role === 'user' ? 'chat-user' : 'chat-assistant';
-        if (m.role === 'user') bubble.textContent = m.content;
+        if (m.role === 'user') {
+          const gallery = renderMessageImages(m.images);
+          if (gallery) {
+            bubble.append(gallery);
+            if (m.content) {
+              const text = document.createElement('div');
+              text.className = 'chat-user-text';
+              text.textContent = m.content;
+              bubble.append(text);
+            }
+          } else {
+            bubble.textContent = m.content;
+          }
+        }
         else {
           const inner = document.createElement('div');
           inner.className = 'chat-body scratch-body';

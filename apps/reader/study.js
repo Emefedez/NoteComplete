@@ -6,7 +6,7 @@ import { factCheckPrompt, cleanFindings, findingsMarkdown, referenceText } from 
 import { pagesContext, jsonFrom, notesBlock, hasClipboardImage, clipboardImages, canvasImage, labelledText } from './ai-context.js';
 import { quizPrompt, prepareQuestions, quizCards, isRight, DEFAULT_QUIZ_PROMPT } from './quiz.js';
 import { modelPicker } from './model-picker.js';
-import { scratchButton, newId } from './scratchpad.js';
+import { scratchButton, newId, normalizeMessageImages, renderMessageImages, openImagePreview } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 import { renderAnswer } from './chat.js';
 import { runAI, smallStudy } from './small-model.js';
@@ -737,6 +737,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     if (asking?.busy) ai?.cancel('card-ask');
     clearInterval(asking?.clock);
     asking = null;
+    if (pastedCards.length) { pastedCards.length = 0; drawCardTray(); }
     $('practiceAskBox').hidden = true;
     $('practiceAskStop').hidden = true;
     showExplained();
@@ -777,7 +778,15 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     thread.busy = true;
     $('practiceAskInput').value = '';
     $('practiceAskStop').hidden = false;
-    if (question) $('practiceAskThread').append(Object.assign(document.createElement('p'), { className: 'practice-ask-question', textContent: question }));
+    const sentPasted = pastedCards.splice(0); drawCardTray();
+    const sentImages = normalizeMessageImages(sentPasted);
+    if (question || sentImages.length) {
+      const qEl = Object.assign(document.createElement('div'), { className: 'practice-ask-question' });
+      const gallery = renderMessageImages(sentImages);
+      if (gallery) qEl.append(gallery);
+      if (question) qEl.append(Object.assign(document.createElement('div'), { className: 'chat-user-text', textContent: question }));
+      $('practiceAskThread').append(qEl);
+    }
     const reply = Object.assign(document.createElement('div'), { className: 'practice-ask-answer chat-body' });
     $('practiceAskThread').append(reply);
     const started = Date.now();
@@ -793,13 +802,17 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
       // Re-rendered at most every 120 ms while it streams, like the chat.
       let timer = 0, rendering = Promise.resolve();
       const show = () => { timer = 0; rendering = rendering.then(() => asking === thread && renderInto(reply, streamed)).then(growWindow); };
-      const mine = await Promise.all(pastedCards.splice(0).map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` }))); drawCardTray();
+      const mine = await Promise.all(sentPasted.map(async (a, i) => ({ bytes: new Uint8Array(await (await fetch(a.url)).arrayBuffer()), type: a.url.startsWith('data:image/png') ? 'image/png' : 'image/jpeg', label: `pasted-${i + 1}` })));
       const { text } = await runAI(ai, { provider, model, notePath: want.note ? notePath() : '', images: [...context.images, ...mine], tag: 'card-ask', prompt }, delta => { streamed += delta; timer ||= setTimeout(show, 120); }, { small: cardModel?.small, vision: cardModel?.vision });
       clearTimeout(timer);
       await rendering;
       if (asking !== thread) return;
       const answer = text.trim();
-      thread.history.push({ role: 'user', content: question || 'Explain this card.' }, { role: 'assistant', content: answer });
+      const userContent = question || (sentImages.length ? 'Explain this image.' : 'Explain this card.');
+      thread.history.push(
+        sentImages.length ? { role: 'user', content: userContent, images: sentImages } : { role: 'user', content: userContent },
+        { role: 'assistant', content: answer },
+      );
       await renderInto(reply, answer);
       growWindow();
       if (keep) {
@@ -824,10 +837,10 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
   // A follow-up moves the conversation to Ask AI with its thread, the card and its page.
   $('practiceAskForm').onsubmit = async event => {
     event.preventDefault();
-    const q = $('practiceAskInput').value.trim(), card = practice?.queue[0];
+    const rawQ = $('practiceAskInput').value.trim(), q = rawQ || (pastedCards.length ? 'Explain this image.' : ''), card = practice?.queue[0];
     if (!card) return;
     // The first question is answered here; follow-ups move to Ask AI.
-    if (!(asking?.card === card && asking.history.length)) return ask(q, { send: true });
+    if (!(asking?.card === card && asking.history.length)) return ask(rawQ, { send: true });
     if (!q) return;
     if (!continueInChat) return ask(q);
     const history = asking.history, extraImages = pastedCards.splice(0), useNote = material().note; drawCardTray();
@@ -852,7 +865,7 @@ export function studyController({ ai, pageCanvas, pageText, pageWords = async ()
     let tray = $('practiceAskTray');
     if (!tray) { tray = Object.assign(document.createElement('div'), { id: 'practiceAskTray', className: 'chat-attachments' }); $('practiceAskForm').before(tray); }
     tray.hidden = !pastedCards.length;
-    tray.replaceChildren(...pastedCards.map((a, i) => { const f = document.createElement('figure'), im = Object.assign(document.createElement('img'), { src: a.url, alt: a.label }), x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Remove' }); x.onclick = () => { pastedCards.splice(i, 1); drawCardTray(); growWindow(); }; f.append(im, x); return f; }));
+    tray.replaceChildren(...pastedCards.map((a, i) => { const f = document.createElement('figure'), im = Object.assign(document.createElement('img'), { src: a.url, alt: a.label, title: a.label ? `${a.label} — click to enlarge` : 'Click to enlarge' }), x = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Remove' }); im.onclick = () => openImagePreview(a.url, a.label); x.onclick = () => { pastedCards.splice(i, 1); drawCardTray(); growWindow(); }; f.append(im, x); return f; }));
   };
   $('practiceAskForm').addEventListener('paste', async event => {
     if (!hasClipboardImage(event.clipboardData)) return;

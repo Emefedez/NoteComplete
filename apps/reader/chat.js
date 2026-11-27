@@ -2,7 +2,7 @@
 // Each question carries the current page (image with tape lifted + its text),
 // a crop of the current selection, and, for tools that support it, the note
 // file through the bundled MCP server so the AI can look at other pages.
-import { scratchButton, newId, parseConversation } from './scratchpad.js';
+import { scratchButton, newId, parseConversation, normalizeMessageImages, renderMessageImages, openImagePreview } from './scratchpad.js';
 import { canvasImage, textBlock, notesBlock, hasClipboardImage, clipboardImages } from './ai-context.js';
 import { modelPicker } from './model-picker.js';
 import { runAI } from './small-model.js';
@@ -40,8 +40,9 @@ export function normalizeThreadMessages(messages = [], fallbackText = '') {
     if (!m || (m.role !== 'user' && m.role !== 'assistant')) continue;
     if (m.content === undefined || m.content === null) continue;
     const content = String(m.content);
-    if (!content.trim()) continue;
-    out.push({ role: m.role, content });
+    const images = normalizeMessageImages(m.images);
+    if (!content.trim() && !images.length) continue;
+    out.push(images.length ? { role: m.role, content, images } : { role: m.role, content });
   }
   return out;
 }
@@ -80,18 +81,31 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     row.append(box, copy, scratchButton(keep, () => ({ id, title, messages: snap })));
     item.append(row);
   }
-  function bubble(role, content, note = '') {
+  function bubble(role, content, note = '', images = []) {
     const item = document.createElement('li');
     item.className = `chat-${role}`;
     const rendered = role === 'assistant' ? answer(item, content) : null;
-    if (role !== 'assistant') item.textContent = content;
+    if (role !== 'assistant') {
+      const gallery = renderMessageImages(images);
+      if (gallery) {
+        item.append(gallery);
+        if (content) {
+          const text = document.createElement('div');
+          text.className = 'chat-user-text';
+          text.textContent = content;
+          item.append(text);
+        }
+      } else {
+        item.textContent = content;
+      }
+    }
     if (note) { const small = document.createElement('small'); small.textContent = note; item.append(small); }
     $('chatMessages').append(item);
     item.scrollIntoView?.({ block: 'end' });
     return { item, rendered };
   }
-  function add(role, content, note = '') {
-    return bubble(role, content, note).item;
+  function add(role, content, note = '', images = []) {
+    return bubble(role, content, note, images).item;
   }
   function setHeading(title = '') {
     const head = $('chatPanel')?.querySelector?.('.chat-head strong');
@@ -163,7 +177,8 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     box.hidden = !attachments.length;
     box.replaceChildren(...attachments.map((a, i) => {
       const item = document.createElement('figure'), img = document.createElement('img'), remove = document.createElement('button');
-      img.src = a.url; img.alt = a.label;
+      img.src = a.url; img.alt = a.label; img.title = a.label ? `${a.label} — click to enlarge` : 'Click to enlarge';
+      img.onclick = () => openImagePreview(a.url, a.label);
       remove.type = 'button'; remove.textContent = '×'; remove.title = 'Remove'; remove.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
       item.append(img, remove);
       return item;
@@ -178,7 +193,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     if (busy || !question.trim()) return;
     busy = true;
     $('chatSend').hidden = true; $('chatStop').hidden = false;
-    add('user', question);
+    const pendingAttachments = attachments.splice(0);
+    renderAttachments();
+    const sentImages = normalizeMessageImages(pendingAttachments);
+    add('user', question, '', sentImages);
     // Three dots pulse until the first words arrive.
     const waiting = add('assistant', '', 'Thinking');
     const dots = document.createElement('span');
@@ -202,11 +220,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         const block = notesBlock(await notesText().catch(() => ''), model?.small ? 2000 : 20000);
         if (block) context.push(block);
       }
-      for (const [i, a] of attachments.splice(0).entries()) {
+      for (const [i, a] of pendingAttachments.entries()) {
         images.push(await dataUrlImage(a.url, `region-${i + 1}`));
         context.push(`The student attached ${a.label} as the image "region-${i + 1}". Focus on it.`);
       }
-      renderAttachments();
       const passage = $('chatSelection').checked && sections ? selectedText() : '';
       if (passage) context.push(`The student selected this passage; focus on it:\n"""\n${passage}\n"""`);
       if ($('chatSelection').checked) {
@@ -237,7 +254,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       }, { small: model?.small, vision: model?.vision });
       clearTimeout(timer);
       await rendering;
-      history.push({ role: 'user', content: question }, { role: 'assistant', content: text.trim() });
+      history.push(
+        sentImages.length ? { role: 'user', content: question, images: sentImages } : { role: 'user', content: question },
+        { role: 'assistant', content: text.trim() },
+      );
       waiting.querySelector('small')?.remove();
       dots.remove();
       await answer(waiting, text);
@@ -273,7 +293,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; $('chatMessages').replaceChildren(); setHeading(''); open(); };
+  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; attachments = []; renderAttachments(); $('chatMessages').replaceChildren(); setHeading(''); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
@@ -297,7 +317,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     list?.replaceChildren?.();
     const renders = [];
     for (const [i, m] of normalized.entries()) {
-      const { item, rendered } = bubble(m.role, m.content);
+      const { item, rendered } = bubble(m.role, m.content, '', m.images);
       if (m.role === 'assistant') {
         if (rendered) renders.push(rendered);
         actions(item, m.content, normalized.slice(0, i + 1));
@@ -336,7 +356,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       $('chatMessages').replaceChildren();
       const from = add('user', title);
       from.classList.add('chat-from');
-      for (const m of history) add(m.role, m.content);
+      for (const m of history) add(m.role, m.content, '', m.images);
       if (image) attach(image, label);
       for (const a of extraImages) if (a?.url) attach(a.url, a.label || 'a pasted image from the clipboard');
       $('chatSelection').checked = false;

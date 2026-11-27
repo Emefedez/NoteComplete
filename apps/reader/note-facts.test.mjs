@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
-import { noteFacts, matches, compareNotes } from './note-facts.js';
+import { noteFacts, matches, compareNotes, TYPES } from './note-facts.js';
 
 const ranged = bytes => { const calls = []; return { calls, read: async (a, b) => { calls.push(b - a); return bytes.slice(a, b); } }; };
 const sample = name => new Uint8Array(readFileSync(new URL(`../../samples/${encodeURIComponent(name)}`, import.meta.url)));
@@ -45,11 +45,14 @@ test('sorting is natural A–Z by default, or by date and size', () => {
   assert.deepEqual([...notes].sort(compareNotes('largest')).map(n => n.size), [50, 5, 1]);
 });
 
-test('file types filter in any combination; .notecomplete counts as NoteComp', () => {
+test('file types filter in any combination; legacy .notecomp/.notepart have no filter entry', () => {
   const note = name => ({ name, modified: 1, size: 1 });
-  assert.equal(matches(note('A.notecomplete'), { types: ['notecomp'] }), true);
-  assert.equal(matches(note('A.noteful'), { types: ['pdf', 'notepart'] }), false);
-  assert.equal(matches(note('A.NOTEPART'), { types: ['pdf', 'notepart'] }), true);
+  assert.equal('notepart' in TYPES, false);
+  assert.equal('notecomp' in TYPES, false);
+  assert.equal(matches(note('A.notecomplete'), { types: [] }), true);
+  assert.equal(matches(note('A.NOTEPART'), { types: [] }), true);
+  assert.equal(matches(note('A.noteful'), { types: ['pdf'] }), false);
+  assert.equal(matches(note('A.noteful'), { types: ['pdf', 'noteful'] }), true);
   assert.equal(matches(note('Exam.html'), { types: ['html'] }), true);
   assert.equal(matches(note('Diagram.jpg'), { types: ['image'] }), true);
   assert.equal(matches(note('A.png'), { types: [] }), true);

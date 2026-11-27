@@ -5,7 +5,7 @@ import { score } from './quiz.js';
 import { noteFingerprint } from './find.js';
 import { icon } from './icons.js';
 import { listExams, removeExam, examsForResource } from './exam-index.js';
-import { parseConversation } from './scratchpad.js';
+import { parseConversation, renderMessageImages } from './scratchpad.js';
 import { renderMarkdown } from './rich-text.js';
 
 const $ = id => document.getElementById(id);
@@ -331,7 +331,20 @@ export function allQuizzes({
             for (const m of msgs) {
               const bubble = document.createElement('li');
               bubble.className = m.role === 'user' ? 'chat-user' : 'chat-assistant';
-              if (m.role === 'user') bubble.textContent = m.content;
+              if (m.role === 'user') {
+                const gallery = renderMessageImages(m.images);
+                if (gallery) {
+                  bubble.append(gallery);
+                  if (m.content) {
+                    const text = document.createElement('div');
+                    text.className = 'chat-user-text';
+                    text.textContent = m.content;
+                    bubble.append(text);
+                  }
+                } else {
+                  bubble.textContent = m.content;
+                }
+              }
               else {
                 const inner = document.createElement('div');
                 inner.className = 'chat-body scratch-body';
