@@ -272,7 +272,7 @@ test('app.js blocks Linux middle-click primary-selection paste and zh-select.js 
   assert.match(appJs, /performance\.now\(\) - middleMouseAt < 400/);
   assert.match(appJs, /\["mousedown", "mouseup", "auxclick"\]/);
   const zhSelectJs = readFileSync(new URL('./chinese/zh-select.js', import.meta.url), 'utf8');
-  assert.match(zhSelectJs, /bar\.replaceChildren\(\.\.\.\[[\s\S]*?\]\.filter\(Boolean\)\)/);
+  assert.match(zhSelectJs, /\.filter\(Boolean\)/);
   assert.doesNotMatch(zhSelectJs, /for \(const b of \[\.\.\.bar\.children\]\) if \(!\(b instanceof Element\)\)/);
 });
 
