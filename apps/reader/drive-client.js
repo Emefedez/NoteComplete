@@ -10,7 +10,7 @@ export const supportedDriveFile = file => !String(file.mimeType || '').startsWit
   && (/\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|html?|pdf)$/i.test(file.name || '')
     || isImageName(file.name) || isAudioName(file.name, file.mimeType) || isVideoName(file.name, file.mimeType) || isOfficeName(file.name)
     || (hasExtension(file.name) ? isTextName(file.name) : String(file.mimeType || '').startsWith('text/'))
-    || ['text/html', 'text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/avif'].includes(file.mimeType));
+    || ['text/html', 'text/plain', 'text/markdown', 'application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/bmp', 'image/avif', 'image/heic', 'image/heif'].includes(file.mimeType));
 const fields = 'id,name,mimeType,modifiedTime,size,md5Checksum,parents,resourceKey,thumbnailLink,capabilities(canDownload)';
 const quote = value => String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 export function folderReference(value) {

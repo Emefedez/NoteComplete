@@ -1,6 +1,6 @@
 {
   "name": "notecomplete-desktop",
-  "version": "2.0.32",
+  "version": "2.0.33",
   "private": true,
   "description": "NoteComplete document reader and editor",
   "author": "NoteComplete contributors",
@@ -172,6 +172,22 @@
             "avif"
           ],
           "name": "AVIF image",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "heic"
+          ],
+          "name": "HEIC photo",
+          "role": "Viewer",
+          "rank": "Alternate"
+        },
+        {
+          "ext": [
+            "heif"
+          ],
+          "name": "HEIF photo",
           "role": "Viewer",
           "rank": "Alternate"
         },
@@ -492,6 +508,8 @@
         "image/gif",
         "image/bmp",
         "image/avif",
+        "image/heic",
+        "image/heif",
         "application/x-tar",
         "application/zip",
         "text/markdown",

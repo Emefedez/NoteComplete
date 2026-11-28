@@ -224,10 +224,16 @@ impl Image {
         let valid = match self.mime.as_str() {
             "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
             "image/jpeg" => bytes.starts_with(b"\xff\xd8\xff"),
+            // Kept as they came, so an animated GIF (or WebP / APNG) still moves on the page;
+            // Noteful's own notes hold these kinds too (package::picture_kind).
+            "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+            "image/webp" => {
+                bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+            }
             _ => false,
         };
         if !valid {
-            return Err(Error::new(0, "Unsupported image data; use PNG or JPEG"));
+            return Err(Error::new(0, "Unsupported image data; use PNG, JPEG, GIF or WebP"));
         }
         Ok(bytes)
     }

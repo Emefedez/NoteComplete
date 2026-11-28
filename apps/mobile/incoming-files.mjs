@@ -14,6 +14,8 @@ export const OPEN_TYPES = {
  'image/gif':['gif'],
  'image/bmp':['bmp'],
  'image/avif':['avif'],
+ 'image/heic':['heic'],
+ 'image/heif':['heif'],
  'application/x-tar':['tar'],
  'text/markdown':['md','markdown'],
  'text/x-markdown':['md'],

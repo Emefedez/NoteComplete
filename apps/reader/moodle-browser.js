@@ -244,7 +244,7 @@ export function moodleBrowser({
     }
   }
 
-  const IMAGE_NAME_RE = /\.(png|jpe?g|webp|gif|avif|bmp)$/i;
+  const IMAGE_NAME_RE = /\.(png|jpe?g|jfif|apng|webp|gif|avif|heic|heif|bmp)$/i;
   const SERVER_SCRIPT_EXTS = new Set(['php', 'asp', 'aspx', 'jsp', 'cgi', 'cfm', 'do']);
   const VIDEO_HOST_RE = /\b(?:youtube\.com|youtu\.be|vimeo\.com|tv\.uvigo\.es|campusremotouvigo|panopto|kaltura|mediasite|loom\.com|dailymotion\.com|twitch\.tv|stream\.microsoft\.com)\b/i;
   const VIDEO_MOD_RE = /(?:video|kalvid|kaltura|panopto|vimeo|youtube|stream|ubicast|mediasite|mediagallery)/i;

@@ -37,6 +37,10 @@ function decode(bytes) {
     decoder().postMessage({ id, bytes: bytes.buffer }, [bytes.buffer]);
   });
 }
+// A HEIC/HEIF file (its bytes) as a JPEG blob: a photo opened or imported from the computer.
+export function heicBlob(bytes) {
+  return decode(new Uint8Array(bytes));
+}
 // A short key for a data URL of a few hundred KB: its length and both ends.
 const keyOf = (href) => `${href.length}:${href.slice(0, 160)}:${href.slice(-160)}`;
 

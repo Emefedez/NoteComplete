@@ -25,7 +25,7 @@ export const isOfficeName = (name) => OFFICE_NAME.test(name || '');
 export const isTableName = (name) => /\.(csv|tsv)$/i.test(name || '');
 
 // Images opened directly as single-page notes (raster only; SVG is never opened as an image).
-export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'ico'];
+export const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'jfif', 'apng', 'webp', 'gif', 'bmp', 'avif', 'heic', 'heif', 'ico'];
 export const IMAGE_NAME = new RegExp(`\\.(${IMAGE_EXTENSIONS.join('|')})$`, 'i');
 export const isImageName = (name) => IMAGE_NAME.test(name || '');
 

@@ -59,7 +59,8 @@
         ],
         "image/jpeg": [
           ".jpg",
-          ".jpeg"
+          ".jpeg",
+          ".jfif"
         ],
         "image/webp": [
           ".webp"
@@ -72,6 +73,10 @@
         ],
         "image/avif": [
           ".avif"
+        ],
+        "image/heic": [
+          ".heic",
+          ".heif"
         ],
         "text/markdown": [
           ".md",
@@ -178,6 +183,8 @@
             "image/gif",
             "image/bmp",
             "image/avif",
+            "image/heic",
+            "image/heif",
             "text/markdown",
             "text/plain",
             "text/html",
@@ -214,6 +221,10 @@
             ".gif",
             ".bmp",
             ".avif",
+            ".heic",
+            ".heif",
+            ".jfif",
+            ".apng",
             ".md",
             ".markdown",
             ".txt",

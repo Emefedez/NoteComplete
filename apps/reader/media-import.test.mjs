@@ -51,3 +51,20 @@ test('files without an extension open as text when their content is text', async
   assert.equal(latin.text, 'Año');
   assert.equal(latin.title, 'notas');
 });
+test('GIF, WebP and animated PNG keep their own bytes; HEIC photos open as images', async () => {
+  const { pictureFormat } = await import('./media-import.js');
+  const enc = (s) => new Uint8Array([...s].map((c) => c.charCodeAt(0)));
+  const chunk = (type, length = 0) => enc(String.fromCharCode(0, 0, 0, length) + type + '\0'.repeat(length + 4));
+  const png = (...chunks) => new Uint8Array([...enc('\x89PNG\r\n\x1a\n'), ...chunks.flatMap((c) => [...c])]);
+  assert.equal(pictureFormat(enc('GIF89a\x01\0\x01\0')), 'gif');
+  assert.equal(pictureFormat(enc('RIFF\x10\0\0\0WEBPVP8 ')), 'webp');
+  assert.equal(pictureFormat(png(chunk('IHDR', 13), chunk('acTL', 8), chunk('IDAT', 2))), 'apng');
+  assert.equal(pictureFormat(png(chunk('IHDR', 13), chunk('IDAT', 2), chunk('acTL', 8))), null);
+  const heic = enc('\0\0\0\x18ftypheic\0\0\0\0mif1heic');
+  assert.equal(pictureFormat(heic), 'heic');
+  assert.equal(fileKind('IMG_0001.HEIC', heic), 'image');
+  assert.equal(fileKind('opaque', enc('\0\0\0\x18ftypmif1\0\0\0\0heic')), 'image');
+  // M4A audio is an ftyp file too: never a picture.
+  assert.equal(pictureFormat(enc('\0\0\0\x20ftypM4A \0\0\0\0')), null);
+  assert.equal(fileKind('photo.jfif', new Uint8Array([0xff, 0xd8, 0xff, 0xe0])), 'image');
+});

@@ -11,6 +11,7 @@ import { noteMode, setNoteMode } from './chinese/ruby.js';
 import { MARKER, PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu, prefabCommand, insertPrefabInto } from './markdown-prefab.js';
 import { highlightCommand, tinyMdeHighlightGrammar } from './md-highlight.js';
 import { paths as iconPaths } from './icons.js';
+import { attachPictureInput, pictureCommand } from './md-pictures.js';
 
 export { PREFAB_LINE, decorateTinyMdeLines, attachMarkdownPrefabContextMenu };
 
@@ -21,7 +22,7 @@ export const MARKDOWN_COMMANDS = [
   'bold', 'italic', 'strikethrough', highlightCommand(iconPaths.highlight), 'code', '|',
   'ul', 'ol', 'tasklist', '|',
   'blockquote', 'hr', '|',
-  'insertLink', 'insertImage',
+  'insertLink', 'insertImage', pictureCommand(),
 ];
 
 const $ = id => document.getElementById(id);
@@ -239,6 +240,8 @@ export function notesController({ call, jump, currentPage, store, status, editPr
       requestAnimationFrame(markLines);
     });
     $('notesEditor').querySelector('.TinyMDE')?.setAttribute('contenteditable', String(!shared || shared.canEdit));
+    // Pictures pasted or dropped in (an animated GIF stays animated).
+    attachPictureInput($('notesEditor'), (md) => { if (!shared || shared.canEdit) editor?.paste(md); });
     // Chinese typed here goes in through the editor (one change, so sharing sees it).
     if (mdEl()) attachIme(mdEl(), { kind: 'contenteditable', insert: (t) => editor?.paste(t), getMode: () => noteMode(fieldMode(zhMode())), setMode: (m) => { setFieldMode(zhMode(), m); setNoteMode(m); syncNotesZh(); } }).addButton(zhNotes);
     syncNotesZh();

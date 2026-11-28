@@ -7,7 +7,7 @@ import path from 'node:path';
 // Notes, PDFs, HTML, images, media, Office/e-book/notebook files, text formats (as in the
 // reader's text-types.js), and names without an extension, which open as text when their content is.
 const TEXT = 'txt|md|markdown|rst|adoc|asciidoc|org|rmd|qmd|csv|tsv|log|json|ya?ml|toml|xml|ini|conf|cfg|env|properties|sh|bash|zsh|fish|ps1|bat|py|c|h|cc|cpp|hpp|cs|java|kt|swift|dart|m?js|cjs|jsx|ts|tsx|css|scss|rs|go|rb|php|sql|tex|bib|r|m|jl|hs|asm|s|lua|vhdl?|v|sv|mk|cmake|nix|proto|awk|sed|diff|patch|puml|plantuml|pu|iuml|wsd';
-const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|rnote|html?|pdf|png|jpe?g|webp|gif|bmp|avif|ico|mp3|m4a|wav|ogg|oga|opus|flac|aac|weba|mp4|m4v|webm|mkv|mov|avi|ogv|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|rdata|rda|rds|${TEXT})$)|^[^.]+$`, 'i');
+const NOTE = new RegExp(`(\\.(noteful|nfedit|notepart|notecomp|notecomplete|goodnotes|ntb|rnote|html?|pdf|png|jpe?g|webp|gif|bmp|avif|heic|heif|jfif|apng|ico|mp3|m4a|wav|ogg|oga|opus|flac|aac|weba|mp4|m4v|webm|mkv|mov|avi|ogv|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|rdata|rda|rds|${TEXT})$)|^[^.]+$`, 'i');
 // A file without an extension is listed only when its start has no NUL bytes (text).
 async function textStart(file) {
   const handle = await openFile(file, 'r');

@@ -71,7 +71,7 @@ export function createSourcePicker(container, {
         <div class="sp-actions-row">
           <button type="button" class="sp-pick-files"></button>
           <button type="button" class="sp-pick-files-folder"></button>
-          <input type="file" class="sp-file-input" multiple accept=".noteful,.nfedit,.notecomp,.notecomplete,.pdf,.html,.htm,.md,.markdown,.txt,.docx,.docm,.dotx,.doc,.rtf,.odt,.fodt,.xlsx,.xlsm,.xlsb,.xls,.ods,.fods,.pptx,.pptm,.ppt,.odp,.epub,.ipynb,.csv,.tsv,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif" hidden />
+          <input type="file" class="sp-file-input" multiple accept=".noteful,.nfedit,.notecomp,.notecomplete,.pdf,.html,.htm,.md,.markdown,.txt,.docx,.docm,.dotx,.doc,.rtf,.odt,.fodt,.xlsx,.xlsm,.xlsb,.xls,.ods,.fods,.pptx,.pptm,.ppt,.odp,.epub,.ipynb,.csv,.tsv,.png,.jpg,.jpeg,.webp,.gif,.bmp,.avif,.heic,.heif,.jfif,.apng" hidden />
         </div>
         <p class="muted sp-hint">Add multiple notes, PDFs, HTML exams, Office docs, Markdown files, or images from disk.</p>
       </div>

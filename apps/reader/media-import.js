@@ -39,6 +39,8 @@ export function fileKind(name, bytes) {
   if (bytes[0] === 0x42 && bytes[1] === 0x4d && isImageName(name)) return "image";
   if (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01 && bytes[3] === 0x00 && /\.ico$/i.test(name)) return "image";
   if (bytes.length >= 12 && new TextDecoder("latin1").decode(bytes.subarray(4, 12)).startsWith("ftypavi")) return "image";
+  // HEIC/HEIF photos (an iPhone's camera), decoded by libheif (heic.js) on import.
+  if (pictureFormat(bytes) === "heic") return "image";
   // Goodnotes and Notability notebooks (zip archives) and Rnote notes (gzip JSON), imported as Noteful notes.
   if (/\.(goodnotes|ntb|rnote)$/i.test(name)) return "notebook";
   // .notecomplete: a tar (ustar magic at 257) with the note and its notes.
@@ -74,10 +76,65 @@ export function fileKind(name, bytes) {
   );
 }
 
-// `any`: whatever image the browser decodes (a pasted GIF, BMP or SVG too); it is kept as PNG.
+const HEIF_BRANDS = /^(heic|heix|hevc|hevx|heim|heis|mif1|msf1)$/;
+// What a picture's first bytes say it is, for the formats kept or decoded specially:
+// "gif", "webp", "apng" (an animated PNG: acTL before the first IDAT), "heic", or null.
+export function pictureFormat(bytes) {
+  const latin = (from, to) => new TextDecoder("latin1").decode(bytes.subarray(from, to));
+  const magic = latin(0, 6);
+  if (magic === "GIF87a" || magic === "GIF89a") return "gif";
+  if (bytes.length >= 12 && latin(0, 4) === "RIFF" && latin(8, 12) === "WEBP") return "webp";
+  if (bytes.length >= 12 && latin(4, 8) === "ftyp" && HEIF_BRANDS.test(latin(8, 12))) return "heic";
+  if (bytes[0] === 0x89 && latin(1, 4) === "PNG") {
+    // Chunks after the 8-byte signature: length (4, big-endian), type (4), data, CRC (4).
+    for (let at = 8; at + 8 <= bytes.length;) {
+      const length = ((bytes[at] << 24) | (bytes[at + 1] << 16) | (bytes[at + 2] << 8) | bytes[at + 3]) >>> 0;
+      const type = latin(at + 4, at + 8);
+      if (type === "acTL") return "apng";
+      if (type === "IDAT") break;
+      at += 12 + length;
+    }
+  }
+  return null;
+}
+// Animated pictures are kept as they came (the core stores GIF, WebP and PNG bytes as they are),
+// so they still move on the page; a still copy would lose every frame after the first.
+const KEPT = { gif: "image/gif", webp: "image/webp", apng: "image/png" };
+
+function base64Of(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).slice(String(reader.result).indexOf(",") + 1));
+    reader.onerror = () => reject(reader.error || Error("Could not read this image."));
+    reader.readAsDataURL(blob);
+  });
+}
+
+// `any`: whatever image the browser decodes (a pasted BMP or SVG too); it is kept as PNG. GIF,
+// WebP and animated PNG keep their own bytes, and HEIC/HEIF photos become JPEG.
 export async function readImage(file, { any = false } = {}) {
-  if (any ? !/^image\//.test(file.type || "") : fileKind(file.name, new Uint8Array(await file.slice(0, 64).arrayBuffer())) !== "image") {
-    throw Error(any ? "The clipboard does not hold an image this browser can read." : "Choose a PNG, JPEG or WebP image.");
+  const head = new Uint8Array(await file.slice(0, 64 * 1024).arrayBuffer());
+  if (any ? !/^image\//.test(file.type || "") && !pictureFormat(head) : fileKind(file.name, head) !== "image") {
+    throw Error(any ? "The clipboard does not hold an image this browser can read." : "Choose a PNG, JPEG, GIF, WebP, HEIC, AVIF, BMP or ICO image.");
+  }
+  const format = pictureFormat(head);
+  if (format === "heic") {
+    const { heicBlob } = await import("./heic.js");
+    const jpeg = await heicBlob(new Uint8Array(await file.arrayBuffer()));
+    const bitmap = await createImageBitmap(jpeg);
+    try {
+      return { base64: await base64Of(jpeg), mime: "image/jpeg", size: [bitmap.width, bitmap.height] };
+    } finally {
+      bitmap.close();
+    }
+  }
+  if (KEPT[format]) {
+    const bitmap = await createImageBitmap(file);
+    try {
+      return { base64: await base64Of(file), mime: KEPT[format], size: [bitmap.width, bitmap.height] };
+    } finally {
+      bitmap.close();
+    }
   }
   const bitmap = await createImageBitmap(file);
   const canvas = document.createElement("canvas");

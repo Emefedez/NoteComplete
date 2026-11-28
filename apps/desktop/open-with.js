@@ -19,6 +19,8 @@ export const OTHER_TYPES = [
   { ext: ['gif'], name: 'GIF image', mimeType: 'image/gif' },
   { ext: ['bmp'], name: 'BMP image', mimeType: 'image/bmp' },
   { ext: ['avif'], name: 'AVIF image', mimeType: 'image/avif' },
+  { ext: ['heic'], name: 'HEIC photo', mimeType: 'image/heic' },
+  { ext: ['heif'], name: 'HEIF photo', mimeType: 'image/heif' },
   { ext: ['tar'], name: 'Tar archive', mimeType: 'application/x-tar' },
   { ext: ['zip'], name: 'ZIP archive', mimeType: 'application/zip' },
   { ext: ['md', 'markdown'], name: 'Markdown document', mimeType: 'text/markdown' },

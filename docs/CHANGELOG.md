@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.32
+
+- **Single-row draggable Notes (`N`) sidebar header & toolbar with edge fades.** Reorganized the Notes sidebar actions (`+ Page`, `Preview`, `Follow`, `中`/`笔`, `?`) into a clean single-row click-and-drag scrollable strip with dynamic left/right fade masks (and `×` always pinned at the rightmost edge), plus made the Markdown command bar below it a single-row draggable fading strip too so neither ever wraps into two rows.
+
 ## 2.0.31
 
 - **Attach files directly in Ask AI (`+` button):** Attach multiple notes, PDFs, Markdown, Office files, or images with automatic MCP & directory access.

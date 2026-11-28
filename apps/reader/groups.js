@@ -47,7 +47,7 @@ export function folderLevel(members = [], sub = '') {
 
 // The chip before a document's name: its real format, short.
 const CHIPS = {
-  pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', gif: 'GIF', bmp: 'BMP', svg: 'SVG', avif: 'AVIF', ico: 'ICO',
+  pdf: 'PDF', png: 'PNG', jpg: 'JPG', jpeg: 'JPG', webp: 'WEBP', gif: 'GIF', bmp: 'BMP', svg: 'SVG', avif: 'AVIF', heic: 'HEIC', heif: 'HEIF', jfif: 'JPG', apng: 'APNG', ico: 'ICO',
   mp3: 'MP3', m4a: 'M4A', wav: 'WAV', ogg: 'OGG', oga: 'OGG', opus: 'OPUS', flac: 'FLAC', aac: 'AAC', weba: 'WEBA',
   mp4: 'MP4', m4v: 'M4V', webm: 'WEBM', mkv: 'MKV', mov: 'MOV', avi: 'AVI', ogv: 'OGV',
   goodnotes: 'Goodnotes', ntb: 'Notability', rnote: 'Rnote', noteful: 'Noteful', nfedit: 'Project', notecomp: 'NoteComp', notecomplete: 'NoteComp', notepart: 'NotePart',

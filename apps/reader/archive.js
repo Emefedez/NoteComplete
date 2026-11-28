@@ -81,7 +81,7 @@ export function typeLabel(name) {
   const n = String(name || '').split('/').pop(), ext = /\.([^.]+)$/.exec(n)?.[1];
   if (/\.(tgz|tar\.gz)$/i.test(n)) return 'Tar + gzip archive';
   const known = {
-    pdf: 'PDF', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', webp: 'WebP image', gif: 'GIF image', bmp: 'BMP image', svg: 'SVG image', avif: 'AVIF image', ico: 'ICO image',
+    pdf: 'PDF', png: 'PNG image', jpg: 'JPEG image', jpeg: 'JPEG image', webp: 'WebP image', gif: 'GIF image', bmp: 'BMP image', svg: 'SVG image', avif: 'AVIF image', heic: 'HEIC photo', heif: 'HEIF photo', jfif: 'JPEG image', apng: 'Animated PNG', ico: 'ICO image',
     mp3: 'MP3 audio', m4a: 'M4A audio', wav: 'WAV audio', ogg: 'OGG audio', oga: 'OGG audio', opus: 'Opus audio', flac: 'FLAC audio', aac: 'AAC audio', weba: 'WebM audio',
     mp4: 'MP4 video', m4v: 'M4V video', webm: 'WebM video', mkv: 'MKV video', mov: 'MOV video', avi: 'AVI video', ogv: 'OGV video',
     noteful: 'Noteful note', nfedit: 'NoteComplete project', goodnotes: 'Goodnotes notebook', ntb: 'Notability notebook', rnote: 'Rnote note',

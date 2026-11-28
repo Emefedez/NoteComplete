@@ -69,6 +69,12 @@
               "mimeType": "image/avif"
             },
             {
+              "mimeType": "image/heic"
+            },
+            {
+              "mimeType": "image/heif"
+            },
+            {
               "mimeType": "application/x-tar"
             },
             {
@@ -212,6 +218,12 @@
               "mimeType": "image/avif"
             },
             {
+              "mimeType": "image/heic"
+            },
+            {
+              "mimeType": "image/heif"
+            },
+            {
               "mimeType": "application/x-tar"
             },
             {
@@ -353,6 +365,12 @@
             },
             {
               "mimeType": "image/avif"
+            },
+            {
+              "mimeType": "image/heic"
+            },
+            {
+              "mimeType": "image/heif"
             },
             {
               "mimeType": "application/x-tar"

@@ -6,7 +6,7 @@
 
 export const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MiB
 export const CHUNKED_FORMAT = 'notecomplete-chunked-v1';
-const NOTE_EXT = /\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf|md|markdown|txt|html?|png|jpe?g|webp|gif|bmp|avif|mp3|m4a|wav|ogg|flac|mp4|webm|mkv|mov|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|csv|tsv)$/i;
+const NOTE_EXT = /\.(noteful|nfedit|notecomp|notecomplete|notepart|pdf|md|markdown|txt|html?|png|jpe?g|webp|gif|bmp|avif|heic|heif|jfif|apng|mp3|m4a|wav|ogg|flac|mp4|webm|mkv|mov|docx|docm|dotx|doc|rtf|odt|fodt|xlsx|xlsm|xlsb|xls|ods|fods|pptx|pptm|ppt|odp|epub|ipynb|csv|tsv)$/i;
 
 const toBase64Url = (bytes) => {
   let bin = '';

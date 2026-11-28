@@ -490,6 +490,9 @@ export function textViewer({ root, body, editorHost, title, format, edit, ruby =
       mde = { editor, bar };
       markEditorLines();
       wireIme(area.querySelector('.TinyMDE'), (t) => editor.paste(t));
+      // Pictures pasted or dropped in go in as Markdown pictures (md-pictures.js).
+      const { attachPictureInput } = await import('./md-pictures.js');
+      if (mine === mount) attachPictureInput(area, (md) => editor.paste(md));
       area.querySelector('.TinyMDE')?.focus?.();
     } else if (!markdown && codeLang() && text.length <= CODE_LIMIT) {
       // Source code: coloured as it is typed; Tab indents, Enter keeps the indentation. The
