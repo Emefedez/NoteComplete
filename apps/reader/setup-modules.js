@@ -582,7 +582,7 @@ export function browserSendModule(bridge = globalThis.notecompleteBrowserSend) {
       for (const text of [
         'In the browser, open chrome://extensions (brave://extensions, edge://extensions…) and turn on Developer mode.',
         'Press Load unpacked and choose the extension folder (Show folder opens it).',
-        'Right click a picture, link or page → Send to NoteComplete: the notebook open here is the default; the menu also lists the other open and Recent notebooks, and Choose in NoteComplete…',
+        'Right click a picture, link or page → Send to NoteComplete: the notebook open here is the default; the menu also lists the other open and Recent notebooks, and Choose in NoteComplete…. The extension button opens a send window you can drag files into.',
       ]) steps.append(Object.assign(doc.createElement('li'), { textContent: text }));
       const folder = doc.createElement('button');
       folder.type = 'button';

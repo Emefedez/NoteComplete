@@ -70,7 +70,7 @@ test('install: helper registered only in browsers that exist, extension unpacked
   await mkdir(path.join(home, '.config', 'chromium'), { recursive: true });
   const header = (name, size) => { const h = Buffer.alloc(512); h.write(name, 0); h.write(size.toString(8).padStart(11, '0'), 124); h.write('0', 156); return h; };
   const body = Buffer.from('{"version":"0.1.0"}');
-  const tgz = gzipSync(Buffer.concat([header('r/extension/manifest.json', body.length), body, Buffer.alloc(512 - body.length), header('r/README.md', 0), Buffer.alloc(1024)]));
+  const tgz = gzipSync(Buffer.concat([header('r/manifest.json', body.length), body, Buffer.alloc(512 - body.length), header('r/test/e2e.mjs', 0), header('r/.github/x.yml', 0), header('r/README.md', 0), Buffer.alloc(1024)]));
   const fetchImpl = async (url) => url.includes('/releases/latest')
     ? { ok: true, json: async () => ({ tag_name: 'v0.1.0', tarball_url: 'https://x/t.tgz' }) }
     : { ok: true, arrayBuffer: async () => tgz };
@@ -81,7 +81,7 @@ test('install: helper registered only in browsers that exist, extension unpacked
   const st = await s.status();
   assert.equal(st.installed, true);
   assert.equal(st.version, '0.1.0');
-  assert.deepEqual(await readdir(path.join(dir, 'data', 'browser-extension')), ['manifest.json']);
+  assert.deepEqual((await readdir(path.join(dir, 'data', 'browser-extension'))).sort(), ['README.md', 'manifest.json']);
   const manifest = JSON.parse(await readFile(path.join(home, '.config', 'chromium', 'NativeMessagingHosts', 'com.notecomplete.send.json'), 'utf8'));
   assert.equal(manifest.path, path.join(dir, 'data', 'send-host', 'notecomplete-send-host'));
   await s.uninstall();

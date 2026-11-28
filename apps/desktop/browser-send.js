@@ -5,8 +5,9 @@
 //     wrapper that runs it with this app's Electron as Node, and a host manifest in every
 //     browser's NativeMessagingHosts folder (the registry on Windows) that lets only the
 //     extension's id start it;
-//   - the extension itself: the latest release of the repository, its `extension/` folder
-//     unpacked into the app's settings folder, for chrome://extensions → Load unpacked.
+//   - the extension itself: the latest release of the repository (its top folder is the
+//     extension; test/ and dot folders are left out) unpacked into the app's settings folder,
+//     for chrome://extensions → Load unpacked.
 import path from 'node:path';
 import os from 'node:os';
 import { gunzipSync } from 'node:zlib';
@@ -120,11 +121,12 @@ export function browserSend({ userData, exe, hostSource, platform = process.plat
     const tar = await fetchImpl(release.tarball_url, { headers: { 'User-Agent': 'NoteComplete' } });
     if (!tar.ok) throw Error(`Could not download the extension (HTTP ${tar.status}).`);
     const files = untar(gunzipSync(Buffer.from(await tar.arrayBuffer())));
-    const wanted = files.map((f) => ({ ...f, rel: f.name.split('/').slice(1).join('/') })).filter((f) => f.rel.startsWith('extension/'));
-    if (!wanted.some((f) => f.rel === 'extension/manifest.json')) throw Error('The release has no extension folder.');
+    const wanted = files.map((f) => ({ ...f, rel: f.name.split('/').slice(1).join('/') }))
+      .filter((f) => f.rel && !f.rel.split('/').some((part) => part.startsWith('.') || part === 'test'));
+    if (!wanted.some((f) => f.rel === 'manifest.json')) throw Error('The release has no manifest.json.');
     await rm(extDir, { recursive: true, force: true });
     for (const f of wanted) {
-      const to = path.join(extDir, ...f.rel.slice('extension/'.length).split('/'));
+      const to = path.join(extDir, ...f.rel.split('/'));
       if (!to.startsWith(extDir + path.sep)) continue;
       await mkdir(path.dirname(to), { recursive: true });
       await writeFile(to, f.bytes);
