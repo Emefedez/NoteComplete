@@ -171,10 +171,11 @@ export function extendContextMenu(el, entries) {
   if (!open || open.el !== el || !list.some((e) => e !== '-')) return false;
   const extra = panel(list, '', open.state, 0);
   for (const b of extra.querySelectorAll(':scope > button')) b.classList.add('context-added');
-  const nodes = [...extra.childNodes, document.createElement('hr')];
-  const title = el.querySelector(':scope > .context-menu-title');
-  if (title) title.after(...nodes); else el.prepend(...nodes);
-  place(el, parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0);
+  // At the bottom, the menu where it was: what the pointer is on stays under it. Past the
+  // window's edge the menu scrolls instead of moving up.
+  el.append(document.createElement('hr'), ...extra.childNodes);
+  const z = uiZoom(), top = el.getBoundingClientRect().top / z, room = innerHeight / z - top - 8;
+  if (el.getBoundingClientRect().height / z > room) { el.style.maxHeight = `${Math.max(120, room)}px`; el.style.overflowY = 'auto'; }
   return true;
 }
 
