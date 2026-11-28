@@ -1,8 +1,6 @@
-## What's new in 2.0.42
+## What's new in 2.0.43
 
-- **Clickable local file links in Ask AI and on notebook pages.** Local `file://` links, bare absolute paths, paths with spaces or parentheses, and `#page=N` jumps now survive Markdown rendering in Ask AI and Scratchpad and open directly at the target page; `file://...#page=N` links on notebook pages open the linked file too.
-- **Open notes reload after AI expansion.** Expanding an already-open notebook via AI/MCP now reloads the updated file cleanly from disk when there are no unsaved edits.
-- **3-way AI document format setting (`Both` by default).** Reworked *Prefer Markdown* into *Both ink & Markdown (AI chooses)*, *Markdown only (+ prefabs)*, and *Handwritten ink only (+ prefabs)* across Setup, AI tools, MCP instructions, and bundled skills.
-- **Noteful ↔ `.nfedit` text box conversion & `.nfedit` default for MCP.** Editing a Noteful-imported text box now converts it in place into an editable `.nfedit` text box (supporting KaTeX math `∑`) in one undo step, and MCP notebooks default to `.nfedit` so interactive prefabs and KaTeX math are preserved.
+- **Reorder notebook pages from AI/MCP (`move_page`).** The NoteComplete MCP can now move any page to a new display position (`move_page(path, from_page, to_page)`), keeping a backup when editing in place and returning a preview of the page in its new place. AI study workflows can restructure or rebalance crowded notes instead of rebuilding them from scratch.
+- **Stricter layout rules for AI-generated handwritten notes.** The bundled skills now require a `page_layout` check before placing prefabs or text boxes, with 24–32 page units of clearance from every existing box, and document how to reorder pages, use pre-run editable R prefabs, and keep KaTeX math boxes pure LaTeX at size 20–22 with prose labels in ink.
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.
