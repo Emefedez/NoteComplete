@@ -168,7 +168,7 @@ export function buildSteps(env) {
   return [
     {
       id: 'look', label: 'Look', optional: false,
-      available: () => has(s, 'theme', 'darkPages', 'uiSize'),
+      available: () => has(s, 'theme', 'darkPages', 'uiSize', 'motion'),
       render(sec) {
         const body = section(sec, 'How NoteComplete looks', 'Changes show at once. They are also in the View menu.');
         if (s.theme) {
@@ -190,6 +190,10 @@ export function buildSteps(env) {
           smaller.onclick = () => step(-1); larger.onclick = () => step(1); reset.onclick = () => step(0);
           body.append(label('Interface size'), make('div', { className: 'wizard-inline-row' }, smaller, value, larger, reset,
             make('span', { className: 'wizard-hint', textContent: 'Menus, bars and dialogs; the pages zoom on their own.' })));
+        }
+        if (s.motion) {
+          body.append(toggle(s.motion, 'Animations', 'Menus, dialogs, panels, cards and pages fade and slide in. The scales make them quicker (below 1×) or slower.'));
+          if (s.motion.scales) body.append(s.motion.scales(make));
         }
       },
     },

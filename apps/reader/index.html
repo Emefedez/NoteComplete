@@ -20,7 +20,7 @@
   /><link rel="apple-touch-icon" href="./apple-touch-icon.png" /><meta
     name="apple-mobile-web-app-title"
     content="NoteComplete"
-  /><link rel="stylesheet" href="./style.css" /><link rel="stylesheet" href="./setup-wizard.css" /><link rel="stylesheet" href="./model-explorer.css" />
+  /><link rel="stylesheet" href="./style.css" /><link rel="stylesheet" href="./setup-wizard.css" /><link rel="stylesheet" href="./motion.css" /><link rel="stylesheet" href="./model-explorer.css" />
   <header class="chrome command-bar" id="commandBar">
     <button id="homeButton" class="bar-icon" data-icon="home" aria-label="Home" title="Home: recent notes and cloud storage"></button>
     <button id="tabCount" class="tab-count" type="button" aria-haspopup="menu" aria-expanded="false" title="Open tabs" hidden>1</button>
@@ -139,6 +139,8 @@
           <hr />
           <button data-proxy="pagesDark" data-icon="moon">Dark pages<kbd>D</kbd></button>
           <button id="qualityOpen" data-icon="image">Display quality…</button>
+          <button id="motionToggle" data-icon="layers" role="menuitemcheckbox" aria-checked="true" data-palette="Animations: on or off" title="Menus, dialogs, panels, cards and pages fade and slide in as they appear">Animations</button>
+          <button id="motionOpen" data-icon="settings" data-palette="Animation speed…" title="How long the animations take: one scale for menus and dialogs, one for lists, pages and panels">Animation speed…</button>
         </div>
       </details>
       <details class="menu bar-menu" id="pagesMenu">
@@ -1820,11 +1822,18 @@
   </div>
 </dialog>
 
+<dialog id="motionDialog" class="ocr-dialog motion-dialog" aria-labelledby="motionTitle">
+  <h2 id="motionTitle">Animations</h2>
+  <p class="muted">Scales stretch or shorten the animations: 1× as designed, less is quicker, more is slower.</p>
+  <label class="wizard-check"><input id="motionOn" type="checkbox" /><span><strong>Animations</strong></span></label>
+  <div id="motionScaleSlot"></div>
+  <div class="ocr-actions"><button id="motionReset" type="button">Back to 1×</button><span class="spacer"></span><button id="motionClose" type="button">Close</button></div>
+</dialog>
 <dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog float-dialog floating" data-window aria-labelledby="scratchTitle">
   <div class="float-head"><h2 id="scratchTitle">Scratchpad</h2><button id="scratchX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
   <ul id="scratchList" class="scratch-list"></ul>
   <p id="scratchEmpty" class="muted" hidden>Nothing kept yet: press Scratchpad under an AI answer.</p>
-  <div class="ocr-actions"><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
+  <div class="ocr-actions"><button id="scratchFoldAll" type="button" hidden>Collapse all</button><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
 </dialog>
 
 <dialog id="allQuizzesDialog" class="ocr-dialog saved-dialog all-study float-dialog floating" data-window aria-labelledby="allQuizzesTitle">

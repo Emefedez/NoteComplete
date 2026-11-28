@@ -130,12 +130,27 @@ import { pdfDetail } from "./pdf-detail.js";
 import { ViewCache, READS } from "./view-cache.js";
 import { createModelExplorer } from "./model-explorer.js";
 import { buildProjectModel, extractPrefabsFromPages, planRename } from "./project-model.js";
+import { installMotion, motion, motionScales } from "./motion.js";
 const $ = (id) => document.getElementById(id),
   ns = "http://www.w3.org/2000/svg";
 // Colour choices shared by the pen, shapes and text.
 const SWATCHES = ["#1f2328", "#246bce", "#d13b2f", "#2a9d63", "#8a4fd0", "#ff9f1c", "#ffdf38", "#e3c6e6"];
+installMotion();
 enhanceSelects();
 decorateIcons();
+// View → Animations (motion.js): on or off, and Animation speed… with its two scale bars.
+{
+  const mk = (tag, props = {}, ...kids) => { const el = Object.assign(document.createElement(tag), props); el.append(...kids.filter(Boolean)); return el; };
+  const show = (m) => { $("motionToggle").setAttribute("aria-checked", String(m.on)); $("motionOn").checked = m.on; };
+  show(motion.get());
+  motion.onChange(show);
+  $("motionScaleSlot").append(motionScales(mk));
+  $("motionToggle").onclick = () => { const on = !motion.get().on; motion.set({ on }); status(on ? "Animations on." : "Animations off."); };
+  $("motionOn").onchange = () => motion.set({ on: $("motionOn").checked });
+  $("motionReset").onclick = () => motion.set({ pop: 1, content: 1 });
+  $("motionClose").onclick = () => $("motionDialog").close();
+  $("motionOpen").onclick = () => { closeMenus(); $("motionDialog").showModal(); };
+}
 const globalAudio = globalAudioController({ bar: $("globalAudioBar"), header: $("commandBar"), status });
 // Audio, video and R files opened from anywhere (media-open.js).
 const { isMp3Name, isMp4Name, openExternalVideo, openMediaFile, openRStudioTarget } = mediaOpener({
@@ -8556,6 +8571,7 @@ $("uiReset").onclick = () => applyUiSize(0);
     settings: {
       theme: { get: () => savedTheme(), set: (v) => theme.set(v) },
       darkPages: { get: () => document.body.classList.contains("pages-dark"), set: (on) => setDarkPages(on) },
+      motion: { get: () => motion.get().on, set: (on) => motion.set({ on }), scales: (make) => motionScales(make) },
       uiSize: {
         get: () => (windows?.zoom ? null : webUiZoom),
         step: async (n) => {
