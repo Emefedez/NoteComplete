@@ -294,7 +294,8 @@ export function editMenu(params, contents) {
   }
   return [];
 }
-function openTab(win, file = null, restore = null) {
+// background: the tab opens behind the current one (Ctrl+click, middle click), as in a browser.
+function openTab(win, file = null, restore = null, { background = false } = {}) {
   const view = new WebContentsView({ webPreferences });
   view.setBackgroundColor(backdrop());
   const contents = view.webContents, id = contents.id;
@@ -302,7 +303,7 @@ function openTab(win, file = null, restore = null) {
   log.attach(contents, id);
   if (file) launchPending.set(id, file);
   if (restore) restorePending.set(id, restore);
-  tabs.add(win.id, id);
+  tabs.add(win.id, id, { activate: !background });
   contents.setWindowOpenHandler(({ url }) => {
     if (ownPage(url, home)) { openPage(url.slice(home.length)); return { action: 'deny' }; }
     if (/^(https?:|mailto:)/i.test(url)) shell.openExternal(url).catch(() => {});
@@ -354,10 +355,13 @@ function openTab(win, file = null, restore = null) {
   view.setVisible(false);
   win.contentView.addChildView(view);
   layout(win);
-  let shown = false;
-  const show = () => { const here = windowOf(contents); if (shown || !here) return; shown = true; activate(here, id); };
-  contents.once('dom-ready', () => setTimeout(show, 30));
-  setTimeout(show, 700);
+  if (background) broadcast(win);
+  else {
+    let shown = false;
+    const show = () => { const here = windowOf(contents); if (shown || !here) return; shown = true; activate(here, id); };
+    contents.once('dom-ready', () => setTimeout(show, 30));
+    setTimeout(show, 700);
+  }
   contents.loadURL(home).catch(error => dialog.showErrorBox('Could not open NoteComplete', error.message));
   return id;
 }
@@ -966,12 +970,12 @@ app.whenReady().then(async () => {
     return true;
   }));
   ipcMain.handle('tabs:list', guarded(event => tabs.list(tabs.windowOf(event.sender.id)).map(t => ({ ...t, current: t.id === event.sender.id }))));
-  ipcMain.handle('tabs:new', guarded((event, filePath) => {
+  ipcMain.handle('tabs:new', guarded((event, filePath, options) => {
     const win = windowOf(event.sender);
     if (!win) return;
     const trimmed = typeof filePath === 'string' ? filePath.trim() : '';
     const target = trimmed && path.isAbsolute(trimmed) && existsSync(trimmed) ? trimmed : null;
-    openTab(win, target);
+    openTab(win, target, null, { background: options?.background === true });
   }));
   ipcMain.handle('tabs:activate', guarded((event, id) => { const win = windowOf(event.sender); if (win && tabs.windowOf(id) === win.id) activate(win, id); }));
   ipcMain.handle('tabs:close', guarded((event, id) => { if (tabs.windowOf(id) === tabs.windowOf(event.sender.id)) requestClose(id); }));

@@ -230,7 +230,7 @@ export function moodleBrowser({
       if (newTab && entry && library?.pathOf && window.notecompleteTabs?.open) {
         const diskPath = await library.pathOf(entry).catch(() => '');
         if (diskPath) {
-          await window.notecompleteTabs.open(diskPath);
+          await window.notecompleteTabs.open(diskPath, { background: true });
           status(`Opened ${file.name} in a new tab.`);
           return;
         }
