@@ -272,6 +272,28 @@ function activate(win, id) {
   views.get(id)?.webContents.focus();
   broadcast(win);
 }
+// The text menu for a right click (params from webContents 'context-menu'): editing actions in a
+// field, Copy on selected text elsewhere, nothing otherwise. Each acts on that tab's contents.
+export function editMenu(params, contents) {
+  const f = params?.editFlags || {};
+  if (params?.isEditable) {
+    return [
+      { label: 'Undo', accelerator: 'CmdOrCtrl+Z', enabled: !!f.canUndo, click: () => contents.undo() },
+      { label: 'Redo', accelerator: 'CmdOrCtrl+Shift+Z', enabled: !!f.canRedo, click: () => contents.redo() },
+      { type: 'separator' },
+      { label: 'Cut', accelerator: 'CmdOrCtrl+X', enabled: !!f.canCut, click: () => contents.cut() },
+      { label: 'Copy', accelerator: 'CmdOrCtrl+C', enabled: !!f.canCopy, click: () => contents.copy() },
+      { label: 'Paste', accelerator: 'CmdOrCtrl+V', enabled: !!f.canPaste, click: () => contents.paste() },
+      { label: 'Paste as plain text', accelerator: 'CmdOrCtrl+Shift+V', enabled: !!f.canPaste, click: () => contents.pasteAndMatchStyle() },
+      { type: 'separator' },
+      { label: 'Select all', accelerator: 'CmdOrCtrl+A', enabled: f.canSelectAll !== false, click: () => contents.selectAll() },
+    ];
+  }
+  if (String(params?.selectionText || '').trim()) {
+    return [{ label: 'Copy', accelerator: 'CmdOrCtrl+C', enabled: f.canCopy !== false, click: () => contents.copy() }];
+  }
+  return [];
+}
 function openTab(win, file = null, restore = null) {
   const view = new WebContentsView({ webPreferences });
   view.setBackgroundColor(backdrop());
@@ -300,6 +322,12 @@ function openTab(win, file = null, restore = null) {
   // Tab keys work in every tab; Ctrl+W must close the tab, not the window.
   // The tab's window is looked up each time: a tab can move to another window.
   contents.on('did-finish-load', () => contents.setZoomFactor(uiZoom));
+  // Right click in a text field (or on selected text): Cut, Copy, Paste… as in any app. The
+  // reader's own menus (pages, Markdown prefabs, diagrams) cancel the event, so they win there.
+  contents.on('context-menu', (_event, params) => {
+    const items = editMenu(params, contents);
+    if (items.length) Menu.buildFromTemplate(items).popup({ window: windowOf(contents) ?? undefined });
+  });
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
     const size = uiZoomStep(input);

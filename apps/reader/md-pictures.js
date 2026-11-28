@@ -20,15 +20,41 @@ function base64Of(blob) {
   });
 }
 
-// The Markdown for one picture file.
-export async function pictureMarkdown(file) {
+// One picture file as a data: address (kept as it came, or converted as said above) and its name.
+export async function pictureData(file) {
   const head = new Uint8Array(await file.slice(0, 64 * 1024).arrayBuffer());
   const format = pictureFormat(head);
   const alt = (file.name || 'picture').replace(/\.[^.]+$/, '').replace(/[[\]\\]/g, '') || 'picture';
   let mime = file.type, base64;
   if (format !== 'heic' && AS_IS[mime]) base64 = await base64Of(file);
   else ({ base64, mime } = await readImage(file, { any: true }));
-  return `![${alt}](data:${mime};base64,${base64})`;
+  return { alt, url: `data:${mime};base64,${base64}` };
+}
+// The Markdown for one picture file.
+export async function pictureMarkdown(file) {
+  const { alt, url } = await pictureData(file);
+  return `![${alt}](${url})`;
+}
+// Pictures pasted or dropped into an HTML source editor (a textarea) go in as <img> tags.
+export function attachHtmlPictureInput(area, onInput) {
+  if (!area || area.__htmlPictures) return;
+  area.__htmlPictures = true;
+  const take = async (event, files) => {
+    const pictures = [...(files || [])].filter(isPicture);
+    if (!pictures.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const tags = [];
+    for (const f of pictures) {
+      const { alt, url } = await pictureData(f);
+      tags.push(`<img alt="${alt.replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`)}" src="${url}">`);
+    }
+    area.setRangeText(tags.join('\n'), area.selectionStart, area.selectionEnd, 'end');
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    onInput?.(area.value);
+  };
+  area.addEventListener('paste', (e) => { take(e, e.clipboardData?.files); }, true);
+  area.addEventListener('drop', (e) => { take(e, e.dataTransfer?.files); }, true);
 }
 
 async function insertAll(files, insert) {

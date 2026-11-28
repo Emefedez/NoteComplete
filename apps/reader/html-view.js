@@ -107,6 +107,8 @@ export function htmlViewer({ root, frame, title, reload, clear, status, darkScri
     editorHost.replaceChildren();
     code = codeEditor(editorHost, { value: source, lang: 'html', onChange: (value) => { source = value; onChange(source); }, className: 'doc-code', inputClass: 'doc-editor-plain', label: 'HTML source' });
     editorHost.hidden = false;
+    // A picture pasted or dropped in goes in as an <img> tag with the picture inside (md-pictures.js).
+    import('./md-pictures.js').then(({ attachHtmlPictureInput }) => attachHtmlPictureInput(editorHost.querySelector('textarea'))).catch(() => {});
     code.focus();
   }
   function stopEditing() {

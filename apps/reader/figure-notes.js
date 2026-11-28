@@ -91,6 +91,8 @@ export function figureNotes({ get, set, toHtml = null, placeholder = 'Notes (Mar
         body.replaceChildren(host);
         editor = new TinyMDE.Editor({ ...MARKDOWN_GRAMMAR, element: host, content: get() || '', placeholder });
         const paint = () => decorateTinyMdeLines(host.querySelector('.TinyMDE'));
+        // Pictures pasted or dropped in go in as Markdown pictures (md-pictures.js).
+        import('./md-pictures.js').then(({ attachPictureInput }) => attachPictureInput(host, (md) => editor?.paste(md))).catch(() => {});
         editor.addEventListener('change', (e) => { if ((get() || '') !== e.content) set(e.content); requestAnimationFrame(paint); });
         paint();
       } catch {

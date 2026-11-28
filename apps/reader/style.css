@@ -4398,6 +4398,12 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-submenu { z-index: 91; }
 .context-menu .context-swatch { flex: none; width: 15px; height: 15px; margin: 1px; border-radius: 50%; box-shadow: inset 0 0 0 1px #0003; }
 .context-menu button.checked { font-weight: 600; }
+/* Two entries on one line (context-menu.js `pair`): each takes half, the label cut short if it must. */
+.context-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.context-pair > button { min-width: 0; gap: 7px; padding: 5px 8px; }
+.context-pair > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context-pair > button .context-chevron { margin-left: auto; }
+.context-pair > button kbd { display: none; }
 .context-menu .context-glyph { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .context-menu button.checked .context-swatch { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
 /* Customize the page menu (menu-config.js). */

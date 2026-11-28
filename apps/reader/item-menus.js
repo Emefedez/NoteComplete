@@ -233,11 +233,11 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       return choice && { label: `Insert ${choice.label}`, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) };
     }
     switch (id) {
-      case "prefab": return { label: "Insert prefab here…", icon: "graph", key: "⇧X", run: () => insertPrefab(p, box), subtitle: "Recently used", submenu: () => {
+      case "prefab": return { label: "Insert prefab here…", short: "Prefab", icon: "graph", key: "⇧X", run: () => insertPrefab(p, box), subtitle: "Recently used", submenu: () => {
         const recent = recentPrefabs(6);
         return [...recent.map((choice) => ({ label: choice.label, icon: choice.icon || "graph", run: () => insertPrefab(p, box, choice) })), recent.length && "-", { label: "All prefabs…", icon: "search", run: () => insertPrefab(p, box) }];
       } };
-      case "shape": return { label: "Insert shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
+      case "shape": return { label: "Insert shape", short: "Shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
         label, icon: "shape", iconEl: document.querySelector(`#shapePicker [data-shape="${kind}"] svg`), run: () => insertShapeAt(p, at, kind),
       })) };
       case "text": return { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
@@ -251,6 +251,20 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       case "redo": return { label: "Redo", icon: "redo", key: "Ctrl Shift Z", disabled: $("redo").disabled, run: () => $("redo").click() };
     }
     return null;
+  }
+  // The page menu's entries in the person's order; Prefab and Shape side by side on one line when
+  // they come one after the other (context-menu.js pair).
+  function pairUp(order, entryOf) {
+    const out = [];
+    for (let i = 0; i < order.length; i++) {
+      const [a, b] = [order[i], order[i + 1]];
+      if ((a === "prefab" && b === "shape") || (a === "shape" && b === "prefab")) {
+        const left = entryOf(a), right = entryOf(b);
+        if (left && right) { const { key: _k, ...l } = left; out.push({ pair: [l, right] }); i++; continue; }
+      }
+      out.push(entryOf(a));
+    }
+    return out;
   }
   function customizePageMenuNow() {
     import("./menu-config.js").then(({ customizePageMenu }) => customizePageMenu({
@@ -289,7 +303,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       sticky && "-",
       canPastePage && { label: "Paste here", icon: "copy", key: "Ctrl V", run: runPagePaste },
       canPastePage && "-",
-      ...pageMenuOrder().map((id) => pageEntry(id, p, at, x, y)),
+      ...pairUp(pageMenuOrder(), (id) => pageEntry(id, p, at, x, y)),
       "-",
       ...(app.doc.canvas ? [] : [...blankPageEntries(p.index), "-"]),
       { label: "Customize this menu…", icon: "settings", run: customizePageMenuNow },

@@ -3,6 +3,8 @@
 // submenu? }, or "-" for a divider. `submenu` (entries, or a function that returns them)
 // slides out to the side when the pointer rests on the entry or the right arrow is pressed
 // (`swatch`: a colour shown in place of the icon; `iconEl`: an svg to show, copied; `checked`: marks the current choice);
+// `{ pair: [left, right] }` puts two entries side by side on one line (Page before | Page after),
+// each showing its `short` label when it has one;
 // a click runs the entry's own `run`, or opens the submenu when it has none. `host`: where it
 // goes (a modal dialog it opens over). It closes on a choice, Escape, a press elsewhere,
 // scrolling or resizing.
@@ -36,11 +38,7 @@ function panel(list, title, root, depth) {
     el.append(head);
   }
   let timer = 0;
-  list.forEach((entry, i) => {
-    if (entry === '-') {
-      if (i && list[i - 1] !== '-' && i < list.length - 1) el.append(document.createElement('hr'));
-      return;
-    }
+  const button = (entry, half = false) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
@@ -52,7 +50,8 @@ function panel(list, title, root, depth) {
     if (entry.iconEl) lead.classList.add('context-glyph');
     if (entry.swatch) lead.style.background = entry.swatch;
     if (entry.checked) { b.classList.add('checked'); b.setAttribute('aria-checked', 'true'); }
-    b.append(lead, Object.assign(document.createElement('span'), { textContent: entry.label }));
+    b.append(lead, Object.assign(document.createElement('span'), { textContent: (half && entry.short) || entry.label }));
+    if (half && entry.short) b.title = entry.label;
     if (entry.key) b.append(Object.assign(document.createElement('kbd'), { textContent: entry.key }));
     const sub = entry.submenu;
     if (sub) {
@@ -87,7 +86,20 @@ function panel(list, title, root, depth) {
       if (sub && e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); showSub(); root.__subs?.at(-1)?.querySelector('button:not(:disabled)')?.focus(); }
       else if (depth && e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); const owner = el.__owner; closeSubs(root, depth); owner?.focus(); }
     });
-    el.append(b);
+    return b;
+  };
+  list.forEach((entry, i) => {
+    if (entry === '-') {
+      if (i && list[i - 1] !== '-' && i < list.length - 1) el.append(document.createElement('hr'));
+      return;
+    }
+    const halves = entry.pair?.filter(Boolean);
+    if (halves?.length === 2) {
+      const row = document.createElement('div');
+      row.className = 'context-pair';
+      row.append(button(halves[0], true), button(halves[1], true));
+      el.append(row);
+    } else el.append(button(halves?.[0] || entry));
   });
   // Presses inside stay inside (no drawing or panning under the menu).
   el.addEventListener('pointerdown', (e) => e.stopPropagation());

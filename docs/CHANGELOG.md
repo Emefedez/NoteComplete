@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.36
+
+- **Recent's Type filter has NoteComplete (.nfedit).** NoteComplete's own notebooks can be shown on their own, like PDF or Noteful.
+- **Send to which notebook? shows its labels in full.** *Open here*, *Open* and *Recent* beside each notebook were cut short (2.0.35's dialog wrapping squeezed them); dialogs still keep long titles inside, now without shrinking small labels. The cloud guide no longer grows past its window with a long title.
+
 ## 2.0.35
 
 - **Dialogs keep their text inside.** Long words with nothing to break at (note titles such as `Manual_Completo_Estadistica_…`, paths, addresses) wrap inside every dialog instead of running out of it: the automatic-save card, the cloud guide and the rest.

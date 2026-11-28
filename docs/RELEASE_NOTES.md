@@ -1,6 +1,7 @@
-## What's new in 2.0.36
+## What's new in 2.0.37
 
-- **Recent's Type filter has NoteComplete (.nfedit).** NoteComplete's own notebooks can be shown on their own, like PDF or Noteful.
-- **Send to which notebook? shows its labels in full.** *Open here*, *Open* and *Recent* beside each notebook were cut short (2.0.35's dialog wrapping squeezed them); dialogs still keep long titles inside, now without shrinking small labels. The cloud guide no longer grows past its window with a long title.
+- **Right click → Cut, Copy, Paste in every text field (desktop).** Any editor or field — Markdown documents, Notes, HTML and code, Ask AI, dialogs — has the usual menu with Undo, Redo, Cut, Copy, Paste, *Paste as plain text* and Select all; on selected text elsewhere, Copy. The app's own menus (pages, prefabs, diagrams) still come first where they exist.
+- **Paste pictures into every editor.** Besides pages, Markdown documents and Notes: figure notes take pasted or dropped pictures as Markdown, and the HTML source editor takes them as `<img>` tags with the picture inside.
+- **Shorter page menu.** Right-click a page: *Page before* | *Page after* share one line, *Page size…* | *Drag borders* the next, and *Prefab* | *Shape* sit side by side (when they are next to each other in your menu order).
 
 Detailed change history: [CHANGELOG.md](https://github.com/Emefedez/NoteComplete/blob/main/docs/CHANGELOG.md). Preview installers for Android, Linux (AppImage), macOS and Windows; `SHA256SUMS.txt` has the checksums. Not signed or notarized; see `docs/BUILDS.md`.

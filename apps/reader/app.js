@@ -1096,12 +1096,18 @@ function blankPageEntries(index, { scroll = false } = {}) {
   const resizable = !doc?.canvas && !$("resizePage").disabled;
   const onThisPage = (run) => () => { if (scroll) jump(index); else setPage(index); run(); };
   const what = doc?.canvas ? "canvas" : "blank page";
+  // Before | after on one line, and Page size | Resize by dragging on the next (context-menu.js pair).
+  const short = doc?.canvas ? "Canvas" : "Page";
   return [
-    { label: `Insert ${what} before`, icon: "plus", run: () => addBlankPage(index, true) },
-    { label: `Insert ${what} after`, icon: "plus", run: () => addBlankPage(index) },
+    { pair: [
+      { label: `Insert ${what} before`, short: `${short} before`, icon: "plus", run: () => addBlankPage(index, true) },
+      { label: `Insert ${what} after`, short: `${short} after`, icon: "plus", run: () => addBlankPage(index) },
+    ] },
     resizable && "-",
-    resizable && { label: "Page size…", icon: "fit", run: onThisPage(() => $("resizePage").click()) },
-    resizable && { label: "Resize by dragging the borders", icon: "maximize", run: onThisPage(startResizeDrag) },
+    resizable && { pair: [
+      { label: "Page size…", icon: "fit", run: onThisPage(() => $("resizePage").click()) },
+      { label: "Resize by dragging the borders", short: "Drag borders", icon: "maximize", run: onThisPage(startResizeDrag) },
+    ] },
   ].filter(Boolean);
 }
 // Below the last page: scrolling past the end offers a new blank page of the same size.
