@@ -3705,16 +3705,23 @@ body.tools-hidden #toolbar .segmented, body.tools-hidden #toolOptions, body.tool
 /* Ask AI's head in a narrow panel (a phone, or the panel's usual 400 px): two rows, so the
    tool and model lists keep their names instead of shrinking to their arrows. Above, the
    title and the window's buttons; below, the lists with their search and Small model. */
-.chat-panel { container: chat-panel / inline-size; }
-@container chat-panel (max-width: 560px) {
-  .chat-head { flex-wrap: wrap; gap: 4px; row-gap: 6px; }
-  .chat-head > * { order: 1; }
-  .chat-head > strong { order: 0; flex: 1 1 0; min-width: 0; margin-right: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .chat-head::before { content: ""; order: 2; flex-basis: 100%; height: 0; }
-  .chat-head > select, .chat-head > input, .chat-head > .model-search, .chat-head > .small-model, .chat-head > .text-only-badge { order: 3; }
-  .chat-head > select { flex: 1 1 110px; min-width: 0; max-width: none; }
-  .chat-head > .small-model { margin-left: 2px; }
-}
+/* Ask AI: the title and the window's buttons in one row; the tool and model lists, their search
+   and One page at a time in the row below (.chat-tools, chat.js), which never wraps: the lists
+   shrink first. The Send row is one line too, dragged sideways when it does not fit. */
+.chat-head > strong { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-tools { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); min-width: 0; }
+.chat-tools select { flex: 1 1 0; min-width: 64px; max-width: 16em; min-height: 26px; padding: 2px 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 12px; text-overflow: ellipsis; }
+.chat-tools > .model-search { flex: none; min-height: 26px; width: 26px; border: 1px solid var(--line); background: var(--surface); }
+.chat-tools > .small-model { flex: none; margin-left: 2px; }
+.chat-tools > .text-only-badge { flex: none; margin-left: 0; }
+.chat-panel.window-large .chat-tools { padding: 8px 14px; }
+.chat-context { flex-wrap: nowrap; align-items: center; overflow-x: auto; scrollbar-width: none; white-space: nowrap; }
+.chat-context::-webkit-scrollbar { display: none; }
+.chat-context > * { flex: none; }
+.chat-context.is-dragging { cursor: grabbing; }
+.chat-context[data-fade="right"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent); }
+.chat-context[data-fade="left"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 22px); mask-image: linear-gradient(to right, transparent, #000 22px); }
+.chat-context[data-fade="both"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(to right, transparent, #000 20px, #000 calc(100% - 20px), transparent); }
 
 /* Home filters: a dropdown per category, with checkboxes. */
 .filter-bar { display: contents; }

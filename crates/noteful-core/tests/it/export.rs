@@ -595,8 +595,11 @@ fn an_animated_gif_or_webp_is_kept_as_it_came_through_the_native_file() {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use noteful_core::Image;
     // A 1×1 GIF89a and a minimal WebP header (the core keeps the bytes, it never decodes them).
-    let gif = STANDARD.decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7").unwrap();
-    let webp = b"RIFF\x1a\0\0\0WEBPVP8L\x0d\0\0\0\x2f\0\0\0\x10\x07\x10\x11\x11\x88\x88\xfe\x07\0".to_vec();
+    let gif = STANDARD
+        .decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+        .unwrap();
+    let webp = b"RIFF\x1a\0\0\0WEBPVP8L\x0d\0\0\0\x2f\0\0\0\x10\x07\x10\x11\x11\x88\x88\xfe\x07\0"
+        .to_vec();
     let picture = |bytes: &[u8], mime: &str| Image {
         base64: STANDARD.encode(bytes),
         mime: mime.into(),
@@ -611,9 +614,23 @@ fn an_animated_gif_or_webp_is_kept_as_it_came_through_the_native_file() {
     e.add_image(0, picture(&gif, "image/gif")).unwrap();
     e.add_image(0, picture(&webp, "image/webp")).unwrap();
     // A file that only says it is a GIF is still refused.
-    assert!(e.add_image(0, picture(b"not a picture", "image/gif")).is_err());
+    assert!(e
+        .add_image(0, picture(b"not a picture", "image/gif"))
+        .is_err());
     let native = e.export_noteful().unwrap();
-    let svg = Editor::open(&native).unwrap().view(0).unwrap()["svg"].as_str().unwrap().to_owned();
-    assert!(svg.contains(&format!("data:image/gif;base64,{}", STANDARD.encode(&gif))), "{svg}");
-    assert!(svg.contains(&format!("data:image/webp;base64,{}", STANDARD.encode(&webp))), "{svg}");
+    let svg = Editor::open(&native).unwrap().view(0).unwrap()["svg"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        svg.contains(&format!("data:image/gif;base64,{}", STANDARD.encode(&gif))),
+        "{svg}"
+    );
+    assert!(
+        svg.contains(&format!(
+            "data:image/webp;base64,{}",
+            STANDARD.encode(&webp)
+        )),
+        "{svg}"
+    );
 }

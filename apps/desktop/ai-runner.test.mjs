@@ -210,3 +210,22 @@ test('stream lines report thinking and file reads as activity, not answer text',
   assert.deepEqual(streamLine('claude', '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"/tmp/x/img-001.png"}}]}}'), { activity: 'Reading img-001.png…' });
   assert.deepEqual(streamLine('claude', '{"type":"assistant","message":{"content":[{"type":"text","text":"hi"}]}}'), {});
 });
+
+test('Antigravity gets the notecomplete plugin only when its own settings lack the server', async () => {
+  const { antigravityHasServer } = await import('./ai-runner.js');
+  const withPlugin = invocation('antigravity', { prompt: 'Q', images: [], dir: '/t', model: '', mcp: '/app/noteful' });
+  assert.equal(withPlugin.files.length, 2);
+  const without = invocation('antigravity', { prompt: 'Q', images: [], dir: '/t', model: '', mcp: '/app/noteful', agyHasServer: true });
+  assert.deepEqual(without.files, []);
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const os = await import('node:os'), path = await import('node:path');
+  const home = await mkdtemp(path.join(os.tmpdir(), 'agy-'));
+  assert.equal(await antigravityHasServer(home), false);
+  await mkdir(path.join(home, '.gemini', 'config'), { recursive: true });
+  const file = path.join(home, '.gemini', 'config', 'mcp_config.json');
+  await writeFile(file, JSON.stringify({ mcpServers: { notecomplete: { command: '/x/noteful', args: ['mcp'] } } }));
+  assert.equal(await antigravityHasServer(home), true);
+  await writeFile(file, JSON.stringify({ mcpServers: { notecomplete: { command: '/x/noteful', disabled: true } } }));
+  assert.equal(await antigravityHasServer(home), false);
+  await rm(home, { recursive: true, force: true });
+});

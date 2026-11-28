@@ -233,7 +233,10 @@ impl Image {
             _ => false,
         };
         if !valid {
-            return Err(Error::new(0, "Unsupported image data; use PNG, JPEG, GIF or WebP"));
+            return Err(Error::new(
+                0,
+                "Unsupported image data; use PNG, JPEG, GIF or WebP",
+            ));
         }
         Ok(bytes)
     }

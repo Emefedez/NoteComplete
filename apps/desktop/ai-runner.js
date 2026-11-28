@@ -111,7 +111,22 @@ export function openCodeConfig(mcp) {
 }
 
 // The command line for one request. `images` are absolute paths in `dir`.
-export function invocation(provider, { prompt, images, attachedPaths = [], dir, model, mcp, stream = false }) {
+// Whether Antigravity's own settings (~/.gemini/config/mcp_config.json) have an enabled
+// `notecomplete` server.
+export async function antigravityHasServer(home = homedir()) {
+  try {
+    const config = JSON.parse(await readFile(path.join(home, '.gemini', 'config', 'mcp_config.json'), 'utf8'));
+    const server = config?.mcpServers?.notecomplete;
+    return !!server && server.disabled !== true && typeof (server.command || server.serverUrl || server.url) === 'string';
+  } catch { return false; }
+}
+
+// What every tool is told when the notecomplete server is on. Antigravity's models tried to
+// browse it as resources (list_resources, refused there: "server notecomplete is not allowed in
+// this context") and then gave up; the tools themselves work.
+export const MCP_USE = 'Call the notecomplete MCP tools directly by name (note_outline, page_text, page_image, search_note, read_notes, write_notes, add_prefab, create_markdown…); do not list or read MCP resources, and if one call fails, try the tool itself before saying the tools are unavailable.';
+
+export function invocation(provider, { prompt, images, attachedPaths = [], dir, model, mcp, stream = false, agyHasServer = false }) {
   const allFiles = [...images, ...attachedPaths];
   const listed = allFiles.length ? `\n\nAttached files (read them):\n${allFiles.map(i => `- ${i}`).join('\n')}` : '';
   const extraDirs = [...new Set([dir, ...attachedPaths.map(p => path.dirname(p))])];
@@ -125,8 +140,11 @@ export function invocation(provider, { prompt, images, attachedPaths = [], dir, 
   if (provider === 'antigravity') {
     const args = ['-p', prompt + listed, '--output-format', stream ? 'stream-json' : 'json', ...extraDirs.flatMap(d => ['--add-dir', d]), '--print-timeout', '3600s'];
     if (model) args.push('--model', model);
-    // A workspace plugin: .agents/plugins/<name>/{plugin.json, mcp_config.json}.
-    const files = mcp ? [
+    // A workspace plugin: .agents/plugins/<name>/{plugin.json, mcp_config.json}. Not when the
+    // person's own Antigravity settings already have a notecomplete server (Setup wizard → AI
+    // tools connection): a second copy showed every tool twice (notecomplete/… and
+    // notecomplete_notecomplete/…).
+    const files = mcp && !agyHasServer ? [
       ['.agents/plugins/notecomplete/plugin.json', JSON.stringify({ name: 'notecomplete', description: 'Read and edit NoteComplete notes' })],
       ['.agents/plugins/notecomplete/mcp_config.json', JSON.stringify({ mcpServers: { notecomplete: { command: mcp, args: ['mcp'] } } })],
     ] : [];
@@ -319,9 +337,10 @@ export function aiRunner({ tools = findTools, mcpBinary = null, t3 = null } = {}
         const mcp = mcpBinary && ((notePath && path.isAbsolute(notePath)) || attachedPaths.length > 0) ? mcpBinary : null;
         const stream = !!onDelta && STREAMS.has(provider);
         const mcpHint = notePath && mcp
-          ? `\n\nThe open note file is ${notePath}; the notecomplete MCP tools can read, edit, expand, or create notes and prefabs.`
-          : (attachedPaths.length && mcp ? '\n\nThe notecomplete MCP tools can read, edit, expand, or create notes and prefabs for any of the attached files.' : '');
-        const call = invocation(provider, { prompt: prompt + mcpHint, images: files, attachedPaths, dir, model, mcp, stream });
+          ? `\n\nThe open note file is ${notePath}; the notecomplete MCP tools can read, edit, expand, or create notes and prefabs. ${MCP_USE}`
+          : (attachedPaths.length && mcp ? `\n\nThe notecomplete MCP tools can read, edit, expand, or create notes and prefabs for any of the attached files. ${MCP_USE}` : '');
+        const agyHasServer = provider === 'antigravity' && mcp ? await antigravityHasServer() : false;
+        const call = invocation(provider, { prompt: prompt + mcpHint, images: files, attachedPaths, dir, model, mcp, stream, agyHasServer });
         for (const [name, content] of call.files || []) {
           await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
           await writeFile(path.join(dir, name), content);

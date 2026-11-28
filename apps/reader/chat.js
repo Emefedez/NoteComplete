@@ -10,6 +10,7 @@ import { renderMarkdown, plainText, rememberAiFile } from './rich-text.js';
 import { windowOf } from './floating.js';
 import { parseHtmlTable } from './table-paste.js';
 import { icon } from './icons.js';
+import { makeDragScrollStrip } from './drag-strip.js';
 
 // Extract a Table prefab spec ({ cells, merges, header, background, tint, fit }) from a rendered
 // <table> element inside an AI chat answer, preserving KaTeX formulas as inline $…$ LaTeX.
@@ -89,6 +90,20 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   // `follow`: a conversation continued from a quiz question or flashcard keeps adding
   // each answer to that item's saved explanation, until New.
   let history = [], busy = false, attachments = [], attachedDocs = [], topic = '', conversation = newId(), chatTitle = '', follow = null;
+  // The tool and model lists get a row of their own under the title and window buttons, before the
+  // picker adds its search and "One page at a time" beside the model list: in one wrapping row
+  // with the title they broke into two or three uneven lines as the window narrowed.
+  {
+    const head = document.querySelector('#chatPanel .chat-head');
+    if (head && !head.nextElementSibling?.classList.contains('chat-tools')) {
+      const tools = document.createElement('div');
+      tools.className = 'chat-tools';
+      tools.append($('chatProvider'), $('chatModel'));
+      head.after(tools);
+    }
+    const context = document.querySelector('#chatPanel .chat-context');
+    if (context) makeDragScrollStrip(context);
+  }
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
   function attachTablePasteButtons(body) {
     if (!toTablePrefab || !body || typeof body.querySelectorAll !== 'function') return;
