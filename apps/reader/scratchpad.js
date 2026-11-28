@@ -97,12 +97,42 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
     status(had ? 'Scratchpad entry rewritten up to this answer.' : 'Kept in this note’s scratchpad (Study → Scratchpad…).');
     if ($('scratchDialog').open) render();
   }
+  // Folded conversations (the arrow in their header) stay folded, remembered on this device.
+  const FOLD_KEY = 'notecomplete-scratch-folded';
+  const folded = (() => { try { return new Set(JSON.parse(localStorage.getItem(FOLD_KEY) || '[]')); } catch { return new Set(); } })();
+  const keepFolded = () => { try { localStorage.setItem(FOLD_KEY, JSON.stringify([...folded].slice(-500))); } catch { /* Kept for this visit. */ } };
+  const setFold = (item, id, on) => {
+    item.classList.toggle('folded', on);
+    item.querySelector('.scratch-fold')?.setAttribute('aria-expanded', String(!on));
+    if (on) folded.add(id); else folded.delete(id);
+  };
+  const foldAllButton = () => {
+    const b = $('scratchFoldAll');
+    if (!b) return;
+    const items = [...$('scratchList').children];
+    const all = items.length > 0 && items.every((li) => li.classList.contains('folded'));
+    b.hidden = items.length < 2;
+    b.textContent = all ? 'Expand all' : 'Collapse all';
+    b.onclick = () => {
+      for (const li of items) setFold(li, li.dataset.id, !all);
+      keepFolded(); foldAllButton();
+    };
+  };
   async function render() {
     const list = await read();
     $('scratchEmpty').hidden = list.length > 0;
     $('scratchList').replaceChildren(...list.map(entry => {
       const item = document.createElement('li'), head = document.createElement('div'), title = document.createElement('strong'), when = document.createElement('span');
       head.className = 'scratch-head'; when.className = 'muted';
+      item.dataset.id = entry.id;
+      // The arrow folds the conversation to its header (down: open, right: folded); so does a
+      // click on the title.
+      const fold = document.createElement('button');
+      fold.type = 'button'; fold.className = 'icon-button scratch-fold'; fold.title = 'Collapse or expand this conversation';
+      fold.setAttribute('aria-label', 'Collapse or expand this conversation');
+      fold.append(icon('collapse'));
+      fold.onclick = () => { setFold(item, entry.id, !item.classList.contains('folded')); keepFolded(); foldAllButton(); };
+      title.onclick = fold.onclick;
       title.textContent = entry.title; when.textContent = new Date(entry.at).toLocaleString();
       if (markdown) renderMarkdown(title, String(entry.title || '').replace(/\n+/g, ' '), markdown).catch(() => { title.textContent = entry.title; });
       // Icon buttons: the name is the hover text and the screen-reader label.
@@ -116,12 +146,12 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
         await store.set('settings', key(), (await read()).filter(e => e.id !== entry.id));
         render();
       }, 'scratch-delete');
-      head.append(title, when, document.createElement('span'),
+      head.append(fold, title, when, document.createElement('span'),
         // Text documents have no Markdown notes beside them.
         ...(canNote() ? [button('note', 'Add to notes', async () => { await notes(`### ${entry.title}\n\n${entry.text}`); status('Added to the Markdown notes.'); })] : []),
         button('copy', 'Copy', () => navigator.clipboard.writeText(entry.text).then(() => status('Copied.'), () => status('The clipboard is not available here.', true))),
         remove);
-      head.children[2].className = 'spacer';
+      head.children[3].className = 'spacer';
       // Bubbles as in Ask AI: your questions on the right, the answers on the left.
       const body = document.createElement('ul');
       body.className = 'scratch-chat';
@@ -151,8 +181,10 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
         body.append(bubble);
       }
       item.append(head, body);
+      setFold(item, entry.id, folded.has(entry.id));
       return item;
     }));
+    foldAllButton();
   }
   $('scratchClose').onclick = () => $('scratchDialog').close();
   return {

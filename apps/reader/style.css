@@ -2919,6 +2919,11 @@ mark.md-hl.md-tc, .TinyMDE .TMHighlight.TMTextColour { background: none; padding
 .scratch-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 13px; }
 .scratch-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scratch-head .muted { flex: none; font-size: 11px; }
+.scratch-head strong { cursor: pointer; }
+.scratch-head .scratch-fold svg { transform: rotate(180deg); transition: transform .18s ease; }
+.scratch-list li.folded .scratch-fold svg { transform: rotate(90deg); }
+.scratch-list li.folded > .scratch-head { margin-bottom: 0; }
+.scratch-list li.folded > .scratch-chat { display: none; }
 .scratch-head .icon-button { flex: none; width: 28px; min-height: 28px; padding: 0; background: transparent; }
 .scratch-head .icon-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .scratch-head .icon-button:hover { background: var(--accent-soft); color: var(--accent); }
