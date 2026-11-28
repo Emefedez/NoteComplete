@@ -4,6 +4,11 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.38
+
+- **Page menu: Insert image before Insert text.** Right-click a page: *Insert image…* comes before the text entry, now called *Insert text here* (was *Type text here*). A menu order you saved yourself stays as it is.
+- **Side-by-side entries open their submenus on their own side.** *Prefab*'s list opens to the left of the menu and *Shape*'s to the right, so neither covers the other half (each flips only when the screen has no room on its side).
+
 ## 2.0.37
 
 - **Right click → Cut, Copy, Paste in every text field (desktop).** Any editor or field — Markdown documents, Notes, HTML and code, Ask AI, dialogs — has the usual menu with Undo, Redo, Cut, Copy, Paste, *Paste as plain text* and Select all; on selected text elsewhere, Copy. The app's own menus (pages, prefabs, diagrams) still come first where they exist.
