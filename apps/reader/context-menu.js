@@ -112,13 +112,17 @@ function uiZoom() {
   const z = parseFloat(document.documentElement.style.zoom);
   return Number.isFinite(z) && z > 0 ? z : 1;
 }
-function place(el, x, y, flipX = null) {
+// `leftFirst`: open to the left of flipX (the left half of a pair), to the right of x only when
+// there is no room there.
+function place(el, x, y, flipX = null, leftFirst = false) {
   const z = uiZoom();
   const r = el.getBoundingClientRect();
   const rw = r.width / z, rh = r.height / z;
   const px = x / z, py = y / z, fx = flipX == null ? null : flipX / z;
   const vw = innerWidth / z, vh = innerHeight / z, m = 8;
-  const rawLeft = px + rw + m > vw ? (fx ?? px) - rw : px;
+  const rawLeft = leftFirst && fx != null
+    ? (fx - rw >= m ? fx - rw : px)
+    : px + rw + m > vw ? (fx ?? px) - rw : px;
   const rawTop = py + rh + m > vh ? vh - rh - m : py;
   const left = Math.max(m, Math.min(vw - rw - m, rawLeft));
   const top = Math.max(m, Math.min(vh - rh - m, rawTop));
@@ -142,7 +146,14 @@ function openSub(root, parent, button, items, title, depth) {
   el.__owner = button;
   button.setAttribute('aria-expanded', 'true');
   (root.__host || document.body).append(el);
-  place(el, r.right - 2, r.top - 5, r.left + 2);
+  // A half of a pair (context-pair) opens past the menu's own edge on its side: the left half
+  // to the left of the menu, the right half to its right, so neither covers the other half.
+  const pair = button.parentElement?.classList.contains('context-pair') ? button.parentElement : null;
+  if (pair) {
+    const menu = parent.getBoundingClientRect();
+    const left = pair.firstElementChild === button;
+    place(el, menu.right - 2, r.top - 5, menu.left + 2, left);
+  } else place(el, r.right - 2, r.top - 5, r.left + 2);
   (root.__subs ||= []).push(el);
 }
 
