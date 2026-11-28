@@ -1634,6 +1634,12 @@ body.bar-compact .palette-trigger span, body.bar-compact .palette-trigger kbd { 
 .find-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
 .find-hit { fill: #ffd33d; fill-opacity: .35; stroke: #e0a800; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .find-hit.current { fill: #ff8a00; fill-opacity: .4; stroke: #d35b00; stroke-width: 2; }
+/* Every dialog wraps long words (note titles like Manual_Completo_Estadistica_…, paths, URLs)
+   inside its width instead of running out of it; flex rows inside let their text shrink. */
+dialog { overflow-wrap: break-word; max-width: calc(100vw - 24px); }
+dialog :is(p, h2, h3, li, label, figcaption, strong, span, code) { overflow-wrap: anywhere; }
+dialog :is(p, h2, h3, li, label, figcaption) { min-width: 0; }
+dialog button { overflow-wrap: normal; }
 .ocr-dialog { width: min(580px, calc(100vw - 24px)); border: 1px solid var(--line); border-radius: var(--radius-box); padding: 18px 20px; background: var(--surface); color: var(--ink); box-shadow: var(--shadow-dialog); }
 .ocr-dialog::backdrop { background: #0006; }
 .ocr-dialog h2 { margin: 0 0 8px; font-size: 16px; }
@@ -4700,6 +4706,9 @@ button.zip-caret:hover { background: var(--accent-soft); color: var(--ink); }
 .marquee { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .marquee.sliding { text-overflow: clip; }
 .marquee > .marquee-text { display: inline-block; transition: transform var(--slide, 1s) linear; }
+.marquee-auto.sliding { text-overflow: clip; }
+.marquee-auto > .marquee-text { display: inline-block; transition: transform var(--slide, 1s) linear; }
+@media (prefers-reduced-motion: reduce) { .marquee-auto > .marquee-text { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .marquee > .marquee-text { transition: none; } }
 
 /* The pages panel (Ctrl Alt B) and the documents list beside HTML and text documents: wider or
@@ -5126,7 +5135,8 @@ rt.zh-t1 { color: #e53935; } rt.zh-t2 { color: #ef8a00; } rt.zh-t3 { color: #2e9
   box-sizing: border-box;
 }
 .cg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 30px; flex-wrap: wrap; }
-.cg-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cg-title { display: inline-flex; align-items: center; gap: 8px; margin: 0; min-width: 0; font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.cg-head > *, .cg-meta > * { min-width: 0; max-width: 100%; }
 .cg-title .provider-icon { width: 16px; height: 16px; color: var(--accent); flex: none; }
 .cg-role-switch { display: inline-flex; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--fill); gap: 2px; flex: none; }
 .cg-role-tab { height: 24px; padding: 0 10px; border: 0; border-radius: calc(var(--radius) - 2px); background: transparent; color: var(--muted); font-size: 11.5px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }

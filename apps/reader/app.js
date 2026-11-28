@@ -4744,6 +4744,7 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
     if (delivery.kind === "local" && delivery.path) {
       const boundChanged = !delivery.overwritten || notePath !== delivery.path || docMember?.path !== delivery.path;
       notePath = delivery.path;
+      sendInbox?.publish();
       const savedEntry = await library.rememberLocal(delivery.path, delivery.name, delivery.size).catch(() => null);
       if (boundChanged && savedEntry) {
         noteEntryKey = savedEntry.key;
@@ -4758,6 +4759,7 @@ async function save(native, as = native ? "noteful" : "project", projectOptions 
       // so Recent reopens what was saved and the next save updates it.
       const entry = delivery.entry, boundChanged = noteEntryKey !== entry.key || docMember?.name !== entry.name;
       notePath = await library.pathOf(entry).catch(() => "");
+      sendInbox?.publish();
       if (boundChanged) {
         noteEntryKey = entry.key;
         activeCoverKeyOverride = entry.key;
@@ -5973,6 +5975,7 @@ const drive = driveBrowser({
       activeCoverKeyOverride = cKey;
       home.rememberFacts(cKey, file);
       notePath = await library.pathOf(await library.entry(driveFile)).catch(() => "");
+      sendInbox?.publish();
       noteEntryKey = library.key(driveFile);
       rememberDocument(noteEntryKey);
       setDocMember({ key: noteEntryKey, name: driveFile.name, source: "drive" });

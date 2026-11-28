@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.34
+
+- **NoteComplete Send, a browser extension (Chromium, Chrome, Brave, Edge, Vivaldi).** Right click a picture, link, selection or page → *Send to NoteComplete*: it goes to the notebook open in NoteComplete's front window by default, or to any other open notebook, a Recent one (opened for it), or *Choose in NoteComplete…*. The extension button opens a send window you can drag files into. Pictures go onto the current page (GIFs stay animated), PDFs become pages at the end, text/HTML/Office files go into the notebook's Markdown notes. Set it up in **Help → Setup wizard → Modules → Browser extension** (it registers a helper with your browsers and downloads the extension from [NoteComplete-send](https://github.com/Emefedez/NoteComplete-send)); NoteComplete starts if it is closed.
+- **Ask AI with Antigravity can use the NoteComplete tools again.** Answers said "server notecomplete is not allowed in this context": the model tried to browse the server's resources, which Antigravity refuses there, and gave up. Every AI tool is now told to call the tools directly, and Antigravity no longer gets the server twice when its own settings already have it.
+- **Ask AI's head no longer breaks into uneven rows.** The tool and model lists have their own row (the lists shrink first), and the *Send* row is one line that drags sideways when the window is narrow.
+
 ## 2.0.33
 
 - **Animated GIFs stay animated.** A GIF opened as a document, imported onto a page (Insert, paste, drop) or saved in a Noteful note keeps its own bytes instead of becoming a still PNG; WebP and animated PNG (APNG) are kept as they are too.
