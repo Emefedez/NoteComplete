@@ -53,6 +53,8 @@ test('file types filter in any combination; legacy .notecomp/.notepart have no f
   assert.equal(matches(note('A.NOTEPART'), { types: [] }), true);
   assert.equal(matches(note('A.noteful'), { types: ['pdf'] }), false);
   assert.equal(matches(note('A.noteful'), { types: ['pdf', 'noteful'] }), true);
+  assert.equal(matches(note('Tema 1.nfedit'), { types: ['nfedit'] }), true);
+  assert.equal(matches(note('Tema 1.nfedit'), { types: ['noteful'] }), false);
   assert.equal(matches(note('Exam.html'), { types: ['html'] }), true);
   assert.equal(matches(note('Diagram.jpg'), { types: ['image'] }), true);
   assert.equal(matches(note('A.png'), { types: [] }), true);

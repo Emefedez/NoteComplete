@@ -54,6 +54,8 @@ export const TYPES = {
   audio: ['Audio', AUDIO_NAME],
   video: ['Video', VIDEO_NAME],
   noteful: ['Noteful', /\.noteful$/i],
+  // NoteComplete's own editable notebooks (projects).
+  nfedit: ['NoteComplete (.nfedit)', /\.nfedit$/i],
 };
 export const typeOf = name => Object.keys(TYPES).find(k => TYPES[k][1].test(name || '')) || '';
 export function matches(note, filters) {

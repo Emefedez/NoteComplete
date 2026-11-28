@@ -4,6 +4,12 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.35
+
+- **Dialogs keep their text inside.** Long words with nothing to break at (note titles such as `Manual_Completo_Estadistica_…`, paths, addresses) wrap inside every dialog instead of running out of it: the automatic-save card, the cloud guide and the rest.
+- **Any text cut short slides on hover.** Every name or title that ends in "…" because it does not fit (scratchpad titles, dialog headings, list rows, as tabs and Recent already did) slides to show its end while the pointer is on it, and slides back after. Nothing moves with reduced motion turned on.
+- **NoteComplete Send lists the open notebook once.** The open notebook now carries its file, so it no longer shows up again under Recent in the extension's menu.
+
 ## 2.0.34
 
 - **NoteComplete Send, a browser extension (Chromium, Chrome, Brave, Edge, Vivaldi).** Right click a picture, link, selection or page → *Send to NoteComplete*: it goes to the notebook open in NoteComplete's front window by default, or to any other open notebook, a Recent one (opened for it), or *Choose in NoteComplete…*. The extension button opens a send window you can drag files into. Pictures go onto the current page (GIFs stay animated), PDFs become pages at the end, text/HTML/Office files go into the notebook's Markdown notes. Set it up in **Help → Setup wizard → Modules → Browser extension** (it registers a helper with your browsers and downloads the extension from [NoteComplete-send](https://github.com/Emefedez/NoteComplete-send)); NoteComplete starts if it is closed.
