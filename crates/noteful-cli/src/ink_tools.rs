@@ -323,6 +323,12 @@ pub(super) fn tools() -> Vec<Value> {
                 "replace_placeholder":{"type":"string","description":"Replace this exact placeholder text (e.g. '<!-- PREFAB:chart -->') in Markdown, HTML, .docx or .odt"},
                 "alt":{"type":"string","description":"Optional alt/caption label for Markdown or HTML"}
             }), &[&write_props]), &["path","spec"]),
+        tool("move_page", "Reorder a page in a notebook: moves page `from_page` (1-based) to position `to_page` (1-based), written to a copy unless `in_place` is true.",
+            merge(json!({
+                "path":path,
+                "from_page":{"type":"integer","minimum":1,"description":"Current 1-based page number to move"},
+                "to_page":{"type":"integer","minimum":1,"description":"Target 1-based page position"}
+            }), &[&write_props]), &["path","from_page","to_page"]),
     ]
 }
 
@@ -414,6 +420,7 @@ impl Server {
             "clean_copy" => self.add_pages(args, Some(page_arg(args).map(|p| p + 1))),
             "write_on_page" => self.write_on_page(args),
             "add_prefab" => self.add_prefab(args),
+            "move_page" => self.move_page(args),
             "page_layout" => self.layout(args),
             "example_pages" => self.example(args),
             _ => return None,
@@ -570,6 +577,35 @@ impl Server {
         save(&editor, &out, Some(&data), backup.as_deref())?;
         let report = json!({"written":out,"backup":backup,"page":display + 1,"strokes":strokes,"under_ink":under,"text_boxes":boxes,"warnings":warnings,"handwriting_text":kept_text(&out)});
         self.preview(&out, display, report)
+    }
+
+    fn move_page(&mut self, args: &Value) -> Res<Value> {
+        let source = note_path(args)?;
+        let from_1 = args["from_page"]
+            .as_u64()
+            .filter(|&n| n >= 1)
+            .ok_or("from_page must be >= 1")? as usize;
+        let to_1 = args["to_page"]
+            .as_u64()
+            .filter(|&n| n >= 1)
+            .ok_or("to_page must be >= 1")? as usize;
+        let (mut editor, data) = open_for_edit(&source)?;
+        editor.move_page(from_1 - 1, to_1 - 1)?;
+        let title = source
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Note");
+        let (out, backup) = destination(args, Some(&source), title)?;
+        save(&editor, &out, Some(&data), backup.as_deref())?;
+        let report = json!({
+            "written": out,
+            "backup": backup,
+            "from_page": from_1,
+            "to_page": to_1,
+            "pages": editor.page_order().len(),
+            "handwriting_text": kept_text(&out)
+        });
+        self.preview(&out, to_1 - 1, report)
     }
 
     fn add_prefab(&mut self, args: &Value) -> Res<Value> {

@@ -1231,7 +1231,7 @@ mod tests {
         let tools = server
             .handle(&json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}))
             .unwrap();
-        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 33);
+        assert_eq!(tools["result"]["tools"].as_array().unwrap().len(), 34);
         let bad = server.handle(&json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"page_text","arguments":{"path":EXAM,"page":9}}})).unwrap();
         assert_eq!(bad["result"]["isError"], true);
         let outline = server.handle(&json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"note_outline","arguments":{"path":EXAM}}})).unwrap();
