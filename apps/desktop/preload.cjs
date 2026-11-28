@@ -301,6 +301,27 @@ contextBridge.exposeInMainWorld('notecompleteWindows', {
   onSetupWizard: callback => ipcRenderer.on('app:setup-wizard', () => callback()),
   onEuroOfficeLaunch: callback => ipcRenderer.on('app:euro-office-launch', () => callback()),
 });
+// NoteComplete Send (send-main.js): files sent from the browser extension. The reader reports
+// what it shows and its Recent notebooks, takes the files sent to it, and says what it did.
+contextBridge.exposeInMainWorld('notecompleteSend', {
+  state: state => ipcRenderer.invoke('send:state', state),
+  recent: list => ipcRenderer.invoke('send:recent', list),
+  take: () => ipcRenderer.invoke('send:take'),
+  targets: () => ipcRenderer.invoke('send:targets'),
+  route: (token, target) => ipcRenderer.invoke('send:route', String(token), String(target)),
+  done: (token, result) => ipcRenderer.invoke('send:done', String(token), result),
+  onFiles: callback => ipcRenderer.on('send:files', (_event, delivery) => callback(delivery)),
+});
+contextBridge.exposeInMainWorld('notecompleteBrowserSend', {
+  status: () => ipcRenderer.invoke('browserSend:status'),
+  install: onProgress => {
+    const listener = (_event, p) => onProgress?.(p);
+    ipcRenderer.on('browserSend:progress', listener);
+    return ipcRenderer.invoke('browserSend:install').finally(() => ipcRenderer.removeListener('browserSend:progress', listener));
+  },
+  uninstall: () => ipcRenderer.invoke('browserSend:uninstall'),
+  openFolder: () => ipcRenderer.invoke('browserSend:openFolder'),
+});
 // Tabs in this window: the reader draws the strip and reports its title and
 // unsaved state; closing asks the reader first (onCloseRequest).
 contextBridge.exposeInMainWorld('notecompleteTabs', {

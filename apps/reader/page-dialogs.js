@@ -362,5 +362,17 @@ export function pageDialogs({ $, action, busy, call, status, app }) {
     $("pageBgDialog").close();
     await action("setPageBackgrounds", { pages, focus: noteIndices[0] });
   };
-  return { openPageBackground };
+  // A PDF's pages added after the last page, at its own scale (a file sent to this note from the
+  // browser extension, send-in.js): what Insert PDF pages does with its defaults.
+  async function appendPdf(bytes, name = "PDF") {
+    if (!app.doc) throw Error("No note is open.");
+    const sizes = await readPdfSizes(bytes);
+    if (!sizes.length) throw Error(`${name} has no pages.`);
+    const id = "pdf-" + Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, "0")).join("");
+    const at = app.doc.pages;
+    const pages = pdfPages(id, sizes, 0, sizes.length - 1, "none", await noteUnitsPerPoint());
+    await action("insertPages", { at, pages, pdf: { id, base64: bytesToBase64(bytes) }, focus: at });
+    return sizes.length;
+  }
+  return { openPageBackground, appendPdf };
 }

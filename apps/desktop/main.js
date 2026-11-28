@@ -32,6 +32,7 @@ import { createOfficeBridge } from './office-bridge.js';
 import { systemOpenWith } from './system-open-with.js';
 import { pngClipboard, processRunner } from './png-clipboard.js';
 import { spawn } from 'node:child_process';
+import { sendMain } from './send-main.js';
 // Loaded with the first sharing session only (docs/COLLABORATION.md).
 const collabServer = () => import('./collab-server.js');
 
@@ -221,6 +222,8 @@ const restorePending = new Map();
 const sessionFile = () => path.join(app.getPath('userData'), 'session.json');
 const launchQueue = launchFiles(process.argv, { packaged: app.isPackaged });
 let started = false;
+// NoteComplete Send (send-main.js): set up with the IPC handlers, started once the app is.
+let sendBridge = null;
 // No spell checker: notes are written in many languages and the red underlines get in the way.
 // The open dialogs' filter; "All files" also offers names without an extension.
 const OPENABLE = ['noteful', 'notepart', 'notecomplete', 'notecomp', 'nfedit', 'goodnotes', 'ntb', 'rnote', 'zip', 'tar', 'tgz', 'gz', '7z', 'rar', 'html', 'htm', 'pdf', 'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'avif', 'heic', 'heif', 'jfif', 'apng', 'ico', 'mp3', 'm4a', 'wav', 'ogg', 'oga', 'opus', 'flac', 'aac', 'weba', 'mp4', 'm4v', 'webm', 'mkv', 'mov', 'avi', 'ogv', 'docx', 'docm', 'dotx', 'doc', 'rtf', 'odt', 'fodt', 'xlsx', 'xlsm', 'xlsb', 'xls', 'ods', 'fods', 'pptx', 'pptm', 'ppt', 'odp', 'epub', 'ipynb', 'rdata', 'rda', 'rds', 'txt', 'md', 'markdown', 'rst', 'adoc', 'asciidoc', 'org', 'rmd', 'qmd', 'csv', 'tsv', 'log', 'json', 'yaml', 'yml', 'toml', 'xml', 'ini', 'conf', 'cfg', 'sh', 'py', 'c', 'h', 'cpp', 'hpp', 'java', 'js', 'ts', 'rs', 'go', 'sql', 'tex', 'r', 'm', 'asm', 's', 'lua', 'vhd', 'vhdl', 'v', 'puml', 'plantuml', 'pu', 'iuml', 'wsd'];
@@ -315,6 +318,7 @@ function openTab(win, file = null, restore = null) {
     launchPending.delete(id);
     restorePending.delete(id);
     tabGone(id);
+    sendBridge?.tabGone(id);
     if (sharing?.owner === id) { sharing.server.stop(); sharing = null; }
   });
   // The new tab is shown once it has drawn its page (or after a moment), so
@@ -410,6 +414,9 @@ function createWindow({ tab = true, files = [] } = {}) {
   const id = win.id;
   windows.set(id, win);
   win.on('resize', () => layout(win));
+  // NoteComplete Send's default notebook is the one in the window used last (send-main.js).
+  win.on('focus', () => sendBridge?.focused(id));
+  sendBridge?.focused(id);
   win.on('app-command', (event, cmd) => {
     if (cmd !== 'browser-backward' && cmd !== 'browser-forward') return;
     event.preventDefault();
@@ -560,6 +567,8 @@ app.whenReady().then(async () => {
     return handler(event, ...args);
   };
   ipcMain.handle('files:folder', guarded(() => files.folder()));
+  // Files sent from the browser extension (send-main.js, send-hub.js).
+  sendBridge = sendMain({ app, ipcMain, guarded, shell, windows, views, tabs, activate, openTab, createWindow });
   // Settings → Prefab modules (prefab-folder.js): the folder in use and its modules; copy the
   // app's modules to a folder, use a folder, go back to the app's own, open it.
   ipcMain.handle('prefabs:list', guarded(() => prefabs.list()));
@@ -888,7 +897,7 @@ app.whenReady().then(async () => {
   }));
   ipcMain.handle('branch:cancel', guarded(() => branches.cancel()));
   ipcMain.handle('branch:log', guarded(async () => { const err = await shell.openPath(branches.logFile); return !err; }));
-  app.on('will-quit', () => { branches.cancel(); });
+  app.on('will-quit', () => { branches.cancel(); sendBridge?.stop().catch(() => {}); });
   ipcMain.handle('update:skip', guarded((_event, version) => updates.skip(String(version))));
   ipcMain.handle('update:settings', guarded(() => updates.settings()));
   ipcMain.handle('update:check-on-open', guarded((_event, on) => updates.setCheckOnOpen(on)));
@@ -1348,6 +1357,7 @@ app.whenReady().then(async () => {
     return readAppleNotesSqlite(chosen.filePaths[0]);
   }));
   started = true;
+  sendBridge?.start();
   const launchedEuroOffice = process.argv.includes('--euro-office');
   // Back from a restart for an update: the windows and tabs that were open, each opening its
   // document again; files the system handed over join the first window.

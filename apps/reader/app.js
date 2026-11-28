@@ -4,6 +4,7 @@ import { textLines, selectedText } from "./text-layer.js";
 import { readingOrder, nearestWord, bandsFor, bandLine, distanceTo } from "./text-highlight.js";
 import { momentum, VelocityTracker } from "./momentum.js";
 import { fractionalScroller } from "./smooth-scroll.js";
+import { sendIn } from "./send-in.js";
 import {
   prepareDocument,
   readImage,
@@ -191,12 +192,14 @@ let epoch = 0,
   gesture = null,
   backgrounds = null;
 let mutationPending = 0;
+// NoteComplete Send (send-in.js): set up once the library and page dialogs exist.
+let sendInbox = null;
 const busy = () => editing || mutationPending > 0;
 // A floppy disk beside the title: a dot while there are unsaved changes,
 // and a click saves like Ctrl S.
 function savedState() {
   const needsSave = !!(doc && dirty && changed);
-  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: needsSave });
+  tabBar.update({ title: doc ? $("title").textContent : "Home", dirty: needsSave }); sendInbox?.publish();
   const label = needsSave ? "Unsaved changes. Click to save (Ctrl S)" : "Project saved";
   $("saveState").hidden = !doc;
   $("saveState").classList.toggle("dirty", needsSave);
@@ -671,8 +674,14 @@ async function openLaunched() {
       if (await openMediaFile(file, { path: desktop.path })) return;
       if (await openArchiveFile(file, { path: desktop.path })) return;
       await load(file);
-      return await openedLocal(desktop.path, desktop.name, file);
+      await openedLocal(desktop.path, desktop.name, file);
+      sendInbox?.publish();
+      sendInbox?.publishRecent();
+      // Files sent from the browser to the notebook this tab was opened for.
+      return await sendInbox?.take();
     }
+    // A window opened to choose where sent files go (no notebook was open).
+    await sendInbox?.take();
     if (tabParams.get("shared") === "1" && !launchedFiles.length) launchedFiles.push(...await sharedFiles());
     const [file, ...rest] = launchedFiles.splice(0);
     if (!file || busy()) return;
@@ -815,7 +824,7 @@ function reset({ opening = false, keepSession = false } = {}) {
   if ($("officeView")) $("officeView").hidden = true;
   $("title").textContent = "Home";
   document.title = "NoteComplete";
-  tabBar.update({ title: "Home", dirty: false });
+  tabBar.update({ title: "Home", dirty: false }); sendInbox?.publish();
   dirty = changed = false;
   $("textSave").hidden = $("htmlSave").hidden = true;
   $("htmlBackToNote").hidden = $("htmlExportCopy").hidden = true;
@@ -918,7 +927,7 @@ async function load(file, preparedDocument = null) {
       const sideTitle = prepared.title || file.name || "Document";
       $("title").textContent = sideTitle;
       document.title = `${sideTitle} — NoteComplete`;
-      tabBar.update({ title: sideTitle, dirty: false });
+      tabBar.update({ title: sideTitle, dirty: false }); sendInbox?.publish();
       if (prepared.kind === "html") { htmlView.open({ text: prepared.text, fingerprint: sideFp, name: sideTitle }); notes?.load(sideFp, { core: false }); }
       else {
         await textView.open({ text: prepared.text, name: sideTitle, markdown: prepared.markdown ?? (isMarkdownName(file.name) || isDiagramName(file.name)), key: file.name });
@@ -979,7 +988,7 @@ async function load(file, preparedDocument = null) {
     }, { maxKept: preloadCacheSize() });
     $("title").textContent = result.title || "Untitled note";
     document.title = `${$("title").textContent} — NoteComplete`;
-    tabBar.update({ title: $("title").textContent, dirty: dirty && changed });
+    tabBar.update({ title: $("title").textContent, dirty: dirty && changed }); sendInbox?.publish();
     showDocument();
     $("pageNumber").max = result.pages;
     documentControls();
@@ -4851,7 +4860,7 @@ async function openNewMarkdown({ title = "Untitled", initialText = "" } = {}) {
   sideFp = await noteFingerprint(new File([initialText], fileName)).catch(() => "");
   $("title").textContent = title;
   document.title = `${title} — NoteComplete`;
-  tabBar.update({ title, dirty: false });
+  tabBar.update({ title, dirty: false }); sendInbox?.publish();
   await textView.open({ text: initialText, name: title, markdown: true, key, edit: true, split: true });
   textSource.forget();
   if (collab?.role !== "guest") notes?.load(sideFp, { core: false });
@@ -5075,7 +5084,7 @@ const officeView = officeViewer({
   },
   onDirtyChange: (isDirty, name) => {
     dirty = changed = isDirty;
-    tabBar.update({ title: name || activeFileName || "Document", dirty: isDirty });
+    tabBar.update({ title: name || activeFileName || "Document", dirty: isDirty }); sendInbox?.publish();
   },
   onStatus: (msg, err) => status(msg, err),
   onSaveBytes: async ({ file, bytes, plan, copyTarget }) => {
@@ -5139,7 +5148,7 @@ setOfficeOpener(async (file, { mode = "edit" } = {}) => {
   officeFile = file;
   $("title").textContent = activeFileName;
   document.title = `${activeFileName} — NoteComplete`;
-  tabBar.update({ title: activeFileName, dirty: false });
+  tabBar.update({ title: activeFileName, dirty: false }); sendInbox?.publish();
   home.hide();
   $("editor").hidden = true;
   $("htmlView").hidden = true;
@@ -5295,7 +5304,7 @@ const odtExporter = odtExportController({
     officeFile = file;
     $("title").textContent = activeFileName;
     document.title = `${activeFileName} — NoteComplete`;
-    tabBar.update({ title: activeFileName, dirty: false });
+    tabBar.update({ title: activeFileName, dirty: false }); sendInbox?.publish();
     home.hide();
     $("editor").hidden = true;
     $("htmlView").hidden = true;
@@ -6225,10 +6234,10 @@ const htmlView = htmlViewer({
       embeddedExam.data = { ...(embeddedExam.data || {}), html: htmlView.text };
       call("setExam", { exam: embeddedExam.data }).catch(() => {});
       savedState();
-      tabBar.update({ title: doc?.title || htmlView.name, dirty: true });
+      tabBar.update({ title: doc?.title || htmlView.name, dirty: true }); sendInbox?.publish();
       return;
     }
-    tabBar.update({ title: htmlView.name, dirty: true });
+    tabBar.update({ title: htmlView.name, dirty: true }); sendInbox?.publish();
   },
   darkScript: loadDarkReader,
   // The dark theme's --canvas and --ink, also when the app itself is light.
@@ -6244,7 +6253,7 @@ const webView = webViewer({
   onTitle: (name, url) => {
     $("title").textContent = name;
     document.title = `${name} — NoteComplete`;
-    tabBar.update({ title: name, dirty: false });
+    tabBar.update({ title: name, dirty: false }); sendInbox?.publish();
     if (url === docMember?.url) library.rememberWeb(docMember.url, name).catch((e) => console.warn("Remember web:", e));
   },
 });
@@ -6302,7 +6311,7 @@ const textView = textViewer({
     collab?.textChanged?.();
     dirty = changed = true;
     $("textSave").hidden = false;
-    tabBar.update({ title: textView.name, dirty: true });
+    tabBar.update({ title: textView.name, dirty: true }); sendInbox?.publish();
   },
 });
 // Ctrl F in a text document: the formatted text, the Markdown editor or the plain editor.
@@ -6339,7 +6348,7 @@ async function saveConvertedCopy() {
       message = `${name} saved. The original is untouched.`;
     }
     dirty = changed = false;
-    tabBar.update({ title: textView.name, dirty: false });
+    tabBar.update({ title: textView.name, dirty: false }); sendInbox?.publish();
     status(message);
   } catch (error) { status(error.message, true); }
 }
@@ -6361,7 +6370,7 @@ async function saveText() {
     }
     dirty = changed = false;
     $(html ? "htmlSave" : "textSave").hidden = true;
-    tabBar.update({ title: view.name, dirty: false });
+    tabBar.update({ title: view.name, dirty: false }); sendInbox?.publish();
     // Study material and notes are kept per content fingerprint: they follow the saved text.
     const before = sideFp, after = await noteFingerprint(new File([view.text], name)).catch(() => "");
     if (before && after && after !== before) {
@@ -6513,7 +6522,7 @@ async function openWeb(member) {
   notePath = noteEntryKey = "";
   $("title").textContent = member.name;
   document.title = `${member.name} — NoteComplete`;
-  tabBar.update({ title: member.name, dirty: false });
+  tabBar.update({ title: member.name, dirty: false }); sendInbox?.publish();
   webView.open({ url: member.url, name: member.name, darkReader: loadDarkReader });
   showDocument();
   documentControls();
@@ -6680,6 +6689,8 @@ async function openedLocal(path, name, file) {
   home.rememberFacts(entry.key, file);
   setDocMember(localMember(path, name));
   void Promise.resolve(home.rememberCover(entry.key, file)).then(() => ensureDocumentCover({ skipExisting: true }));
+  sendInbox?.publish();
+  sendInbox?.publishRecent();
 }
 // Archives (.zip, .tar, .tar.gz/.tgz, .gz; archive.js): opened, they show what they hold in
 // the archive window (archive-view.js), checked entry by entry, and each entry NoteComplete
@@ -6692,7 +6703,7 @@ const zipWin = archiveView({ open: (file, title) => openFromArchive(file, title)
 function showArchiveTitle(title) {
   $("title").textContent = title;
   document.title = `${title} — NoteComplete`;
-  tabBar.update({ title });
+  tabBar.update({ title }); sendInbox?.publish();
 }
 async function openFromArchive(file, title, member = null) {
   if (!ready || busy()) { status("Wait for the current operation to finish.", true); return false; }
@@ -6848,7 +6859,7 @@ async function renameLocal(member, name) {
       textView.rename(title, newName);
       $("title").textContent = title;
       document.title = `${title} — NoteComplete`;
-      tabBar.update({ title, dirty: dirty && changed });
+      tabBar.update({ title, dirty: dirty && changed }); sendInbox?.publish();
     }
     await setDocMember(moved);
   } else await groupList.render();
@@ -7569,7 +7580,7 @@ $("resizeAll").onclick = async () => {
   action("resizePages", { pages, focus: page });
 };
 // Pages → Insert and Pages → Change PDF background (page-dialogs.js).
-const { openPageBackground } = pageDialogs({
+const { openPageBackground, appendPdf } = pageDialogs({
   $,
   action,
   busy,
@@ -7582,6 +7593,20 @@ const { openPageBackground } = pageDialogs({
     get panels() { return panels; },
   },
 });
+// Files sent from the browser extension (send-in.js; desktop send-main.js).
+sendInbox = sendIn({
+  getDoc: () => doc,
+  getTitle: () => $("title").textContent,
+  getPath: () => notePath,
+  library,
+  importImages: (files) => importImages(files),
+  appendPdf,
+  notes: notesApi,
+  status,
+  ready: async () => { while (busy()) await new Promise((r) => setTimeout(r, 100)); },
+});
+sendInbox.publish();
+sendInbox.publishRecent();
 // In a note of infinite canvases, Pages → Insert adds another canvas after this one.
 {
   const insertBlankPages = $("insertBlank").onclick;
@@ -8240,7 +8265,7 @@ const expandMaker = expandController({
     doc.has_exam = true;
     dirty = changed = true;
     savedState();
-    tabBar.update({ title: doc.title || $("title").textContent, dirty: true });
+    tabBar.update({ title: doc.title || $("title").textContent, dirty: true }); sendInbox?.publish();
     if (embeddedExam?.active) await openEmbeddedExamHtml();
     documentControls();
   },

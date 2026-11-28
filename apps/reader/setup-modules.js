@@ -557,14 +557,75 @@ export function cloudProvidersModule({ storage = globalThis.localStorage } = {})
   };
 }
 
+// ---- Browser extension (NoteComplete Send; desktop browser-send.js) ----
+
+// The card's state from notecompleteBrowserSend.status(): { browsers, version, installed }.
+export function browserSendState(status, { bridge = true } = {}) {
+  if (!bridge) return { state: 'desktop', detail: NEEDS_DESKTOP };
+  if (!status) return { state: 'error', detail: 'Could not check the browser extension.' };
+  if (status.installed) {
+    return { state: 'installed', version: status.version || '', detail: `Set up for ${status.browsers.join(', ')}`, action: 'Update' };
+  }
+  return { state: 'missing', detail: 'Chromium, Chrome, Brave, Edge or Vivaldi', action: 'Install' };
+}
+
+export function browserSendModule(bridge = globalThis.notecompleteBrowserSend) {
+  return {
+    id: 'browser-send', kind: 'install',
+    icon: 'share',
+    name: 'Browser extension (NoteComplete Send)',
+    summary: 'Right click a picture, PDF or link in the browser to send it to a notebook',
+    settings(el, ui, status = {}) {
+      const doc = el.ownerDocument;
+      const steps = doc.createElement('ol');
+      steps.className = 'wizard-hint';
+      for (const text of [
+        'In the browser, open chrome://extensions (brave://extensions, edge://extensions…) and turn on Developer mode.',
+        'Press Load unpacked and choose the extension folder (Show folder opens it).',
+        'Right click a picture, link or page → Send to NoteComplete: the notebook open here is the default; the menu also lists the other open and Recent notebooks, and Choose in NoteComplete…',
+      ]) steps.append(Object.assign(doc.createElement('li'), { textContent: text }));
+      const folder = doc.createElement('button');
+      folder.type = 'button';
+      folder.textContent = 'Show folder';
+      folder.onclick = () => bridge.openFolder();
+      const remove = doc.createElement('button');
+      remove.type = 'button';
+      remove.textContent = 'Remove';
+      remove.onclick = async () => {
+        if (remove.dataset.confirm !== '1') { remove.dataset.confirm = '1'; remove.textContent = 'Press again to remove'; return; }
+        await bridge.uninstall();
+        remove.textContent = 'Removed';
+        remove.disabled = folder.disabled = true;
+      };
+      const row = doc.createElement('div');
+      row.className = 'wizard-inline-row';
+      row.append(folder, remove);
+      el.append(steps, row);
+      if (status.version) el.append(ui.hint(`Extension ${status.version}. After an update, press the reload arrow on its card in the browser's extensions page.`));
+    },
+    async status() {
+      if (!bridge) return browserSendState(null, { bridge: false });
+      try { return browserSendState(await bridge.status()); } catch (e) { return { state: 'error', detail: e.message }; }
+    },
+    async install(onProgress = () => {}) {
+      const res = await bridge.install((p) => onProgress({ text: p?.text || 'Working' }));
+      if (!res?.ok) throw Error(res?.error || 'Could not set up the browser extension.');
+      if (!res.browsers?.length) return { ok: true, text: 'Downloaded, but no Chromium-family browser was found. Open one once, then press Update.' };
+      await bridge.openFolder();
+      return { ok: true, text: `Ready for ${res.browsers.join(', ')}: load the folder in the browser (steps below)` };
+    },
+  };
+}
+
 // The built-in cards, in the order the wizard shows them.
-export function registerBuiltInModules({ rBridge = globalThis.notecompleteRBridge, office = globalThis.notecompleteOffice, agents = globalThis.notecompleteAgents, storage = globalThis.localStorage } = {}) {
+export function registerBuiltInModules({ rBridge = globalThis.notecompleteRBridge, office = globalThis.notecompleteOffice, agents = globalThis.notecompleteAgents, browserSend = globalThis.notecompleteBrowserSend, storage = globalThis.localStorage } = {}) {
   registry.clear();
   registerModule(mathModule({ rBridge }));
   registerModule(euroOfficeModule({ storage, bridge: office }));
   registerModule(chineseModule());
   registerModule(cloudProvidersModule({ storage }));
   registerModule(agentsModule(agents));
+  registerModule(browserSendModule(browserSend));
   return moduleList();
 }
 

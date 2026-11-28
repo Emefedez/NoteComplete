@@ -88,7 +88,7 @@ test('the end screen', () => {
 
 test('modules: the registry and its cards', () => {
   const list = M.registerBuiltInModules({ rBridge: null, agents: null });
-  assert.deepEqual(list.map((m) => m.id), ['math', 'euro-office', 'chinese', 'cloud-providers', 'ai-tools']);
+  assert.deepEqual(list.map((m) => m.id), ['math', 'euro-office', 'chinese', 'cloud-providers', 'ai-tools', 'browser-send']);
   for (const m of list) {
     assert.ok(m.name && m.summary && m.icon, m.id);
     assert.ok(['feature', 'install'].includes(m.kind), m.id);
@@ -252,4 +252,21 @@ test('prefabs wizard step: draft tracks tree changes and applies on Finish', asy
   assert.equal(applied.length, 1);
   assert.deepEqual(applied[0].remove, ['charts']);
   assert.deepEqual(applied[0].install, []);
+});
+
+test('modules: the browser extension card follows the desktop helper', async () => {
+  assert.equal(M.browserSendState(null, { bridge: false }).state, 'desktop');
+  assert.deepEqual(M.browserSendState({ browsers: [], version: '' }), { state: 'missing', detail: 'Chromium, Chrome, Brave, Edge or Vivaldi', action: 'Install' });
+  const on = M.browserSendState({ browsers: ['Chromium', 'Brave'], version: '0.1.0', installed: true });
+  assert.equal(on.state, 'installed');
+  assert.equal(on.action, 'Update');
+  assert.match(on.detail, /Chromium, Brave/);
+  const calls = [];
+  const card = M.browserSendModule({ status: async () => ({ browsers: ['Chromium'], version: '0.1.0', installed: true }), install: async (p) => { p({ text: 'Downloading' }); return { ok: true, browsers: ['Chromium'] }; }, openFolder: async () => calls.push('folder') });
+  assert.equal((await card.status()).state, 'installed');
+  const steps = [];
+  const done = await card.install((p) => steps.push(p.text));
+  assert.ok(done.ok && /Chromium/.test(done.text));
+  assert.deepEqual(steps, ['Downloading']);
+  assert.deepEqual(calls, ['folder']);
 });
