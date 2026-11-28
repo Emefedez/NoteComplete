@@ -215,8 +215,8 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
   const PAGE_ACTIONS = [
     { id: "prefab", label: "Insert prefab here…", icon: "graph" },
     { id: "shape", label: "Insert shape", icon: "shape" },
-    { id: "text", label: "Type text here", icon: "text" },
     { id: "image", label: "Insert image…", icon: "image" },
+    { id: "text", label: "Insert text here", icon: "text" },
     { id: "uml", label: "Insert UML diagram here…", icon: "uml" },
     { id: "table", label: "Insert table here…", icon: "table" },
     { id: "export", label: "Export this page", icon: "export" },
@@ -240,7 +240,7 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       case "shape": return { label: "Insert shape", short: "Shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
         label, icon: "shape", iconEl: document.querySelector(`#shapePicker [data-shape="${kind}"] svg`), run: () => insertShapeAt(p, at, kind),
       })) };
-      case "text": return { label: "Type text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
+      case "text": return { label: "Insert text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
       case "image": return { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() };
       case "uml": return { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, box) };
       case "table": return { label: "Insert table here…", icon: "table", run: () => insertCompound(p, "table", box) };

@@ -3,7 +3,7 @@
 import { icon } from './icons.js';
 
 const KEY = 'notecomplete-page-menu';
-export const PAGE_MENU_DEFAULT = ['prefab', 'shape', 'text', 'image', '-', 'export', 'undo'];
+export const PAGE_MENU_DEFAULT = ['prefab', 'shape', 'image', 'text', '-', 'export', 'undo'];
 
 export function pageMenuOrder() {
   try {
