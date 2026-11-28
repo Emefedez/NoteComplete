@@ -144,11 +144,19 @@ pub(super) fn ai_format_setting() -> AiFormat {
     for path in candidates {
         if let Ok(raw) = std::fs::read_to_string(&path) {
             if let Ok(v) = serde_json::from_str::<Value>(&raw) {
-                if let Some(fmt) = v.get("aiFormat").and_then(Value::as_str).and_then(parse_ai_format) {
+                if let Some(fmt) = v
+                    .get("aiFormat")
+                    .and_then(Value::as_str)
+                    .and_then(parse_ai_format)
+                {
                     return fmt;
                 }
                 if let Some(pref) = v.get("preferMarkdown").and_then(Value::as_bool) {
-                    return if pref { AiFormat::Markdown } else { AiFormat::Both };
+                    return if pref {
+                        AiFormat::Markdown
+                    } else {
+                        AiFormat::Both
+                    };
                 }
             }
         }
