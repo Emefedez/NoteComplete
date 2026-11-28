@@ -106,6 +106,61 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     if (context) makeDragScrollStrip(context);
   }
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
+  // The pen on a question of yours: it goes back into the box (its pictures attached again)
+  // to be changed, or sent as it is with another tool or model; sending drops it and every
+  // message after it, and asks again from there. `editing`: { item, at } (at: its place in history).
+  let editing = null;
+  function editBanner() {
+    let bar = $('chatEditBar');
+    if (!bar) {
+      bar = Object.assign(document.createElement('div'), { id: 'chatEditBar', className: 'chat-edit-bar', hidden: true });
+      const text = Object.assign(document.createElement('span'), { textContent: 'Editing a question: Send asks again from there (you can change the tool or model first).' });
+      const cancel = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Cancel', title: 'Keep the conversation as it is (Esc)' });
+      cancel.onclick = () => stopEditing(true);
+      bar.append(icon('draw'), text, cancel);
+      $('chatForm').before(bar);
+    }
+    return bar;
+  }
+  function stopEditing(clear = false) {
+    editing?.item.classList.remove('chat-editing');
+    editing = null;
+    if ($('chatEditBar')) $('chatEditBar').hidden = true;
+    if (clear) { $('chatInput').value = ''; attachments = []; renderAttachments(); }
+  }
+  function startEditing(item, at, content, images = []) {
+    if (busy) return status('Wait for the answer, or stop it, before editing a question.', true);
+    editing?.item.classList.remove('chat-editing');
+    editing = { item, at };
+    item.classList.add('chat-editing');
+    attachments = normalizeMessageImages(images).map((img) => ({ url: img.url, label: img.label }));
+    renderAttachments();
+    $('chatInput').value = content;
+    editBanner().hidden = false;
+    $('chatInput').focus();
+    $('chatInput').setSelectionRange?.(content.length, content.length);
+  }
+  // Puts the pen on a question bubble; `at` is where the question is (or would be) in history.
+  function editable(item, at, content, images = []) {
+    const pen = document.createElement('button');
+    pen.type = 'button';
+    pen.className = 'chat-edit';
+    pen.title = 'Edit this question, or send it again (with another model too)';
+    pen.setAttribute('aria-label', 'Edit or resend this question');
+    pen.append(icon('draw'));
+    pen.onclick = () => startEditing(item, at, content, images);
+    item.prepend(pen);
+  }
+  // Sending an edit: that question and everything after it go, in the list and in history.
+  function cutAtEdit() {
+    if (!editing) return;
+    const { item, at } = editing;
+    stopEditing();
+    if (!item.isConnected) return;
+    while (item.nextSibling) item.nextSibling.remove();
+    item.remove();
+    history = history.slice(0, at);
+  }
   function attachTablePasteButtons(body) {
     if (!toTablePrefab || !body || typeof body.querySelectorAll !== 'function') return;
     for (const old of body.querySelectorAll('.chat-table-actions')) old.remove();
@@ -326,7 +381,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     const userDisplay = pendingDocs.length
       ? `${question}${question ? '\n' : ''}${pendingDocs.map(d => `[Attached: ${d.name}]`).join(' ')}`
       : question;
-    add('user', userDisplay, '', sentImages);
+    editable(add('user', userDisplay, '', sentImages), history.length, question, sentImages);
     // Three dots pulse until the first words arrive.
     const waiting = add('assistant', '', 'Thinking');
     const dots = document.createElement('span');
@@ -431,7 +486,9 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatForm').onsubmit = event => {
     event.preventDefault();
     const q = $('chatInput').value.trim() || (attachments.length ? 'Explain this image.' : (attachedDocs.length ? 'Summarize the attached file(s).' : ''));
+    if (busy || !q) return;
     $('chatInput').value = '';
+    cutAtEdit();
     ask(q);
   };
   if ($('chatAttachFile')) {
@@ -466,7 +523,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       $('chatInput')?.focus();
     };
   }
-  $('chatInput').onkeydown = event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); } };
+  $('chatInput').onkeydown = event => {
+    if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('chatForm').requestSubmit(); }
+    else if (event.key === 'Escape' && editing) { event.preventDefault(); event.stopPropagation(); stopEditing(true); }
+  };
   $('chatPanel').addEventListener('paste', async event => {
     if (!hasClipboardImage(event.clipboardData)) return;
     event.preventDefault();
@@ -475,7 +535,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   $('chatStop').onclick = () => ai?.cancel('chat');
   $('chatNotes').onchange = () => { $('chatNotes').dataset.touched = '1'; };
   $('chatClose').onclick = close;
-  $('chatClear').onclick = () => { history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; attachments = []; attachedDocs = []; renderAttachments(); $('chatMessages').replaceChildren(); setHeading(''); open(); };
+  $('chatClear').onclick = () => { stopEditing(); history = []; topic = ''; conversation = newId(); chatTitle = ''; follow = null; attachments = []; attachedDocs = []; renderAttachments(); $('chatMessages').replaceChildren(); setHeading(''); open(); };
   $('chatProvider').onchange = () => {
     $('chatNoteLabel').hidden = !notePath();
     try { localStorage.setItem('notecomplete-ai-provider', $('chatProvider').value); } catch { /* Optional. */ }
@@ -487,6 +547,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     const normalized = normalizeThreadMessages(messages, text);
     const firstUser = normalized.find(m => m.role === 'user')?.content || '';
     const resolvedTitle = String(title || firstUser || 'Ask AI').replace(/\s+/g, ' ').trim() || 'Ask AI';
+    stopEditing();
     history = normalized;
     conversation = id || newId();
     chatTitle = resolvedTitle;
@@ -500,6 +561,7 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
     const renders = [];
     for (const [i, m] of normalized.entries()) {
       const { item, rendered } = bubble(m.role, m.content, '', m.images);
+      if (m.role === 'user') editable(item, i, m.content, m.images);
       if (m.role === 'assistant') {
         const done = (rendered || Promise.resolve()).then(() => {
           attachTablePasteButtons(item.querySelector('.chat-body'));
@@ -541,7 +603,11 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       $('chatMessages').replaceChildren();
       const from = add('user', title);
       from.classList.add('chat-from');
-      for (const m of history) add(m.role, m.content, '', m.images);
+      stopEditing();
+      for (const [i, m] of history.entries()) {
+        const item = add(m.role, m.content, '', m.images);
+        if (m.role === 'user') editable(item, i, m.content, m.images);
+      }
       if (image) attach(image, label);
       for (const a of extraImages) if (a?.url) attach(a.url, a.label || 'a pasted image from the clipboard');
       $('chatSelection').checked = false;

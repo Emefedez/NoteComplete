@@ -6537,3 +6537,17 @@ body.bar-compact .bar-end-actions .bar-ai span { max-width: 0; opacity: 0; }
   margin: 0;
   padding: 0;
 }
+
+/* Ask AI: the pen on your questions (chat.js) edits one or sends it again; it shows on hover. */
+.chat-messages li.chat-user { position: relative; }
+.chat-messages .chat-edit { position: absolute; left: -30px; top: 50%; translate: 0 -50%; display: inline-grid; place-items: center; width: 24px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--muted); opacity: 0; transition: opacity .15s ease; cursor: pointer; }
+.chat-messages .chat-edit svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chat-messages li.chat-user:hover .chat-edit, .chat-messages .chat-edit:focus-visible, .chat-messages li.chat-editing .chat-edit { opacity: 1; }
+.chat-messages .chat-edit:hover { background: var(--accent-soft); color: var(--accent); }
+@media (hover: none) { .chat-messages .chat-edit { opacity: .7; } }
+.chat-messages li.chat-editing { outline: 2px solid var(--accent); outline-offset: 1px; }
+.chat-edit-bar { display: flex; align-items: center; gap: 8px; margin: 0 10px 6px; padding: 5px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--ink); font-size: 12px; }
+.chat-edit-bar[hidden] { display: none; }
+.chat-edit-bar > svg { flex: none; width: 14px; height: 14px; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.chat-edit-bar > span { flex: 1; min-width: 0; }
+.chat-edit-bar > button { flex: none; min-height: 24px; padding: 2px 8px; font-size: 12px; }
