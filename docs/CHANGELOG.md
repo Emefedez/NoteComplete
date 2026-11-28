@@ -4,6 +4,10 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.41
+
+- **Edit or resend any question in Ask AI.** Hover over a question you asked and click its pen button (also visible on touch devices) to put the question and its attached pictures back into the input box. Edit it, or switch to another AI tool or model, and send to ask again from there (dropping that turn and everything after it); press *Esc* or click *Cancel* to keep the conversation as it is.
+
 ## 2.0.40
 
 - **Ctrl+click opens a tab behind the one you are in.** Ctrl+click (or middle click) on a note in Home or a Moodle file opens it in a new tab and leaves you where you were, as a browser does. The new tab loads in the background; click it in the tab strip when you want it.
