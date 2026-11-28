@@ -2937,7 +2937,7 @@ mark.md-hl.md-tc, .TinyMDE .TMHighlight.TMTextColour { background: none; padding
 .all-study .all-quizzes li:not(.all-quizzes-doc) { flex: none; align-items: center; min-width: 0; }
 .all-study .saved-open { flex: 1 1 auto; min-width: 0; min-height: 40px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; padding: 6px 10px; border-radius: var(--radius); }
 .all-study .saved-open strong { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.all-study .saved-open span { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.all-study .saved-open > span { flex: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .all-study .saved-export, .all-study .saved-icon { flex: none; align-self: center; width: 32px; height: 32px; min-height: 32px; }
 .all-study .scratch-saved-row { align-items: center; }
 /* Saved explanations open from their Explanation ▾ button; closed, they take no room. */
@@ -2957,6 +2957,11 @@ mark.md-hl.md-tc, .TinyMDE .TMHighlight.TMTextColour { background: none; padding
 .scratch-list li, .scratch-body { min-width: 0; overflow-wrap: anywhere; }
 .scratch-body .katex-display { overflow-x: auto; overflow-y: hidden; max-width: 100%; }
 .scratch-body .katex-display > .katex { white-space: normal; }
+/* In its window the list is the one scroller: it fills the space between the intro and Close and
+   follows the window's size (no fixed 60dvh box scrolling inside the window's own body). */
+.float-dialog.has-body .scratch-list { flex: 1 1 auto; min-height: 0; max-height: none; align-content: start; overscroll-behavior: contain; }
+.float-dialog.has-body:has(.scratch-list) > .panel-body { overflow: hidden; }
+.float-dialog.has-body .scratch-list ~ * { flex: none; }
 .chat-body pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-body a { color: var(--accent); text-decoration: underline; cursor: pointer; }
 /* Ask boxes: Ask, Ask again and Close are icons. */
@@ -4403,6 +4408,9 @@ body.pages-dark #penHover { filter: var(--page-filter, contrast(100%)) invert(0.
 .context-pair > button { min-width: 0; gap: 7px; padding: 5px 8px; }
 .context-pair > button > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .context-pair > button .context-chevron { margin-left: auto; }
+/* Opening to the left: the arrow sits on the left edge and points left; the icon keeps its place. */
+.context-menu button.opens-left { position: relative; }
+.context-menu button.opens-left .context-chevron { position: absolute; left: -4px; top: 50%; width: 11px; height: 11px; margin: 0; transform: translateY(-50%) scaleX(-1); }
 .context-pair > button kbd { display: none; }
 .context-menu .context-glyph { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .context-menu button.checked .context-swatch { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent); }
@@ -4713,6 +4721,9 @@ button.zip-caret:hover { background: var(--accent-soft); color: var(--ink); }
 .marquee > .marquee-text { display: inline-block; transition: transform var(--slide, 1s) linear; }
 .marquee-auto.sliding { text-overflow: clip; }
 .marquee-auto > .marquee-text { display: inline-block; transition: transform var(--slide, 1s) linear; }
+/* The sliding text is never cut itself (a row's own `span { overflow: hidden; text-overflow: ellipsis }`
+   would clip it to the name's width and slide an empty box). */
+:is(.marquee, .marquee-auto) > .marquee-text { max-width: none !important; overflow: visible !important; text-overflow: clip !important; }
 @media (prefers-reduced-motion: reduce) { .marquee-auto > .marquee-text { transition: none; } }
 @media (prefers-reduced-motion: reduce) { .marquee > .marquee-text { transition: none; } }
 

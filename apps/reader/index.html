@@ -175,6 +175,7 @@
           <button id="studyRetake" data-icon="restart" disabled>Retake wrong answers<kbd>Shift W</kbd></button>
           <hr />
           <button id="studyOpenDeck" data-icon="storage" data-palette="Study: Saved resources…" title="Saved quizzes, flashcard decks, exams, and AI scratchpad conversations for this note or across all notes">Saved resources…<kbd>Shift D</kbd></button>
+          <button id="scratchOpen" data-icon="chat" data-palette="Study: Scratchpad…" title="AI conversations kept with this note">Scratchpad…</button>
           <button id="keptRefsOpen" data-icon="star" data-palette="Study: Kept for exercises…" title="View and manage snippets kept from Grab for exercises alongside any page or figure editor">Kept for exercises…</button>
           <button data-proxy="importAny" data-icon="import" data-palette="Study: Import quiz or study material…" title="Same as File → Import…: a quiz from Quiz Toolkit (Markdown), a study pack from another NoteComplete, or a flashcard deck">Import quiz or study material…</button>
           <button id="studyExportQuiz" data-icon="export" disabled title="The open quiz, or the latest one, as an Anki text import">Export quiz to Anki…</button>
@@ -1821,9 +1822,8 @@
 
 <dialog id="scratchDialog" class="ocr-dialog saved-dialog scratch-dialog float-dialog floating" data-window aria-labelledby="scratchTitle">
   <div class="float-head"><h2 id="scratchTitle">Scratchpad</h2><button id="scratchX" type="button" class="icon-button" data-icon="close" aria-label="Close" title="Close"></button></div>
-  <p class="muted">AI conversations kept with this note: press Scratchpad under an answer. Pressing it again in the same conversation rewrites its entry.</p>
   <ul id="scratchList" class="scratch-list"></ul>
-  <p id="scratchEmpty" class="muted" hidden>Nothing kept yet.</p>
+  <p id="scratchEmpty" class="muted" hidden>Nothing kept yet: press Scratchpad under an AI answer.</p>
   <div class="ocr-actions"><span class="spacer"></span><button id="scratchClose" type="button">Close</button></div>
 </dialog>
 

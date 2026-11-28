@@ -60,8 +60,11 @@ export function installMarquee(doc = globalThis.document) {
       if (!el.classList.contains('marquee')) el.classList.add('marquee-auto');
       const span = inner(el);
       el.classList.add('sliding');
-      el.style.setProperty('--slide', `${slideSeconds(distance)}s`);
-      span.style.transform = `translateX(${-distance}px)`;
+      // Measured on the wrapped text (the name's own scrollWidth can count padding or markup
+      // around it), and laid out once at 0 so the slide starts from the text as it stands.
+      const shift = slideDistance(span.getBoundingClientRect().width, el.clientWidth) || distance;
+      el.style.setProperty('--slide', `${slideSeconds(shift)}s`);
+      span.style.transform = `translateX(${-shift}px)`;
     });
   });
   doc.addEventListener('pointerout', (e) => {

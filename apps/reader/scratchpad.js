@@ -1,6 +1,6 @@
 // Scratchpad: AI answers kept with the note. The Scratchpad button under an answer keeps
 // its conversation up to that answer; pressing it again in the same conversation
-// rewrites that entry. View → Scratchpad… shows them (Markdown and formulas), each with
+// rewrites that entry. Study → Scratchpad… shows them (Markdown and formulas), each with
 // Add to notes, Copy and Delete. Kept per note (`scratch:<fingerprint>`).
 import { renderMarkdown } from './rich-text.js';
 import { icon } from './icons.js';
@@ -94,7 +94,7 @@ export function scratchpad({ store, key, markdown, status, notes, canNote = () =
       }),
       at: Date.now(),
     }));
-    status(had ? 'Scratchpad entry rewritten up to this answer.' : 'Kept in this note’s scratchpad (View → Scratchpad…).');
+    status(had ? 'Scratchpad entry rewritten up to this answer.' : 'Kept in this note’s scratchpad (Study → Scratchpad…).');
     if ($('scratchDialog').open) render();
   }
   async function render() {

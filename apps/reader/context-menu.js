@@ -38,7 +38,9 @@ function panel(list, title, root, depth) {
     el.append(head);
   }
   let timer = 0;
-  const button = (entry, half = false) => {
+  // `opensLeft`: its submenu opens to the left (the left half of a pair), so its arrow is on
+  // the left and points left.
+  const button = (entry, half = false, opensLeft = false) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
@@ -60,6 +62,7 @@ function panel(list, title, root, depth) {
       const chev = icon('arrowRight');
       chev.classList.add('context-chevron');
       b.append(chev);
+      b.classList.toggle('opens-left', opensLeft);
     }
     const showSub = () => {
       const items = (typeof sub === 'function' ? sub() : sub || []).filter(Boolean);
@@ -83,8 +86,8 @@ function panel(list, title, root, depth) {
     });
     b.addEventListener('pointerleave', () => { clearTimeout(timer); root.__timers?.delete(timer); });
     b.addEventListener('keydown', (e) => {
-      if (sub && e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); showSub(); root.__subs?.at(-1)?.querySelector('button:not(:disabled)')?.focus(); }
-      else if (depth && e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); const owner = el.__owner; closeSubs(root, depth); owner?.focus(); }
+      if (sub && e.key === (b.classList.contains('opens-left') ? 'ArrowLeft' : 'ArrowRight')) { e.preventDefault(); e.stopPropagation(); showSub(); root.__subs?.at(-1)?.querySelector('button:not(:disabled)')?.focus(); }
+      else if (depth && e.key === (el.__owner?.classList.contains('opens-left') ? 'ArrowRight' : 'ArrowLeft')) { e.preventDefault(); e.stopPropagation(); const owner = el.__owner; closeSubs(root, depth); owner?.focus(); }
     });
     return b;
   };
@@ -97,7 +100,7 @@ function panel(list, title, root, depth) {
     if (halves?.length === 2) {
       const row = document.createElement('div');
       row.className = 'context-pair';
-      row.append(button(halves[0], true), button(halves[1], true));
+      row.append(button(halves[0], true, true), button(halves[1], true));
       el.append(row);
     } else el.append(button(halves?.[0] || entry));
   });
@@ -154,6 +157,8 @@ function openSub(root, parent, button, items, title, depth) {
     const left = pair.firstElementChild === button;
     place(el, menu.right - 2, r.top - 5, menu.left + 2, left);
   } else place(el, r.right - 2, r.top - 5, r.left + 2);
+  // Flipped to the left (no room on the right): its arrow follows.
+  button.classList.toggle('opens-left', el.getBoundingClientRect().right <= r.left + 4);
   (root.__subs ||= []).push(el);
 }
 

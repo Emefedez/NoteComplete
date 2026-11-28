@@ -7980,7 +7980,7 @@ const find = findController({
   documentInfo: () => ({ pages: doc?.pages || 0 }),
   jobs: () => jobs,
 });
-// Scratchpad: AI conversations kept per note (View → Scratchpad…).
+// Scratchpad: AI conversations kept per note (Study → Scratchpad…).
 const scratch = scratchpad({
   store: library.store,
   key: () => (doc ? `scratch:${find.fingerprint || doc.title || "note"}` : studyText() && sideFp ? `scratch:${sideFp}` : ""),

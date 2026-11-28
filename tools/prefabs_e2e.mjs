@@ -95,15 +95,16 @@ try {
   await p.mouse.click(sheet.x + sheet.width * 0.5, Math.min(mid[1] + img.height / 2 + 120, 860), { button: 'right' });
   await p.waitForSelector('.context-menu');
   const pageEntries = await p.locator('.context-menu button span').allTextContents();
-  for (const e of ['Insert prefab here…', 'Insert shape', 'Type text here', 'Insert image…', 'Export this page', 'Undo', 'Customize this menu…']) assert.ok(pageEntries.includes(e), `page menu: ${pageEntries}`);
+  for (const e of ['Prefab', 'Shape', 'Image…', 'Text', 'Export this page', 'Undo', 'Customize this menu…']) assert.ok(pageEntries.includes(e), `page menu: ${pageEntries}`);
   assert.ok(!pageEntries.includes('Quick menu') && !pageEntries.includes('Insert UML diagram here…'), `page menu: ${pageEntries}`);
   // Resting on Insert prefab here…: the ones used last.
-  await p.hover('.context-menu:not(.context-submenu) button:has-text("Insert prefab here")');
+  await p.hover('.context-menu:not(.context-submenu) button[title="Insert prefab here…"]');
+  assert.ok(await p.locator('.context-pair > button.opens-left[title="Insert prefab here…"] .context-chevron').count(), 'Prefab opens to the left: its arrow on the left');
   await p.waitForSelector('.context-submenu');
   assert.ok((await p.locator('.context-submenu button span').allTextContents()).includes('Histogram'), 'recently used');
   // Insert shape → Rectangle: one more item, where it was asked.
   const before = await items();
-  await p.hover('.context-menu:not(.context-submenu) button:has-text("Insert shape")');
+  await p.hover('.context-menu:not(.context-submenu) button[title="Insert shape"]');
   await p.click('.context-submenu button:has-text("Rectangle")');
   await p.waitForFunction((n) => document.querySelectorAll('.sheet[data-page="0"] .render :is([data-item^="new:"], [data-item^="image:"])').length === n + 1, before);
   // Its menu: colour, thickness and opacity, changed in place.

@@ -240,8 +240,8 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
       case "shape": return { label: "Insert shape", short: "Shape", icon: "shape", submenu: () => Object.entries(SHAPE_NAMES).map(([kind, label]) => ({
         label, icon: "shape", iconEl: document.querySelector(`#shapePicker [data-shape="${kind}"] svg`), run: () => insertShapeAt(p, at, kind),
       })) };
-      case "text": return { label: "Insert text here", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
-      case "image": return { label: "Insert image…", icon: "image", key: "⇧I", run: () => $("importImage").click() };
+      case "text": return { label: "Insert text here", short: "Text", icon: "text", run: () => { document.querySelector('#toolbar [data-tool="text"]').click(); textBox.open(p, at); } };
+      case "image": return { label: "Insert image…", short: "Image…", icon: "image", key: "⇧I", run: () => $("importImage").click() };
       case "uml": return { label: "Insert UML diagram here…", icon: "uml", run: () => insertUml(p, box) };
       case "table": return { label: "Insert table here…", icon: "table", run: () => insertCompound(p, "table", box) };
       case "export": return { ...exportEntries(`${app.doc.title || "Note"} - page ${p.index + 1}`, (scale, type, quality) => pagePicture(p.index, scale, type, quality)), label: "Export this page" };
@@ -252,13 +252,14 @@ export function itemMenus({ $, ITEM_NAMES, SHAPE_NAMES, SWATCHES, WIDTH_LADDER, 
     }
     return null;
   }
-  // The page menu's entries in the person's order; Prefab and Shape side by side on one line when
-  // they come one after the other (context-menu.js pair).
+  // The page menu's entries in the person's order; Prefab and Shape, Image and Text side by side
+  // on one line when they come one after the other (context-menu.js pair).
+  const PAIRS = [["prefab", "shape"], ["image", "text"]];
   function pairUp(order, entryOf) {
     const out = [];
     for (let i = 0; i < order.length; i++) {
       const [a, b] = [order[i], order[i + 1]];
-      if ((a === "prefab" && b === "shape") || (a === "shape" && b === "prefab")) {
+      if (PAIRS.some(([x, y]) => (a === x && b === y) || (a === y && b === x))) {
         const left = entryOf(a), right = entryOf(b);
         if (left && right) { const { key: _k, ...l } = left; out.push({ pair: [l, right] }); i++; continue; }
       }
