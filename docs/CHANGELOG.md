@@ -4,6 +4,13 @@ Every version's changes before the latest one, newest first. The latest release'
 in [RELEASE_NOTES.md](RELEASE_NOTES.md), which is the text of the GitHub release: when a new
 version comes out, move that file's version section here and write the new one in its place.
 
+## 2.0.40
+
+- **Ctrl+click opens a tab behind the one you are in.** Ctrl+click (or middle click) on a note in Home or a Moodle file opens it in a new tab and leaves you where you were, as a browser does. The new tab loads in the background; click it in the tab strip when you want it.
+- **Animations.** Menus, dialogs, side panels, Home's cards, pages and scratchpad conversations now fade and slide in as they appear. Turn them on or off in *View → Animations* or in *Setup → Look*. *View → Animation speed…* (also in Setup) has two scale bars, one for menus and dialogs and one for lists, pages and panels, from 0.25× (quicker) to 3× (slower). Animations start off when the system asks for reduced motion.
+- **Chinese look-ups no longer push the menu around.** When the page menu finds Chinese in a picture after it has opened, the *Look up* entries are added at the bottom, so what is under the pointer stays put. A menu that grows past the window's edge scrolls instead of moving.
+- **Scratchpad conversations fold.** Each conversation has an arrow in its header (down: open, right: folded); clicking it or the title folds the conversation to its header. *Collapse all* / *Expand all* sits at the bottom of the window. Folded conversations stay folded the next time.
+
 ## 2.0.39
 
 - **Long titles in Saved resources slide to their end.** Hovering a scratchpad conversation whose title is cut short now slides the whole title into view, ending on its last word, and slides it back when you move away (before, it slid an empty box and the end stayed hidden).
