@@ -94,14 +94,15 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
   // picker adds its search and "One page at a time" beside the model list: in one wrapping row
   // with the title they broke into two or three uneven lines as the window narrowed.
   {
-    const head = document.querySelector('#chatPanel .chat-head');
+    const panel = $('chatPanel');
+    const head = panel?.querySelector?.('.chat-head');
     if (head && !head.nextElementSibling?.classList.contains('chat-tools')) {
       const tools = document.createElement('div');
       tools.className = 'chat-tools';
       tools.append($('chatProvider'), $('chatModel'));
       head.after(tools);
     }
-    const context = document.querySelector('#chatPanel .chat-context');
+    const context = panel?.querySelector?.('.chat-context');
     if (context) makeDragScrollStrip(context);
   }
   const model = ai ? modelPicker($('chatModel'), $('chatModelOther'), ai) : null;
