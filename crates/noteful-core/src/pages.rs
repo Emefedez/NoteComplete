@@ -39,6 +39,7 @@ pub(crate) fn link_valid(link: &str) -> bool {
     link.len() <= 500
         && (link.starts_with("https://")
             || link.starts_with("http://")
+            || link.starts_with("file://")
             || link.starts_with("notecomplete:"))
         && !link.chars().any(|c| c.is_whitespace() || c.is_control())
 }

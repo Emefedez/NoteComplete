@@ -11,7 +11,8 @@ import { homedir } from 'node:os';
 import path from 'node:path';
 
 export const SERVER = 'notecomplete';
-export const DEFAULT_MCP_SETTINGS = Object.freeze({ preferMarkdown: false });
+export const AI_DOC_FORMATS = Object.freeze(['both', 'markdown', 'ink']);
+export const DEFAULT_MCP_SETTINGS = Object.freeze({ aiFormat: 'both', preferMarkdown: false });
 export const TOOLS = {
   claude: { label: 'Claude Code' },
   codex: { label: 'Codex' },
@@ -85,13 +86,20 @@ export async function installSkillsFor(tool, { skillsDir, home = homedir() } = {
   return { tool, installed: names, dirs };
 }
 
+function normalizeAiFormat(value, legacyPreferMd) {
+  if (value === 'both' || value === 'markdown' || value === 'ink') return value;
+  if (legacyPreferMd === true) return 'markdown';
+  return 'both';
+}
+
 // Shared MCP preferences stored in <userData>/mcp-settings.json so both the
 // desktop app UI and the `noteful mcp` Rust binary read the same settings.
 export async function readMcpSettings(file) {
   try {
     const raw = await readFile(file, 'utf8');
     const parsed = JSON.parse(raw);
-    return { preferMarkdown: parsed?.preferMarkdown === true };
+    const aiFormat = normalizeAiFormat(parsed?.aiFormat, parsed?.preferMarkdown);
+    return { aiFormat, preferMarkdown: aiFormat === 'markdown' };
   } catch {
     return { ...DEFAULT_MCP_SETTINGS };
   }
@@ -99,8 +107,15 @@ export async function readMcpSettings(file) {
 
 export async function writeMcpSettings(file, patch = {}) {
   const current = await readMcpSettings(file);
+  let aiFormat = current.aiFormat;
+  if (patch?.aiFormat !== undefined) {
+    aiFormat = normalizeAiFormat(patch.aiFormat, false);
+  } else if (typeof patch?.preferMarkdown === 'boolean') {
+    aiFormat = patch.preferMarkdown ? 'markdown' : 'both';
+  }
   const next = {
-    preferMarkdown: typeof patch?.preferMarkdown === 'boolean' ? patch.preferMarkdown : current.preferMarkdown,
+    aiFormat,
+    preferMarkdown: aiFormat === 'markdown',
   };
   await mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.tmp`;

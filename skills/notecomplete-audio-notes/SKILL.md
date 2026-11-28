@@ -26,6 +26,7 @@ Use this workflow whenever a user asks you to read, summarize, transcribe-align,
      - If you need the raw audio file to run local transcription, call `extract_resource(path, kind="audio")` to list audio indices, then `extract_resource(path, kind="audio", index=N, out_dir=...)`.
 
 5. **Produce the output in the user's preferred format**
-   - Check the MCP server's initialization instructions: if **Prefer Markdown (.md)** is enabled (or the user asked for Markdown), use `create_markdown` with `<!-- PREFAB:key -->` placeholders for diagrams/charts.
+   - Check the MCP server's initialization instructions for the user's format setting (`Both` by default — feel free to use Markdown, handwritten ink, or combine **both** in the same `.nfedit` note via `write_notes` + `add_pages` + `add_prefab`; if set to `Markdown only`, use `create_markdown` with `<!-- PREFAB:key -->` placeholders; if set to `Ink only`, use `.nfedit` handwritten pages + `add_prefab`).
+   - Always save to `.nfedit` whenever using prefabs or KaTeX math text boxes (`math: true`), and pre-run any `r_figure` prefabs via `Rscript` (`cache.svg`) so plots render immediately and stay double-click editable.
    - If adding notes to an existing `.notecomp` / `.nfedit`, use `write_notes(path, text, page=N)` with `<!-- page N -->` markers and `[MM:SS]` timestamp references.
    - If the user asked for flashcards, draft them grouped by page + timestamp and save with `write_anki_deck`.

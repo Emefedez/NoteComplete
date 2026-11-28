@@ -6,34 +6,70 @@ import { renderSuccessionEditor, renderT3StatusCard } from "./ai-failover.js";
 
 const ASKED = "notecomplete-agents-asked";
 export const PREFER_MD_KEY = "notecomplete-ai-prefer-markdown";
+export const AI_FORMAT_KEY = "notecomplete-ai-document-format";
+export const AI_FORMAT_OPTIONS = [
+  { id: "both", label: "Both ink & Markdown (recommended — AI chooses)" },
+  { id: "markdown", label: "Markdown (.md) only (+ prefabs)" },
+  { id: "ink", label: "Handwritten ink only (+ prefabs)" },
+];
 
-export function readPreferMarkdown(store = globalThis.localStorage) {
-  try { return store?.getItem(PREFER_MD_KEY) === "true"; } catch { return false; }
+export function normalizeAiFormat(value, legacyPreferMd = false) {
+  if (value === "both" || value === "markdown" || value === "ink") return value;
+  return legacyPreferMd ? "markdown" : "both";
 }
 
-export async function syncPreferMarkdown({ api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
+export function readAiFormat(store = globalThis.localStorage) {
+  try {
+    const saved = store?.getItem(AI_FORMAT_KEY);
+    if (saved === "both" || saved === "markdown" || saved === "ink") return saved;
+    return store?.getItem(PREFER_MD_KEY) === "true" ? "markdown" : "both";
+  } catch { return "both"; }
+}
+
+export async function syncAiFormat({ api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
   if (typeof api?.settings === "function") {
     try {
       const s = await api.settings();
-      if (typeof s?.preferMarkdown === "boolean") {
-        try { store?.setItem(PREFER_MD_KEY, String(s.preferMarkdown)); } catch { /* Optional. */ }
-        return s.preferMarkdown;
+      if (s && (typeof s.aiFormat === "string" || typeof s.preferMarkdown === "boolean")) {
+        const fmt = normalizeAiFormat(s.aiFormat, s.preferMarkdown === true);
+        try {
+          store?.setItem(AI_FORMAT_KEY, fmt);
+          store?.setItem(PREFER_MD_KEY, String(fmt === "markdown"));
+        } catch { /* Optional. */ }
+        return fmt;
       }
     } catch { /* Fall back to local storage. */ }
   }
-  return readPreferMarkdown(store);
+  return readAiFormat(store);
 }
 
-export async function writePreferMarkdown(on, { api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
-  const value = on === true;
-  try { store?.setItem(PREFER_MD_KEY, String(value)); } catch { /* Optional. */ }
+export async function writeAiFormat(format, { api = globalThis.notecompleteAgents, store = globalThis.localStorage } = {}) {
+  const fmt = normalizeAiFormat(format, false);
+  try {
+    store?.setItem(AI_FORMAT_KEY, fmt);
+    store?.setItem(PREFER_MD_KEY, String(fmt === "markdown"));
+  } catch { /* Optional. */ }
   if (typeof api?.setSettings === "function") {
     try {
-      const saved = await api.setSettings({ preferMarkdown: value });
-      if (typeof saved?.preferMarkdown === "boolean") return saved.preferMarkdown;
+      const saved = await api.setSettings({ aiFormat: fmt, preferMarkdown: fmt === "markdown" });
+      if (saved && (typeof saved.aiFormat === "string" || typeof saved.preferMarkdown === "boolean")) {
+        return normalizeAiFormat(saved.aiFormat, saved.preferMarkdown === true);
+      }
     } catch { /* Kept in local storage. */ }
   }
-  return value;
+  return fmt;
+}
+
+export function readPreferMarkdown(store = globalThis.localStorage) {
+  return readAiFormat(store) === "markdown";
+}
+
+export async function syncPreferMarkdown(opts = {}) {
+  return (await syncAiFormat(opts)) === "markdown";
+}
+
+export async function writePreferMarkdown(on, opts = {}) {
+  return (await writeAiFormat(on === true ? "markdown" : "both", opts)) === "markdown";
 }
 
 // One line per tool: what it is now and what the button does.
@@ -63,10 +99,15 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
     dialog.innerHTML = `
       <h2 id="agentsTitle">Connect your AI tools to your notes</h2>
       <p class="muted">NoteComplete comes with a note server. Connected tools can read your notes, make flashcards and write real handwriting or Markdown documents with embedded prefabs, using your own subscription. Notes are changed only when you ask for it, and the previous file is kept.</p>
-      <label class="wizard-check" style="margin: 0 0 12px;">
-        <input id="agentsPreferMarkdown" type="checkbox" />
-        <span><strong>Prefer Markdown (.md) for AI-generated documents</strong><span class="wizard-check-hint">Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.</span></span>
-      </label>
+      <div class="wizard-check" style="margin: 0 0 12px; display: block;">
+        <label for="agentsAiFormat"><strong>AI-generated document format</strong></label>
+        <div style="margin: 6px 0 4px;">
+          <select id="agentsAiFormat" style="width: 100%; max-width: 420px;">
+            ${AI_FORMAT_OPTIONS.map((o) => `<option value="${o.id}">${o.label}</option>`).join("")}
+          </select>
+        </div>
+        <span class="wizard-check-hint">Choose whether connected AI tools (MCP) can combine handwritten ink and Markdown in the same note, or stick to one format (always using prefabs for charts, R plots, and diagrams).</span>
+      </div>
       <div id="agentsT3Mount" style="margin: 0 0 12px;"></div>
       <details class="agents-manual" style="margin: 0 0 12px;">
         <summary><strong>AI document failover priority</strong> — hand off orchestrator &amp; subagents on error / usage limit</summary>
@@ -78,21 +119,25 @@ export function agentConnector({ api = globalThis.notecompleteAgents, status = (
       <div class="ocr-actions"><button id="agentsClose" type="button" class="primary">Done</button></div>`;
     document.body.append(dialog);
     dialog.querySelector("#agentsClose").onclick = () => dialog.close();
-    const prefBox = dialog.querySelector("#agentsPreferMarkdown");
-    prefBox.checked = readPreferMarkdown(store);
-    prefBox.onchange = async () => {
-      const saved = await writePreferMarkdown(prefBox.checked, { api, store });
-      prefBox.checked = saved;
+    const fmtSelect = dialog.querySelector("#agentsAiFormat");
+    fmtSelect.value = readAiFormat(store);
+    fmtSelect.onchange = async () => {
+      const saved = await writeAiFormat(fmtSelect.value, { api, store });
+      fmtSelect.value = saved;
       const note = dialog.querySelector("#agentsStatus");
-      if (note) note.textContent = saved
-        ? "AI tools will prefer Markdown (.md) documents (takes effect on the next MCP session)."
-        : "AI tools will use the default notebook/document format (takes effect on the next MCP session).";
+      if (note) {
+        note.textContent = saved === "markdown"
+          ? "AI tools will use Markdown (.md) documents + prefabs (takes effect on the next MCP session)."
+          : saved === "ink"
+            ? "AI tools will use handwritten ink notebooks + prefabs (takes effect on the next MCP session)."
+            : "AI tools can choose or combine handwritten ink and Markdown + prefabs (takes effect on the next MCP session).";
+      }
     };
   }
   async function render() {
     const list = dialog.querySelector("#agentsList"), note = dialog.querySelector("#agentsStatus");
-    const prefBox = dialog.querySelector("#agentsPreferMarkdown");
-    if (prefBox) syncPreferMarkdown({ api, store }).then((v) => { prefBox.checked = v; }, () => {});
+    const fmtSelect = dialog.querySelector("#agentsAiFormat");
+    if (fmtSelect) syncAiFormat({ api, store }).then((v) => { fmtSelect.value = v; }, () => {});
     const t3Mount = dialog.querySelector("#agentsT3Mount");
     if (t3Mount) renderT3StatusCard(t3Mount, { ai: globalThis.notecompleteAI, onInstalled: () => render() });
     const succMount = dialog.querySelector("#agentsSuccessionMount");

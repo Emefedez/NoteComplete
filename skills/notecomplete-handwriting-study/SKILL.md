@@ -5,13 +5,15 @@ description: Write natural handwritten NoteComplete/Noteful notebooks, grade han
 
 # NoteComplete Handwritten Study Pages & Grading
 
-Use this workflow when the user explicitly wants handwritten ink notebooks, page annotations/grading, or visual mockup-to-ink study sheets. (If the user has **Prefer Markdown (.md)** enabled and did not ask for handwriting, use `notecomplete-markdown-prefabs` instead.)
+Use this workflow when writing handwritten ink notebooks, annotating/grading pages, or building visual study sheets. Check the NoteComplete MCP `initialize` instructions for the user's format setting (`Both` by default — feel free to use ink, Markdown, or combine **both** in the same note via `write_notes` / `add_prefab` with `target="notes"`, choosing what fits each part best; if set to `Markdown only`, use `notecomplete-markdown-prefabs` instead).
 
 ## 1. Writing new handwritten pages (`create_notebook`, `add_pages`, `clean_copy`)
 1. Always call `example_pages()` (or `example_pages(name)` for `cell-biology`, `radiation`, `clean-copy`, `quiz`, `answers-tree`) first to match the dialect and layout density.
-2. Aim for ~90% of one page per section using `!columns`, `> [sky]`, `!zone`, `!stat`, `!sticky`, and plain SVG `!draw` blocks.
-3. For formulas, prefer native KaTeX `textbox` items (`math: true`) via `write_on_page` rather than hand-drawn equations.
-4. Inspect the returned PNG preview after every write; if content spills onto an extra page or overlaps, tighten and re-run.
+2. Aim for ~90% of one page per section using `!columns`, `> [sky]`, `!zone`, `!stat`, `!sticky`, and plain SVG `!draw` blocks. For boxes/cards/frames, use `> [color]`, `!sticky`, `!zone`, or `shape` rectangles—**never** stack or tile multiple highlighter strokes to fake a box.
+3. For formulas and worked math, **always** use native KaTeX `textbox` items (`math: true`) via `write_on_page` (leaving space in the layout) rather than plain-text approximations or hand-drawn equations. **Save to `.nfedit`** whenever a notebook uses prefabs or `math: true` text boxes (`.noteful` flattens prefabs to static images and strips `math: true`).
+4. For graphs, statistical/R plots (`r_figure` / `r-math`: normal, t, chi-square, binomial, histogram, boxplot, scatter, custom R), function plots (`plot`), charts (`histogram`/`bar`), timelines, process states, UML, truth tables, or number lines, leave space on the page (or use `!zone`) and call `add_prefab` on the generated `.nfedit` page instead of hand-drawing them in `!draw`. For `r_figure`, pre-run with `Rscript` and embed `cache.svg` so plots are immediately rendered and stay double-click editable in NoteComplete.
+5. When summarizing a source PDF/manual, add clickable `[label](file:///abs/path/to/file.pdf#page=N)` links on both new and existing pages so clicking jumps straight to the expanded source page.
+6. Inspect the returned PNG preview after every write (and do a quick final page-by-page overview with `page_image` once generation finishes) to catch any text/axis/label overlap or crowding and tighten/reposition before finishing.
 
 ## 2. Grading or marking an existing page (`page_image` → `page_layout` → `write_on_page`)
 1. Call `page_image(path, page)` to read the student's answers.

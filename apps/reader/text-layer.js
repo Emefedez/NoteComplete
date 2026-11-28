@@ -137,8 +137,8 @@ export function textLayer(size, sources) {
   }
   return svg;
 }
-// Web links and the app's own actions (notecomplete:install); nothing that runs script.
-export const linkAllowed = (link) => typeof link === 'string' && link.length <= 500 && /^(https?:\/\/|notecomplete:)[^\s]*$/.test(link);
+// Web links, local file links (file://), and the app's own actions (notecomplete:install); nothing that runs script.
+export const linkAllowed = (link) => typeof link === 'string' && link.length <= 500 && /^(https?:\/\/|file:\/\/|notecomplete:)[^\s]*$/.test(link);
 
 // The selected part of a text layer as plain text, one line per row.
 export function selectedText(selection) {

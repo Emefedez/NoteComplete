@@ -168,9 +168,10 @@ pub(super) fn destination(
         }
         return Ok((out, None));
     }
-    // A Goodnotes or Notability notebook is written as a .nfedit that keeps it.
+    // Default to .nfedit so interactive prefabs, KaTeX math text boxes, and searchable
+    // handwriting are preserved (Noteful's .noteful format flattens them).
     let e = writable_ext(&source.map(ext).map_or_else(
-        || "noteful".into(),
+        || "nfedit".into(),
         |e| {
             if matches!(e.as_str(), "goodnotes" | "ntb" | "rnote") {
                 "nfedit".into()
@@ -287,9 +288,9 @@ pub(super) fn tools() -> Vec<Value> {
         Value::Object(m)
     };
     vec![
-        tool("create_notebook", &format!("Create a new notebook whose pages are written in natural, editable Noteful handwriting ink (pen, highlighter and tape strokes on generated paper). Returns where it was written and a picture of page 1.\n{style}"),
+        tool("create_notebook", &format!("Create a new notebook whose pages are written in natural, editable Noteful handwriting ink (pen, highlighter and tape strokes on generated paper). Use `> [color]`, `!sticky`, `!zone`, or `shape` rectangles for boxes—never stack multiple highlighter strokes to make a box. For statistical/R plots (`r_figure`), function plots, charts, UML, timelines, or truth tables, leave space and call `add_prefab` on the page instead of hand-drawing graphs. Returns where it was written and a picture of page 1.\n{style}"),
             merge(json!({"title":{"type":"string"},"markdown":{"type":"string"}}), &[&look_props, &json!({"out":write_props["out"],"overwrite":write_props["overwrite"]})]), &["title","markdown"]),
-        tool("add_pages", &format!("Add handwritten pages to a note (at the end, or after page N), written to a copy unless in_place.\n{style}"),
+        tool("add_pages", &format!("Add handwritten pages to a note (at the end, or after page N), written to a copy unless in_place. Use `> [color]`, `!sticky`, `!zone`, or `shape` rectangles for boxes—never stack multiple highlighter strokes to make a box. For statistical/R plots (`r_figure`), function plots, charts, UML, timelines, or truth tables, leave space and call `add_prefab` on the added page(s) instead of hand-drawing graphs.\n{style}"),
             merge(json!({"path":path,"markdown":{"type":"string"},"after_page":{"type":"integer","minimum":0,"description":"Insert after this page (0 = at the start); default at the end"}}), &[&look_props, &write_props]), &["path","markdown"]),
         tool("clean_copy", &format!("Insert a neat handwritten rewrite right after a page. First read the messy page with page_image (and page_text); then pass the cleaned, well-structured content as markdown. Defaults: ruled paper, neat hand.\n{style}"),
             merge(json!({"path":path,"page":page,"markdown":{"type":"string"}}), &[&look_props, &write_props]), &["path","page","markdown"]),
@@ -448,8 +449,8 @@ impl Server {
         save(&editor, &out, None, None)?;
         let mut report = json!({"written":out,"pages":pages.len(),"warnings":warnings,"note":spill(pages.len()),"handwriting_text":kept_text(&out),
             "open":"Open it in NoteComplete, or import it on the iPad (Files → share to Noteful)."});
-        if prefer_markdown_setting() {
-            report["preference_note"] = json!("Note: the user has 'Prefer Markdown for AI-generated documents' enabled in NoteComplete settings; use create_markdown unless handwritten ink was explicitly requested.");
+        if crate::mcp::ai_format_setting() == crate::mcp::AiFormat::Markdown {
+            report["preference_note"] = json!("Note: the user has 'Markdown only (+ prefabs)' enabled in NoteComplete settings; use create_markdown unless handwritten ink was explicitly requested.");
         }
         self.preview(&out, 0, report)
     }

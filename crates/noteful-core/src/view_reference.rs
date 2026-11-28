@@ -171,7 +171,9 @@ impl Editor {
             .filter_map(|i| {
                 // Bounds let search highlight typed text like PDF and OCR words.
                 let mut t = serde_json::to_value(i.text.as_ref()?).ok()?;
-                t["bounds"] = json!(i.bounds);
+                t["bounds"] = json!(self.current_bounds(page, &i.id).unwrap_or(i.bounds));
+                t["id"] = json!(i.id);
+                t["imported"] = json!(true);
                 Some(t)
             })
             .chain(

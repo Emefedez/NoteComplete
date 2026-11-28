@@ -9,7 +9,7 @@ import { icon } from './icons.js';
 import { presets, presetOf } from './quality.js';
 import { LOCAL_ID, LOCAL_LABEL } from './local-ai.js';
 import { moduleButton, registerBuiltInModules, showsSettings } from './setup-modules.js';
-import { describe as describeAgentTool, readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
+import { describe as describeAgentTool, AI_FORMAT_OPTIONS, readAiFormat, syncAiFormat, writeAiFormat } from './agents.js';
 import { renderSuccessionEditor, renderT3StatusCard } from './ai-failover.js';
 import { buildPackTree, renderPrefabsStep, hasPrefabChanges, applyPrefabDraft } from './setup-prefabs.js';
 import { PRESETS } from './themes.js';
@@ -261,18 +261,18 @@ export function buildSteps(env) {
             p.tag ? make('span', { className: 'wizard-provider-tag', textContent: p.tag }) : null));
         }
         const agentsApi = env.agents ?? globalThis.notecompleteAgents;
-        const preferMd = toggle(
-          {
-            get: () => readPreferMarkdown(storage),
-            set: (on) => { void writePreferMarkdown(on, { api: agentsApi, store: storage }); },
-          },
-          'Prefer Markdown (.md) for AI-generated documents',
-          'Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.',
-        );
-        const preferMdInput = preferMd.querySelector('input[type="checkbox"]');
-        if (preferMdInput && agentsApi?.settings) {
-          syncPreferMarkdown({ api: agentsApi, store: storage }).then((v) => { preferMdInput.checked = v; }, () => {});
+        const aiFmtSelect = make('select', { className: 'wizard-select' },
+          ...AI_FORMAT_OPTIONS.map((o) => make('option', { value: o.id, textContent: o.label })));
+        aiFmtSelect.value = readAiFormat(storage);
+        aiFmtSelect.onchange = () => { void writeAiFormat(aiFmtSelect.value, { api: agentsApi, store: storage }); };
+        if (agentsApi?.settings) {
+          syncAiFormat({ api: agentsApi, store: storage }).then((v) => { aiFmtSelect.value = v; }, () => {});
         }
+        const aiFmtWrap = make('div', { className: 'wizard-check' },
+          make('div', {},
+            make('strong', { textContent: 'Format for AI-generated documents' }),
+            make('div', { style: 'margin: 6px 0 4px;' }, aiFmtSelect),
+            make('span', { className: 'wizard-check-hint', textContent: 'By default AI tools can use ink, Markdown, or combine both in the same note (always using prefabs for charts, R plots, and diagrams).' })));
         const t3Mount = make('div', { className: 'wizard-t3-mount' });
         renderT3StatusCard(t3Mount, {
           ai: env.ai,
@@ -291,7 +291,7 @@ export function buildSteps(env) {
           label('Harness failover priority'),
           make('p', { className: 'wizard-hint', textContent: 'If a harness errors out or hits usage limits while generating AI documents, NoteComplete hands off the orchestrator and remaining subagents to the next harness in this order without losing completed work.' }),
           successionMount,
-          label('AI-generated documents'), preferMd);
+          label('AI-generated documents'), aiFmtWrap);
 
         if (agentsApi?.status) {
           if (!draft.agents) {

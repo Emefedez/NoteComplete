@@ -447,7 +447,8 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
         transcript && `Conversation so far:\n${transcript}`,
         `Student: ${question}`,
       ].filter(Boolean).join('\n\n');
-      const beforeStat = targetNotePath ? await globalThis.notecompleteFiles?.statLocalNote?.(targetNotePath).catch(() => null) : null;
+      const openNotePath = notePath();
+      const beforeStat = openNotePath ? await globalThis.notecompleteFiles?.statLocalNote?.(openNotePath).catch(() => null) : null;
       // The answer appears while it is written; Markdown is re-rendered at most
       // every 120 ms so long answers stay cheap.
       let streamed = '', timer = 0, rendering = Promise.resolve();
@@ -468,10 +469,10 @@ export function chatController({ ai, pageCanvas, pageText, documentInfo, current
       await answer(waiting, text, { withTableButtons: true });
       actions(waiting, text.trim());
       follow?.(question, text.trim());
-      if (targetNotePath && onNoteChanged) {
-        const afterStat = await globalThis.notecompleteFiles?.statLocalNote?.(targetNotePath).catch(() => null);
+      if (openNotePath && onNoteChanged) {
+        const afterStat = await globalThis.notecompleteFiles?.statLocalNote?.(openNotePath).catch(() => null);
         if (afterStat && (!beforeStat || afterStat.mtimeMs > beforeStat.mtimeMs || afterStat.size !== beforeStat.size)) {
-          await onNoteChanged(targetNotePath);
+          await onNoteChanged(openNotePath);
         }
       }
       return text.trim();

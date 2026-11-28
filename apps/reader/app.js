@@ -584,13 +584,42 @@ $("status").addEventListener("pointerenter", () => clearTimeout(statusTimer));
 $("status").addEventListener("pointerleave", () => {
   if ($("status").classList.contains("show")) statusTimer = setTimeout(() => $("status").classList.remove("show", "copied"), 1500);
 });
-// The app's own links (notecomplete:install), e.g. in the website's welcome notebook.
-document.addEventListener("click", (event) => {
+// The app's own links (notecomplete:install) and local file links (file://...) on notebook pages.
+document.addEventListener("click", async (event) => {
   const link = event.target.closest?.("a.ink-link, a[href^='notecomplete:']");
   const href = link?.getAttribute("href") || "";
-  if (!href.startsWith("notecomplete:")) return;
-  event.preventDefault();
-  if (href === "notecomplete:install") installApp();
+  if (href.startsWith("notecomplete:")) {
+    event.preventDefault();
+    if (href === "notecomplete:install") installApp();
+    return;
+  }
+  if (/^file:\/\//i.test(href)) {
+    event.preventDefault();
+    try {
+      const u = new URL(href);
+      let filePath = decodeURIComponent(u.pathname);
+      if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
+      const pageMatch = u.hash.match(/^#(?:page[=-]?|p|L)(\d+)\b/i);
+      const targetPage = pageMatch && Number(pageMatch[1]) > 0 ? Number(pageMatch[1]) : 0;
+      if (doc && (filePath === notePath || filePath === docMember?.path)) {
+        if (targetPage > 0) jump(Math.min(doc.pages, targetPage) - 1);
+        return;
+      }
+      if (!window.notecompleteFiles?.readLocalNote) {
+        status("Opening local file links is only available in the desktop app.", true);
+        return;
+      }
+      if (busy() || !canReplace()) return;
+      const opened = await window.notecompleteFiles.readLocalNote(filePath);
+      if (!opened) return status(`File not found: ${filePath}`, true);
+      const file = new File([opened.bytes], opened.name);
+      await load(file);
+      await openedLocal(opened.path, opened.name, file);
+      if (doc && targetPage > 0) jump(Math.min(doc.pages, targetPage) - 1);
+    } catch (err) {
+      status(err?.message || "Could not open linked file.", true);
+    }
+  }
 }, true);
 // Add this site to the Home Screen / install it as an app. Browsers that offer an install
 // prompt (Chrome, Edge, Android) show it; elsewhere (Safari on iPhone and iPad) the steps.
@@ -8028,7 +8057,7 @@ async function reloadNoteFromDisk(targetPath) {
   const opened = await window.notecompleteFiles.readLocalNote(targetPath).catch(() => null);
   if (!opened) return;
   const diskFile = new File([opened.bytes], opened.name);
-  if (dirty || busy()) {
+  if (dirty && changed || busy()) {
     try {
       const { bytes: localBytes } = await exportNoteBytes(opened.name.endsWith(".nfedit") ? "project" : "noteful");
       if (localBytes) {
@@ -8660,17 +8689,16 @@ $("uiReset").onclick = () => applyUiSize(0);
 document.addEventListener("click", async (e) => {
   const a = e.target.closest?.(".chat-body a");
   if (!a) return;
-  if (a.dataset.page) {
-    e.preventDefault();
-    if (!doc) return;
-    for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
-    showDocument();
-    jump(Math.min(doc.pages, Number(a.dataset.page)) - 1);
-    return;
-  }
   if (a.dataset.localFile) {
     e.preventDefault();
     const filePath = a.dataset.localFile;
+    const targetPage = a.dataset.page ? Number(a.dataset.page) : 0;
+    if (doc && (filePath === notePath || filePath === docMember?.path)) {
+      for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
+      showDocument();
+      if (targetPage > 0) jump(Math.min(doc.pages, targetPage) - 1);
+      return;
+    }
     if (!window.notecompleteFiles?.readLocalNote) {
       status("Opening local file links is only available in the desktop app.", true);
       return;
@@ -8683,9 +8711,18 @@ document.addEventListener("click", async (e) => {
       const file = new File([opened.bytes], opened.name);
       await load(file);
       await openedLocal(opened.path, opened.name, file);
+      if (doc && targetPage > 0) jump(Math.min(doc.pages, targetPage) - 1);
     } catch (err) {
       status(err?.message || `Could not open ${filePath}`, true);
     }
+    return;
+  }
+  if (a.dataset.page) {
+    e.preventDefault();
+    if (!doc) return;
+    for (const d of document.querySelectorAll("dialog[open]:not(.floating)")) d.close();
+    showDocument();
+    jump(Math.min(doc.pages, Number(a.dataset.page)) - 1);
     return;
   }
   const url = a.dataset.aiImage || (a.dataset.aiFile && getAiFile(a.dataset.aiFile)?.url);

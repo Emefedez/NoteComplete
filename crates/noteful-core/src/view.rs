@@ -446,7 +446,9 @@ impl Editor {
         // Bounds let search highlight typed text like PDF and OCR words.
         let imported_texts = p.items.iter().filter(|i| shown(&i.id)).filter_map(|i| {
             let mut t = serde_json::to_value(i.text.as_ref()?).ok()?;
-            t["bounds"] = json!(i.bounds);
+            t["bounds"] = json!(self.current_bounds(page, &i.id).unwrap_or(i.bounds));
+            t["id"] = json!(i.id);
+            t["imported"] = json!(true);
             Some(t)
         });
         let added_texts = facts

@@ -412,7 +412,9 @@ impl Editor {
             })
     }
     /// Change a text box's text, size or style (one undo step). Its position
-    /// stays; the box grows or shrinks from its top-left corner.
+    /// stays; the box grows or shrinks from its top-left corner. If `id` is a
+    /// Noteful-imported text box, converts it in place into an editable NoteComplete
+    /// (.nfedit) text box (supporting KaTeX math, runs, etc.) as one undo step.
     pub fn edit_text(
         &mut self,
         page: usize,
@@ -421,26 +423,51 @@ impl Editor {
         size: [f64; 2],
     ) -> Result<()> {
         self.editable_layer(page, id)?;
-        let mut image = self
-            .images(page)
-            .find(|(key, _)| key == id)
-            .map(|(_, image)| image.clone())
-            .filter(|image| image.text.is_some())
-            .ok_or_else(|| Error::new(0, "Not a text box"))?;
         if !text.valid() || size.iter().any(|v| !v.is_finite() || *v <= 0. || *v > 1e6) {
             return Err(Error::new(0, "Invalid text box"));
         }
-        if image.text.as_ref() == Some(&text) && [image.bounds[2], image.bounds[3]] == size {
-            return Ok(());
+        let existing = self
+            .images(page)
+            .find(|(key, _)| key == id)
+            .map(|(_, image)| image.clone())
+            .filter(|image| image.text.is_some());
+        if let Some(mut image) = existing {
+            if image.text.as_ref() == Some(&text) && [image.bounds[2], image.bounds[3]] == size {
+                return Ok(());
+            }
+            image.text = Some(text);
+            image.bounds[2] = size[0];
+            image.bounds[3] = size[1];
+            return self.commit(Edit::Retext {
+                page,
+                id: id.to_owned(),
+                image,
+            });
         }
-        image.text = Some(text);
-        image.bounds[2] = size[0];
-        image.bounds[3] = size[1];
-        self.commit(Edit::Retext {
+        let imported_layer = self
+            .page(page)?
+            .items
+            .iter()
+            .find(|i| i.id == id && i.text.is_some())
+            .map(|i| i.layer)
+            .ok_or_else(|| Error::new(0, "Not a text box"))?;
+        let [bx, by, _, _] = self.current_bounds(page, id)?;
+        let image = Image {
+            base64: String::new(),
+            mime: String::new(),
+            bounds: [bx, by, size[0], size[1]],
+            layer: imported_layer,
+            joined: true,
+            part: None,
+            under: false,
+            text: Some(text),
+        };
+        self.commit(Edit::Erase {
             page,
-            id: id.to_owned(),
-            image,
-        })
+            ids: vec![id.to_owned()],
+            joined: false,
+        })?;
+        self.commit(Edit::Image { page, image })
     }
     /// A blank document, or a PDF whose dimensions were read by the host PDF parser.
     pub fn create_document(title: &str, sizes: &[[f64; 2]], pdf: &[u8]) -> Result<Self> {

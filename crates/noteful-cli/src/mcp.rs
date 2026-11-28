@@ -83,16 +83,37 @@ fn library() -> PathBuf {
     documents.join("NoteComplete")
 }
 
-/// Reads the desktop app's `mcp-settings.json` (`preferMarkdown`) or the
-/// `NOTECOMPLETE_PREFER_MARKDOWN` env var override.
-pub(super) fn prefer_markdown_setting() -> bool {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum AiFormat {
+    Both,
+    Markdown,
+    Ink,
+}
+
+fn parse_ai_format(s: &str) -> Option<AiFormat> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "both" | "mixed" | "auto" => Some(AiFormat::Both),
+        "markdown" | "md" => Some(AiFormat::Markdown),
+        "ink" | "handwriting" | "notebook" => Some(AiFormat::Ink),
+        _ => None,
+    }
+}
+
+/// Reads the desktop app's `mcp-settings.json` (`aiFormat` / legacy `preferMarkdown`)
+/// or the `NOTECOMPLETE_AI_FORMAT` / `NOTECOMPLETE_PREFER_MARKDOWN` env var overrides.
+pub(super) fn ai_format_setting() -> AiFormat {
+    if let Ok(val) = std::env::var("NOTECOMPLETE_AI_FORMAT") {
+        if let Some(fmt) = parse_ai_format(&val) {
+            return fmt;
+        }
+    }
     if let Ok(val) = std::env::var("NOTECOMPLETE_PREFER_MARKDOWN") {
         let v = val.trim().to_ascii_lowercase();
         if matches!(v.as_str(), "1" | "true" | "yes" | "on") {
-            return true;
+            return AiFormat::Markdown;
         }
         if matches!(v.as_str(), "0" | "false" | "no" | "off") {
-            return false;
+            return AiFormat::Both;
         }
     }
     let mut candidates: Vec<PathBuf> = Vec::new();
@@ -123,13 +144,16 @@ pub(super) fn prefer_markdown_setting() -> bool {
     for path in candidates {
         if let Ok(raw) = std::fs::read_to_string(&path) {
             if let Ok(v) = serde_json::from_str::<Value>(&raw) {
+                if let Some(fmt) = v.get("aiFormat").and_then(Value::as_str).and_then(parse_ai_format) {
+                    return fmt;
+                }
                 if let Some(pref) = v.get("preferMarkdown").and_then(Value::as_bool) {
-                    return pref;
+                    return if pref { AiFormat::Markdown } else { AiFormat::Both };
                 }
             }
         }
     }
-    false
+    AiFormat::Both
 }
 
 fn tool(name: &str, description: &str, properties: Value, required: &[&str]) -> Value {
@@ -170,10 +194,10 @@ impl Server {
                     .iter()
                     .find(|v| **v == asked)
                     .unwrap_or(&VERSIONS[0]);
-                let pref_notice = if prefer_markdown_setting() {
-                    "USER PREFERENCE: Prefer Markdown (.md) documents for AI-generated documents (use create_markdown with optional inline prefabs, or add_prefab on .md files) instead of handwritten notebooks, unless the user explicitly asks for handwriting. "
-                } else {
-                    ""
+                let pref_notice = match ai_format_setting() {
+                    AiFormat::Both => "AI DOCUMENT FORMAT (Both ink & Markdown + prefabs): Choose whichever best fits the workflow, and do not hesitate to combine BOTH in the same note (e.g., handwritten ink pages alongside companion Markdown notes via write_notes / add_prefab with target='notes'). Always use add_prefab (or inline prefabs in create_markdown) for charts, R plots (r_figure), diagrams, timelines, UML, and truth tables. ",
+                    AiFormat::Markdown => "USER PREFERENCE (Markdown only + prefabs): Use Markdown (.md) documents via create_markdown (with optional inline prefabs) or add_prefab on .md files instead of handwritten ink notebooks, unless the user explicitly asks for handwriting. Always use prefabs for charts, R plots, and diagrams. ",
+                    AiFormat::Ink => "USER PREFERENCE (Handwritten ink only + prefabs): Use handwritten ink notebooks (.noteful/.nfedit) via create_notebook, add_pages, clean_copy, or write_on_page instead of standalone .md documents, unless the user explicitly asks for Markdown. Always use add_prefab for charts, R plots (r_figure), and diagrams on the pages instead of hand-drawing graphs. ",
                 };
                 Ok(
                     json!({"protocolVersion":version,"capabilities":{"tools":{},"prompts":{},"resources":{}},
@@ -1301,14 +1325,15 @@ mod tests {
     }
 
     #[test]
-    fn prefer_markdown_setting_reads_mcp_settings_file() {
+    fn ai_format_setting_reads_mcp_settings_file() {
         let dir = std::env::temp_dir().join(format!("nc-mcp-pref-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("mcp-settings.json");
         std::fs::write(&file, r#"{"preferMarkdown": true}"#).unwrap();
         std::env::set_var("NOTECOMPLETE_MCP_SETTINGS", &file);
+        std::env::remove_var("NOTECOMPLETE_AI_FORMAT");
         std::env::remove_var("NOTECOMPLETE_PREFER_MARKDOWN");
-        assert!(prefer_markdown_setting());
+        assert_eq!(ai_format_setting(), AiFormat::Markdown);
         let mut server = Server::default();
         let init = server
             .handle(&json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}))
@@ -1316,9 +1341,11 @@ mod tests {
         assert!(init["result"]["instructions"]
             .as_str()
             .unwrap()
-            .contains("USER PREFERENCE: Prefer Markdown (.md)"));
-        std::fs::write(&file, r#"{"preferMarkdown": false}"#).unwrap();
-        assert!(!prefer_markdown_setting());
+            .contains("USER PREFERENCE (Markdown only + prefabs)"));
+        std::fs::write(&file, r#"{"aiFormat": "ink"}"#).unwrap();
+        assert_eq!(ai_format_setting(), AiFormat::Ink);
+        std::fs::write(&file, r#"{"aiFormat": "both", "preferMarkdown": false}"#).unwrap();
+        assert_eq!(ai_format_setting(), AiFormat::Both);
         std::env::remove_var("NOTECOMPLETE_MCP_SETTINGS");
         std::fs::remove_dir_all(dir).ok();
     }

@@ -10,9 +10,10 @@ Use this workflow when creating Markdown documents or inserting NoteComplete pre
 ## Creating a new Markdown document with prefabs (`create_markdown`)
 
 1. Draft clean Markdown with `<!-- PREFAB:key -->` placeholders where each visual figure belongs (e.g. `<!-- PREFAB:schedule -->`, `<!-- PREFAB:uml -->`).
-2. Build the `prefabs` JSON object mapping each `key` to its NoteComplete prefab spec (see `add_prefab`'s tool schema for exact spec shapes: `states`, `timeline`, `histogram`, `bar`, `plot`, `uml`, `truthtable`, `numberline`, `algorithms`, `r-math`, `textual-analysis`, `hanzi`, `stickynote`).
+2. Build the `prefabs` JSON object mapping each `key` to its NoteComplete prefab spec (see `add_prefab`'s tool schema for exact spec shapes: `states`, `timeline`, `histogram`, `bar`, `plot`, `uml`, `truthtable`, `numberline`, `algorithms`, `r-math`, `textual-analysis`, `hanzi`, `stickynote`). For `r_figure` (`r-math`), pre-run the R plot with `Rscript` and attach `cache.svg` so the figure renders immediately instead of showing a placeholder preview.
 3. Call `create_markdown(title, markdown, prefabs)` once.
    - NoteComplete renders every prefab to an SVG data URI carrying `data-nc-prefab-spec`, so the user can **double-click any prefab in NoteComplete** (or right-click → **Edit prefab…** in Euro-Office) to edit it natively.
+   - When adding prefabs to a notebook canvas (`target: "page"`), write to `.nfedit` (not `.noteful`, which flattens prefabs into static images).
 4. Visually inspect the PNG previews returned by `create_markdown` and fix any cramped labels or clipped axes.
 
 ## Inserting prefabs into existing documents (`add_prefab`)

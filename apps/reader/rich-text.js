@@ -15,18 +15,47 @@ export function getAiFile(name) {
   return aiFiles.get(String(name || '').toLowerCase()) || null;
 }
 
+function parseLocalPageHash(hash = '') {
+  const m = String(hash || '').match(/^#(?:page[=-]?|p|L)(\d+)\b/i);
+  return m && Number(m[1]) > 0 ? Number(m[1]) : 0;
+}
+
+function encodeLocalAiHref(filePath, page = 0) {
+  const encoded = encodeURIComponent(filePath).replace(/[()]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `#ai-local:${encoded}${page > 0 ? `#page=${page}` : ''}`;
+}
+
 // Links to pages, attached images or external web pages in AI answers.
 export function resolveAiLink(label = '', url = '') {
   const raw = String(url || '').trim(), text = String(label || '').trim();
   if (/^(https?:|mailto:)/i.test(raw)) return { href: raw, external: true };
   if (/^data:image\//i.test(raw)) return { href: '#ai-image', image: raw };
+  if (/^#ai-local:/i.test(raw)) {
+    const rest = raw.slice('#ai-local:'.length);
+    const hashAt = rest.indexOf('#');
+    const encodedPath = hashAt >= 0 ? rest.slice(0, hashAt) : rest;
+    const page = hashAt >= 0 ? parseLocalPageHash(rest.slice(hashAt)) : 0;
+    try {
+      const filePath = decodeURIComponent(encodedPath);
+      if (filePath) return { href: raw, localFile: filePath, ...(page ? { page } : {}) };
+    } catch { /* Invalid encoded path. */ }
+  }
   if (/^file:\/\//i.test(raw)) {
     try {
       const u = new URL(raw);
       let filePath = decodeURIComponent(u.pathname);
       if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
-      if (filePath) return { href: raw, localFile: filePath };
+      const page = parseLocalPageHash(u.hash);
+      if (filePath) return { href: raw, localFile: filePath, ...(page ? { page } : {}) };
     } catch { /* Invalid file URL. */ }
+  }
+  if ((raw.startsWith('/') && !raw.startsWith('//')) || /^[A-Za-z]:[/\\]/.test(raw)) {
+    const hashAt = raw.indexOf('#');
+    const pathPart = hashAt >= 0 ? raw.slice(0, hashAt) : raw;
+    const page = hashAt >= 0 ? parseLocalPageHash(raw.slice(hashAt)) : 0;
+    let filePath = pathPart;
+    try { filePath = decodeURIComponent(pathPart); } catch { /* Keep raw path if not percent-encoded. */ }
+    if (filePath) return { href: raw, localFile: filePath, ...(page ? { page } : {}) };
   }
   const combined = `${raw} ${text}`;
   const fileMatch = combined.match(/(?:^|[/\\:#]|\b)(?:\d+-)?(notes-region|region-\d+|selection|source)(?:\.(?:jpe?g|png|webp|pdf))?(?:$|[\s)#?])/i);
@@ -44,17 +73,21 @@ export function resolveAiLink(label = '', url = '') {
 // and local/page/image links outside code blocks before CommonMark parsing.
 // A document's own links (`links: false`) are left as written.
 export function normalizeMarkdown(markdown, { links = true } = {}) {
+  const rewriteLink = (whole, bang, label, url) => {
+    const resolved = links && resolveAiLink(label, url);
+    if (!resolved) return whole;
+    if (bang === '!') {
+      const key = resolved.aiFile || (resolved.page ? `page-${resolved.page}` : '');
+      const found = key && getAiFile(key);
+      return found?.url ? `![${label}](${found.url})` : whole;
+    }
+    if (resolved.localFile) return `[${label}](${encodeLocalAiHref(resolved.localFile, resolved.page)})`;
+    return !resolved.external && !resolved.image ? `[${label}](${resolved.href})` : whole;
+  };
   const rewriteSegment = segment => segment
-    .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (whole, bang, label, url) => {
-      const resolved = links && resolveAiLink(label, url);
-      if (!resolved) return whole;
-      if (bang === '!') {
-        const key = resolved.aiFile || (resolved.page ? `page-${resolved.page}` : '');
-        const found = key && getAiFile(key);
-        return found?.url ? `![${label}](${found.url})` : whole;
-      }
-      return !resolved.external && !resolved.image && !resolved.localFile ? `[${label}](${resolved.href})` : whole;
-    })
+    .replace(/(!?)\[([^\]]*)\]\(<([^>\n]+)>\)/g, (whole, bang, label, url) => rewriteLink(whole, bang, label, url))
+    .replace(/(!?)\[([^\]]*)\]\(((?:file:\/\/|\/|[A-Za-z]:[/\\])(?:[^()\n]|\([^()\n]*\))+?)(?:\s+"[^"]*")?\)/g, (whole, bang, label, url) => rewriteLink(whole, bang, label, url))
+    .replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (whole, bang, label, url) => rewriteLink(whole, bang, label, url))
     .replace(/\\\[([\s\S]+?)\\\]|\\\(([^\n]+?)\\\)|\$\$([\s\S]+?)\$\$|\$(?!\$)\s*([^$\n]+?)\s*\$(?![$\d])/g, (whole, displayBracket, inlineParen, displayDollar, inlineDollar) => {
       if (displayBracket != null) return `$$\n${displayBracket.trim().replace(/\n\s*\n/g, '\n')}\n$$`;
       if (inlineParen != null) return `$${inlineParen.trim()}$`;
@@ -124,6 +157,11 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
     if (resolved?.external) {
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
+    } else if (resolved?.localFile) {
+      a.setAttribute('href', resolved.href);
+      a.dataset.localFile = resolved.localFile;
+      if (resolved.page) a.dataset.page = String(resolved.page);
+      a.title ||= resolved.page ? `Open ${resolved.localFile} (page ${resolved.page})` : `Open ${resolved.localFile}`;
     } else if (resolved?.page) {
       a.setAttribute('href', resolved.href);
       a.dataset.page = String(resolved.page);
@@ -136,10 +174,6 @@ export async function renderMarkdown(element, text, toHtml, { document: own = fa
       a.setAttribute('href', '#ai-image');
       a.dataset.aiImage = resolved.image;
       a.title ||= 'Show image';
-    } else if (resolved?.localFile) {
-      a.setAttribute('href', resolved.href);
-      a.dataset.localFile = resolved.localFile;
-      a.title ||= `Open ${resolved.localFile}`;
     } else if (!own && !(a.getAttribute('href') || '').startsWith('#')) {
       // Relative links mean something only in a document (a file beside it).
       a.setAttribute('href', '#');

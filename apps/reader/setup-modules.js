@@ -19,7 +19,7 @@
 import { mathSettings } from './math/settings.js';
 import { zhSettings, zhEverUsed, setZhEverUsed } from './chinese/settings.js';
 import { OFFICE_KINDS, openWithPrefs, rOpenWith, setOpenWith, setROpenWith } from './open-with-pref.js';
-import { readPreferMarkdown, syncPreferMarkdown, writePreferMarkdown } from './agents.js';
+import { AI_FORMAT_OPTIONS, readAiFormat, syncAiFormat, writeAiFormat } from './agents.js';
 
 const registry = new Map();
 
@@ -337,17 +337,30 @@ export function agentsModule(api = globalThis.notecompleteAgents) {
     summary: 'Let Claude Code, Codex and others read and write your notes',
     settingsAlways: true,
     settings(el, ui) {
-      const box = ui.toggle(
-        {
-          get: () => readPreferMarkdown(),
-          set: (on) => { void writePreferMarkdown(on, { api }); },
-        },
-        'Prefer Markdown (.md) for AI-generated documents',
-        'Tell connected AI tools (MCP) to create Markdown documents with embedded editable prefabs by default instead of handwritten notebooks.',
-      );
-      el.append(box);
-      const input = box.querySelector?.('input[type="checkbox"]');
-      if (input) syncPreferMarkdown({ api }).then((v) => { input.checked = v; }, () => {});
+      const wrap = document.createElement('div');
+      wrap.className = 'wizard-check';
+      const title = document.createElement('strong');
+      title.textContent = 'AI-generated document format';
+      const select = document.createElement('select');
+      for (const o of AI_FORMAT_OPTIONS) {
+        const opt = document.createElement('option');
+        opt.value = o.id;
+        opt.textContent = o.label;
+        select.append(opt);
+      }
+      select.value = readAiFormat();
+      select.onchange = () => { void writeAiFormat(select.value, { api }); };
+      const hint = document.createElement('span');
+      hint.className = 'wizard-check-hint';
+      hint.textContent = 'Let AI tools combine ink & Markdown in the same note, or restrict to one format (+ prefabs).';
+      const inner = document.createElement('div');
+      const row = document.createElement('div');
+      row.style.margin = '6px 0 4px';
+      row.append(select);
+      inner.append(title, row, hint);
+      wrap.append(inner);
+      el.append(wrap);
+      syncAiFormat({ api }).then((v) => { select.value = v; }, () => {});
     },
     async status() {
       if (!api) return agentsState(null, { bridge: false });
